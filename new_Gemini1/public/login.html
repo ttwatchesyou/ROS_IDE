@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="th" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ROS2 IDE — Login</title>
+<script src="/theme.js"></script>
+<style>
+  /* ══ DARK THEME (default) ══ */
+  :root, [data-theme="dark"] {
+    --bg:#0d0f18; --bg2:#1a1d2e; --bg3:#111320; --brd:#2a2d3e; 
+    --fg:#e2e4ec; --acc:#4f8ef7; --grn:#3ecf8e; --red:#f06767; --dim:#555;
+    --shadow: 0 24px 64px rgba(0,0,0,.5);
+  }
+
+  /* ══ LIGHT THEME ══ */
+  [data-theme="light"] {
+    --bg:#f5f5f0; --bg2:#ffffff; --bg3:#f0efe9; --brd:rgba(0,0,0,0.1); 
+    --fg:#1a1c23; --acc:#1a6ef5; --grn:#1a8c5a; --red:#c0392b; --dim:#888;
+    --shadow: 0 24px 64px rgba(0,0,0,.1);
+  }
+
+  /* ══ THEME TRANSITION ══ */
+  *,*::before,*::after{ transition:background-color .18s ease,border-color .18s ease,color .12s ease,box-shadow .18s ease; }
+
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{background:var(--bg);color:var(--fg);font-family:'Inter',system-ui,sans-serif;
+       min-height:100vh;display:flex;align-items:center;justify-content:center;}
+  
+  .card{background:var(--bg2);border:1px solid var(--brd);border-radius:16px;
+        padding:40px 36px;width:380px;box-shadow:var(--shadow);}
+  .logo{text-align:center;margin-bottom:32px;}
+  .logo-icon{font-size:42px;display:block;margin-bottom:8px;}
+  .logo-title{font-size:22px;font-weight:700;color:var(--fg);}
+  .logo-sub{font-size:12px;color:var(--dim);margin-top:4px;}
+  
+  .field{margin-bottom:18px;}
+  label{display:block;font-size:12px;color:var(--dim);margin-bottom:6px;font-weight:500;}
+  input{width:100%;background:var(--bg3);border:1px solid var(--brd);border-radius:8px;
+        color:var(--fg);font-size:14px;padding:11px 14px;outline:none;transition:border .2s;}
+  input:focus{border-color:var(--acc);}
+  
+  .btn-login{width:100%;background:var(--acc);color:#fff;border:none;border-radius:8px;
+             padding:12px;font-size:14px;font-weight:600;cursor:pointer;margin-top:8px;
+             transition:opacity .2s;}
+  .btn-login:hover{opacity:.88;}
+  .btn-login:disabled{opacity:.5;cursor:not-allowed;}
+  
+  .err{background:rgba(240,103,103,.12);border:1px solid var(--red);border-radius:8px;
+       padding:10px 14px;font-size:12px;color:var(--red);margin-bottom:16px;display:none;}
+
+  /* ══ THEME TOGGLE BUTTON ══ */
+  .theme-toggle-wrap { position:absolute; top:24px; right:24px; }
+  #btn-theme{
+    width:34px;height:34px;border-radius:8px;border:1px solid var(--brd);
+    background:var(--bg2);cursor:pointer;display:flex;align-items:center;
+    justify-content:center;transition:all .15s;flex-shrink:0;padding:0;
+  }
+  #btn-theme:hover{border-color:var(--brd);background:var(--bg3);}
+  #btn-theme svg{width:16px;height:16px;fill:none;stroke:var(--dim);
+    stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;transition:stroke .12s;}
+  #btn-theme:hover svg{stroke:var(--fg);}
+</style>
+</head>
+<body>
+
+<div class="theme-toggle-wrap">
+  <button id="btn-theme" onclick="toggleTheme()" title="Toggle light / dark mode">
+    <svg id="icon-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    <svg id="icon-sun" viewBox="0 0 24 24" style="display:none"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+  </button>
+</div>
+
+<div class="card">
+  <div class="logo">
+    <span class="logo-icon">🤖</span>
+    <div class="logo-title">ROS2 IDE</div>
+    <div class="logo-sub">Robot Management Platform</div>
+  </div>
+  <div class="err" id="err"></div>
+  <div class="field">
+    <label>Username</label>
+    <input id="u" type="text" placeholder="admin" autocomplete="username">
+  </div>
+  <div class="field">
+    <label>Password</label>
+    <input id="p" type="password" placeholder="••••••••" autocomplete="current-password"
+      onkeydown="if(event.key==='Enter')doLogin()">
+  </div>
+  <button class="btn-login" id="btn" onclick="doLogin()">Sign in</button>
+  
+  <div style="text-align:center; margin-top:16px; font-size:12px; color:var(--dim);">
+    ยังไม่มีบัญชี? <a href="/register" style="color:var(--acc);text-decoration:none;font-weight:600;">ลงทะเบียนที่นี่</a>
+  </div>
+</div>
+
+<script>
+// ── Auth Logic ─────────────────────────────────────────────────
+async function doLogin(){
+  const u=document.getElementById('u').value.trim();
+  const p=document.getElementById('p').value;
+  const err=document.getElementById('err');
+  const btn=document.getElementById('btn');
+  if(!u||!p){showErr('Please fill in all fields');return;}
+  btn.disabled=true; btn.textContent='Signing in...';
+  try{
+    const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});
+    const d=await r.json();
+    if(d.ok){
+      localStorage.setItem('ros2ide_token',d.token);
+      localStorage.setItem('ros2ide_user',JSON.stringify(d.user));
+      window.location.href='/robots';
+    } else { showErr(d.error||'Login failed'); }
+  }catch(e){ showErr('Connection error'); }
+  finally{ btn.disabled=false; btn.textContent='Sign in'; }
+}
+function showErr(msg){const e=document.getElementById('err');e.textContent=msg;e.style.display='block';}
+
+// ถ้ามี token ที่ valid → ข้ามหน้า login ไปหน้า robots
+const token=localStorage.getItem('ros2ide_token');
+if(token){
+  fetch('/api/auth/me',{headers:{'x-auth-token':token}})
+    .then(r=>r.json())
+    .then(d=>{
+      if(d.ok) window.location.replace('/robots');
+      else localStorage.removeItem('ros2ide_token'); // token หมดอายุ ลบทิ้ง
+    })
+    .catch(()=>{}); // ถ้า network error ไม่ redirect
+}
+</script>
+</body>
+</html>

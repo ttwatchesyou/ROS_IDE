@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="th" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ROS2 IDE — Robots</title>
+<script src="/theme.js"></script>
+<style>
+/* ══ DARK THEME (default) ══ */
+:root, [data-theme="dark"] {
+  --bg:#0d0f18;--bg2:#1a1d2e;--bg3:#12141f;--brd:#2a2d3e;--fg:#e2e4ec;--mt:#8b8fa8;
+  --acc:#4f8ef7;--grn:#3ecf8e;--red:#f06767;--amb:#f5a623;--dim:#555;--pur:#9f7aea;
+  --mono:'JetBrains Mono',monospace;
+}
+
+/* ══ LIGHT THEME ══ */
+[data-theme="light"] {
+  --bg:#f5f5f0;--bg2:#ffffff;--bg3:#e4e3db;--brd:rgba(0,0,0,0.08);--fg:#1a1c23;--mt:#5a5e72;
+  --acc:#1a6ef5;--grn:#1a8c5a;--red:#c0392b;--amb:#b87010;--dim:#a0a3b4;--pur:#6c3ec9;
+}
+
+/* ══ THEME TRANSITION ══ */
+*,*::before,*::after{ transition:background-color .18s ease,border-color .18s ease,color .12s ease; }
+
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--fg);font-family:'Inter',system-ui,sans-serif;min-height:100vh;}
+
+/* ── Custom Scrollbar ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--brd); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--mt); }
+
+/* ── Topbar ── */
+.topbar{display:flex;align-items:center;gap:12px;padding:0 24px;height:56px;
+  background:var(--bg2);border-bottom:1px solid var(--brd);position:sticky;top:0;z-index:100;}
+.topbar-logo{font-size:20px;font-weight:700;color:var(--fg);display:flex;align-items:center;gap:8px;}
+.topbar-nav{display:flex;gap:4px;margin-left:24px;}
+.tnav{padding:6px 14px;border-radius:7px;font-size:13px;cursor:pointer;color:var(--mt);transition:all .15s;}
+.tnav:hover{background:rgba(139,143,168,.1);color:var(--fg);}
+.tnav.active{background:rgba(79,142,247,.15);color:var(--acc);}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px;}
+.user-badge{font-size:12px;color:var(--dim);display:flex;align-items:center;gap:6px;}
+.btn{background:var(--bg3);border:1px solid var(--brd);border-radius:7px;color:var(--fg);
+  padding:6px 14px;font-size:12px;cursor:pointer;transition:all .15s;}
+.btn:hover{border-color:var(--acc);color:var(--acc);}
+.btn-acc{background:var(--acc);border-color:var(--acc);color:#fff;}
+.btn-acc:hover{opacity:.88;color:#fff;}
+.btn-red{border-color:var(--red);color:var(--red);}
+
+/* ══ THEME TOGGLE BUTTON ══ */
+#btn-theme{
+  width:34px;height:34px;border-radius:8px;border:1px solid var(--brd);
+  background:var(--bg2);cursor:pointer;display:flex;align-items:center;
+  justify-content:center;transition:all .15s;flex-shrink:0;padding:0;
+}
+#btn-theme:hover{border-color:var(--brd);background:var(--bg3);}
+#btn-theme svg{width:16px;height:16px;fill:none;stroke:var(--mt);
+  stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;transition:stroke .12s;}
+#btn-theme:hover svg{stroke:var(--fg);}
+
+/* ── Main layout ── */
+.main{max-width:1100px;margin:32px auto;padding:0 24px;}
+.page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;}
+.page-title{font-size:22px;font-weight:700;}
+.page-sub{font-size:13px;color:var(--dim);margin-top:4px;}
+
+/* ── Robot grid ── */
+.robot-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;}
+.robot-card{background:var(--bg2);border:1px solid var(--brd);border-radius:12px;padding:20px;
+  transition:border-color .2s;cursor:pointer;}
+.robot-card:hover{border-color:var(--acc);}
+.robot-card.online{border-left:3px solid var(--grn);}
+.robot-card.offline{border-left:3px solid var(--dim);}
+.rc-head{display:flex;align-items:flex-start;gap:12px;margin-bottom:14px;}
+.rc-icon{font-size:28px;flex-shrink:0;}
+.rc-title{font-size:15px;font-weight:600;flex:1;}
+.rc-desc{font-size:11px;color:var(--dim);margin-top:3px;}
+.rc-status{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;}
+.rc-status.online{color:var(--grn);}
+.rc-status.offline{color:var(--dim);}
+.dot{width:8px;height:8px;border-radius:50%;}
+.dot.on{background:var(--grn);box-shadow:0 0 6px rgba(62,207,142,.4);}
+.dot.off{background:var(--dim);}
+.rc-meta{font-size:11px;color:var(--dim);display:flex;flex-direction:column;gap:3px;}
+.rc-meta span{display:flex;align-items:center;gap:6px;}
+.rc-owner{background:rgba(99,102,241,.15);border:1px solid var(--acc);color:var(--acc);padding:2px 8px;border-radius:6px;font-weight:600;align-self:flex-start;}
+.rc-actions{display:flex;gap:6px;margin-top:14px;padding-top:14px;border-top:1px solid var(--brd);}
+.rc-actions .btn{flex:1;text-align:center;padding:5px 8px;font-size:11px;}
+
+/* ── Empty state ── */
+.empty{text-align:center;padding:60px 20px;color:var(--dim);}
+.empty-icon{font-size:48px;margin-bottom:16px;}
+
+/* ── Modal ── */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:9999;
+  display:flex;align-items:center;justify-content:center;display:none;}
+.modal.show{display:flex;}
+.modal-box{background:var(--bg2);border:1px solid var(--brd);border-radius:12px;
+  width:520px;max-height:90vh;overflow-y:auto;box-shadow:0 24px 64px rgba(0,0,0,.3);}
+.modal-hdr{display:flex;align-items:center;justify-content:space-between;
+  padding:18px 22px;border-bottom:1px solid var(--brd);}
+.modal-hdr h3{font-size:16px;font-weight:700;}
+.modal-close{background:none;border:none;color:var(--dim);font-size:20px;cursor:pointer;}
+.modal-body{padding:22px;}
+.field{margin-bottom:16px;}
+label{display:block;font-size:12px;color:var(--mt);margin-bottom:6px;font-weight:500;}
+input,select,textarea{width:100%;background:var(--bg3);border:1px solid var(--brd);
+  border-radius:7px;color:var(--fg);font-size:13px;padding:9px 12px;outline:none;
+  font-family:inherit;transition:border .2s;}
+input:focus,select:focus,textarea:focus{border-color:var(--acc);}
+.modal-foot{display:flex;justify-content:flex-end;gap:8px;padding:16px 22px;
+  border-top:1px solid var(--brd);}
+
+/* ── Install script modal ── */
+.script-box{background:var(--bg3);border:1px solid var(--brd);border-radius:8px;
+  padding:16px;font-family:var(--mono);font-size:12px;color:var(--grn);
+  overflow-x:auto;white-space:pre;margin-bottom:16px;}
+.step{display:flex;gap:12px;margin-bottom:20px;}
+.step-num{width:28px;height:28px;border-radius:50%;background:var(--acc);color:#fff;
+  font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.step-body{flex:1;min-width:0;}
+.step-title{font-size:13px;font-weight:600;margin-bottom:6px;}
+.step-desc{font-size:12px;color:var(--dim);line-height:1.6;}
+
+/* ── Notification ── */
+.notif{position:fixed;top:70px;right:20px;background:var(--bg2);border:1px solid var(--brd);
+  border-radius:8px;padding:12px 18px;font-size:13px;z-index:99999;
+  box-shadow:0 8px 24px rgba(0,0,0,.2);transform:translateX(120%);transition:transform .3s;}
+.notif.show{transform:translateX(0);}
+.notif.ok{border-left:3px solid var(--grn);}
+.notif.err{border-left:3px solid var(--red);}
+
+.err-msg{background:rgba(240,103,103,.12);border:1px solid var(--red);border-radius:7px;
+  padding:10px 14px;font-size:12px;color:var(--red);margin-bottom:14px;display:none;}
+</style>
+</head>
+<body>
+
+<!-- Topbar -->
+<div class="topbar">
+  <div class="topbar-logo">🤖 <span>ROS2 IDE</span></div>
+  <div class="topbar-nav">
+    <div class="tnav active" onclick="location.href='/robots'">Robots</div>
+    <div class="tnav" id="nav-ide" onclick="goToIDE()" style="display:none">Open IDE</div>
+  </div>
+  <div class="topbar-right">
+    <div class="user-badge">👤 <span id="username-display">—</span></div>
+    
+    <!-- Theme Toggle Button -->
+    <button id="btn-theme" onclick="toggleTheme()" title="Toggle light / dark mode">
+      <svg id="icon-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      <svg id="icon-sun" viewBox="0 0 24 24" style="display:none"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+    </button>
+    
+    <button class="btn" onclick="logout()">Sign out</button>
+  </div>
+</div>
+
+<!-- Main -->
+<div class="main">
+  <div class="page-header">
+    <div>
+      <div class="page-title">Robots</div>
+      <div class="page-sub">Manage your ROS2 robots</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn" onclick="addSimRobot()" title="สร้างหุ่นยนต์จำลอง ทดสอบได้โดยไม่ต้องมี ROS จริง">🧪 Demo (Sim)</button>
+      <button class="btn btn-acc" onclick="showAddModal()">＋ Add Robot</button>
+    </div>
+  </div>
+  <div class="robot-grid" id="robot-grid">
+    <div class="empty"><div class="empty-icon">🤖</div><div>Loading...</div></div>
+  </div>
+</div>
+
+<!-- Add/Edit Robot Modal -->
+<div class="modal" id="modal-robot">
+  <div class="modal-box">
+    <div class="modal-hdr">
+      <h3 id="modal-title">Add Robot</h3>
+      <button class="modal-close" onclick="closeModal('modal-robot')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="err-msg" id="robot-err"></div>
+      <input type="hidden" id="edit-robot-id">
+      <div class="field">
+        <label>Robot Name *</label>
+        <input id="f-name" placeholder="e.g. Turtle Bot 1">
+      </div>
+      <div class="field">
+        <label>Robot Key * <span style="color:var(--dim);font-size:10px">(จาก install script)</span></label>
+        <input id="f-key" placeholder="xxxxxxxx-xxxx-4xxx-xxxx-xxxxxxxxxxxx" style="font-family:var(--mono)">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="field">
+          <label>SSH Username</label>
+          <input id="f-user" placeholder="ubuntu">
+        </div>
+        <div class="field">
+          <label>SSH Password</label>
+          <input id="f-pass" type="password" placeholder="••••••••">
+        </div>
+      </div>
+      <div class="field">
+        <label>Workspace Path</label>
+        <input id="f-ws" placeholder="~/ros2_ws">
+      </div>
+      <div class="field">
+        <label>Description</label>
+        <input id="f-desc" placeholder="e.g. Differential drive robot">
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal('modal-robot')">Cancel</button>
+      <button class="btn btn-acc" id="btn-save-robot" onclick="saveRobot()">Add Robot</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── ปรับ Layout Install Script Modal ให้เป็น 2 คอลัมน์กว้างๆ สวยงาม (เพิ่ม min-width: 0) ── -->
+<div class="modal" id="modal-install">
+  <div class="modal-box" style="width: 860px; max-width: 95vw;">
+    <div class="modal-hdr">
+      <h3>Add New Robot</h3>
+      <button class="modal-close" onclick="closeModal('modal-install')">✕</button>
+    </div>
+    
+    <div class="modal-body" style="display: flex; gap: 24px; align-items: stretch;">
+      
+      <!-- ฝั่งซ้าย: คำแนะนำการเชื่อมต่อ -->
+      <div style="flex: 1.15; min-width: 0;">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <div class="step-title">รัน Install Script บนเครื่อง Robot</div>
+            <div class="step-desc">เปิด Terminal บนหุ่นยนต์ แล้วรันคำสั่งนี้:</div>
+            <div class="script-box" id="install-cmd" style="margin-bottom:8px">curl -sSL http://YOUR_SERVER/install.sh | bash</div>
+            <button class="btn" onclick="copyInstallCmd()">📋 Copy Command</button>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <div class="step-title">รับ Robot Key</div>
+            <div class="step-desc">เมื่อติดตั้งเสร็จ จะแสดง Robot Key ออกมา หรือตรวจสอบด้วยคำสั่ง:</div>
+            <div class="script-box" style="margin-bottom:0">ros2ide-agent key</div>
+          </div>
+        </div>
+
+        <div class="step" style="margin-bottom:0">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <div class="step-title">กรอกข้อมูลเพื่อเชื่อมต่อ</div>
+            <div class="step-desc">นำ Key มากรอกลงในฟอร์มด้านขวา พร้อมตั้งชื่อให้หุ่นยนต์ของคุณ</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ฝั่งขวา: ฟอร์มกรอกข้อมูล (เพิ่ม min-width: 0 เพื่อไม่ให้กล่องฟอร์มถูกบีบ) -->
+      <div style="flex: 0.85; min-width: 0; background:var(--bg3); border:1px solid var(--brd); border-radius:12px; padding:24px; display:flex; flex-direction:column; justify-content:center;">
+        <div class="err-msg" id="install-err"></div>
+        <div class="field">
+          <label>Robot Key *</label>
+          <input id="if-key" placeholder="xxxxxxxx-xxxx-4xxx-xxxx-xxxxxxxxxxxx" style="font-family:var(--mono)">
+        </div>
+        <div class="field">
+          <label>Robot Name *</label>
+          <input id="if-name" placeholder="e.g. TurtleBot3 Burger">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field">
+            <label>SSH User</label>
+            <input id="if-user" value="ubuntu">
+          </div>
+          <div class="field">
+            <label>SSH Password</label>
+            <input id="if-pass" type="password" placeholder="(เว้นว่างถ้าใช้ key)">
+          </div>
+        </div>
+        <div class="field" style="margin-bottom:0">
+          <label>Workspace Path</label>
+          <input id="if-ws" value="~/ros2_ws">
+        </div>
+      </div>
+
+    </div>
+    
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal('modal-install')">Cancel</button>
+      <button class="btn btn-acc" onclick="addRobotFromInstall()">Add Robot</button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete confirm -->
+<div class="modal" id="modal-delete">
+  <div class="modal-box" style="width:400px">
+    <div class="modal-hdr">
+      <h3>Delete Robot</h3>
+      <button class="modal-close" onclick="closeModal('modal-delete')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--mt);line-height:1.7">
+        Are you sure you want to delete <strong id="del-robot-name"></strong>?<br>
+        This action cannot be undone.
+      </p>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal('modal-delete')">Cancel</button>
+      <button class="btn btn-red" id="btn-confirm-del" onclick="confirmDelete()">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- Notification -->
+<div class="notif" id="notif"></div>
+
+<script>
+// ── App Logic ──────────────────────────────────────────────────
+const TOKEN = localStorage.getItem('ros2ide_token');
+const USER  = JSON.parse(localStorage.getItem('ros2ide_user')||'{}');
+if (!TOKEN){ location.replace('/'); throw new Error('Not authenticated'); }
+
+document.getElementById('username-display').textContent = USER.username || '—';
+
+// ── API helper ─────────────────────────────────────────────────
+const api = (url, opts={}) => fetch(url, {
+  headers: { 'Content-Type':'application/json', 'x-auth-token': TOKEN },
+  ...opts, body: opts.body ? JSON.stringify(opts.body) : undefined,
+}).then(r => r.json());
+
+// ── Realtime status ────────────────────────────────────────────
+let robots = [];
+let statusWs = null;
+
+function connectStatusWs() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  statusWs = new WebSocket(`${proto}//${location.host}/ws/robot-status`, ['ros2ide', TOKEN]);
+  statusWs.onmessage = e => {
+    const d = JSON.parse(e.data);
+    if (d.type === 'snapshot') {
+      robots.forEach(r => { r.online = d.status[r.robot_key] === 'online' || d.status[r.robot_key] === true; });
+      renderGrid();
+    } else if (d.type === 'status') {
+      const r = robots.find(x => x.robot_key === d.robot_key);
+      if (r) { r.online = d.online; updateCardStatus(r); }
+    }
+  };
+  statusWs.onclose = () => setTimeout(connectStatusWs, 3000);
+}
+
+function updateCardStatus(r) {
+  const card = document.getElementById('rc-' + r.id);
+  if (!card) return;
+  card.className = 'robot-card ' + (r.online ? 'online' : 'offline');
+  const dot  = card.querySelector('.dot');
+  const stat = card.querySelector('.rc-status');
+  if (dot)  { dot.className  = 'dot ' + (r.online ? 'on' : 'off'); }
+  if (stat) { stat.className = 'rc-status ' + (r.online ? 'online' : 'offline');
+              stat.querySelector('span').textContent = r.online ? 'Online' : 'Offline'; }
+  const openBtn = card.querySelector('.btn-open');
+  if (openBtn) openBtn.disabled = !r.online;
+}
+
+// ── Load robots ────────────────────────────────────────────────
+async function loadRobots() {
+  const d = await api('/api/robots');
+  if (!d.ok) { notif(d.error, 'err'); return; }
+  robots = d.robots;
+  renderGrid();
+  connectStatusWs();
+}
+
+function renderGrid() {
+  const grid = document.getElementById('robot-grid');
+  if (!robots.length) {
+    grid.innerHTML = `<div class="empty">
+      <div class="empty-icon">🤖</div>
+      <div style="font-size:15px;font-weight:600;margin-bottom:8px">No robots yet</div>
+      <div style="font-size:13px;color:var(--dim);margin-bottom:20px">Add your first robot to get started</div>
+      <button class="btn btn-acc" onclick="showAddModal()">＋ Add Robot</button>
+    </div>`;
+    return;
+  }
+  grid.innerHTML = robots.map(r => `
+    <div class="robot-card ${r.online?'online':'offline'}" id="rc-${r.id}">
+      <div class="rc-head">
+        <span class="rc-icon">🤖</span>
+        <div style="flex:1;min-width:0">
+          <div class="rc-title">${escH(r.name)}</div>
+          <div class="rc-desc">${escH(r.description||'')}</div>
+        </div>
+        <div class="rc-status ${r.online?'online':'offline'}">
+          <div class="dot ${r.online?'on':'off'}"></div>
+          <span>${r.online?'Online':'Offline'}</span>
+        </div>
+      </div>
+      <div class="rc-meta">
+        <span>🔑 <code style="font-family:var(--mono);font-size:10px">${r.robot_key.slice(0,18)}…</code></span>
+        <span>👤 ${escH(r.ssh_user||'ubuntu')}</span>
+        <span>📁 ${escH(r.workspace||'~/ros2_ws')}</span>
+        ${r.added_by_name?`<span class="rc-owner" title="เจ้าของหุ่นยนต์">🪪 เจ้าของ: ${escH(r.added_by_name)}</span>`:''}
+        ${r.last_connected?`<span>🕐 Last seen: ${new Date(r.last_connected).toLocaleString('th-TH')}</span>`:''}
+      </div>
+      <div class="rc-actions">
+        <button class="btn btn-open" ${r.online?'':'disabled'} onclick="openIDE(${r.id})"
+          style="${r.online?'background:rgba(62,207,142,.15);border-color:var(--grn);color:var(--grn)':''}">
+          ▶ Open IDE
+        </button>
+        <button class="btn" onclick="showEditModal(${r.id})" title="Edit">✏️</button>
+        <button class="btn btn-red" onclick="showDeleteModal(${r.id})" title="Delete">🗑️</button>
+      </div>
+    </div>`).join('');
+}
+
+function escH(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ── Open IDE ───────────────────────────────────────────────────
+async function openIDE(robotId) {
+  notif('Connecting...', 'ok');
+  const d = await api('/api/connect', { method:'POST', body:{ robotId } });
+  if (!d.ok) { notif(d.error, 'err'); return; }
+  // Store session
+  localStorage.setItem('ros2ide_session', d.sessionId);
+  localStorage.setItem('ros2ide_rosinfo', JSON.stringify(d.rosInfo));
+  localStorage.setItem('ros2ide_workspace', d.workspace);
+  localStorage.setItem('ros2ide_username', d.username);
+  localStorage.setItem('ros2ide_robotname', d.robotName);
+  localStorage.setItem('ros2ide_is_sim', String(d.isSim === true));
+  window.location.replace('/app');
+}
+function goToIDE(){ window.location.href = '/app'; }
+
+// ── Add/Edit Modal ─────────────────────────────────────────────
+function showAddModal(){ openModal('modal-install'); setInstallCmd(); }
+
+function setInstallCmd(){
+  const cmd = `curl -sSL ${location.origin}/install.sh | bash`;
+  document.getElementById('install-cmd').textContent = cmd;
+}
+
+function copyInstallCmd(){
+  const cmd = document.getElementById('install-cmd').textContent;
+  navigator.clipboard.writeText(cmd).then(()=>notif('Copied!','ok'));
+}
+
+async function addRobotFromInstall(){
+  const key  = document.getElementById('if-key').value.trim();
+  const name = document.getElementById('if-name').value.trim();
+  const user = document.getElementById('if-user').value.trim();
+  const pass = document.getElementById('if-pass').value;
+  const ws   = document.getElementById('if-ws').value.trim();
+  const err  = document.getElementById('install-err');
+  err.style.display = 'none';
+  if (!key || !name) { err.textContent='Robot Key and Name are required'; err.style.display='block'; return; }
+  // Normalize key: trim whitespace and any accidental chars
+  const cleanKey = key.trim().replace(/[^a-f0-9-]/gi,'');
+  const d = await api('/api/robots', { method:'POST', body:{ robot_key:cleanKey, name, ssh_user:user||'ubuntu', ssh_pass:pass, workspace:ws||'~/ros2_ws' }});
+  if (!d.ok) { err.textContent=d.error; err.style.display='block'; return; }
+  notif('Robot added!', 'ok');
+  closeModal('modal-install');
+  loadRobots();
+}
+
+function showEditModal(id){
+  const r = robots.find(x=>x.id===id); if(!r) return;
+  document.getElementById('modal-title').textContent = 'Edit Robot';
+  document.getElementById('btn-save-robot').textContent = 'Save Changes';
+  document.getElementById('edit-robot-id').value = id;
+  document.getElementById('f-name').value  = r.name;
+  document.getElementById('f-key').value   = r.robot_key;
+  document.getElementById('f-key').disabled = true;
+  document.getElementById('f-user').value  = r.ssh_user || 'ubuntu';
+  document.getElementById('f-pass').value  = '';
+  document.getElementById('f-ws').value    = r.workspace || '~/ros2_ws';
+  document.getElementById('f-desc').value  = r.description || '';
+  openModal('modal-robot');
+}
+
+async function saveRobot(){
+  const id   = document.getElementById('edit-robot-id').value;
+  const name = document.getElementById('f-name').value.trim();
+  const key  = document.getElementById('f-key').value.trim();
+  const user = document.getElementById('f-user').value.trim();
+  const pass = document.getElementById('f-pass').value;
+  const ws   = document.getElementById('f-ws').value.trim();
+  const desc = document.getElementById('f-desc').value.trim();
+  const err  = document.getElementById('robot-err');
+  err.style.display = 'none';
+  if (!name) { err.textContent='Name is required'; err.style.display='block'; return; }
+  let d;
+  if (id) {
+    d = await api(`/api/robots/${id}`, { method:'PUT', body:{ name, ssh_user:user, ssh_pass:pass||undefined, workspace:ws, description:desc }});
+  } else {
+    if (!key) { err.textContent='Robot Key required'; err.style.display='block'; return; }
+    d = await api('/api/robots', { method:'POST', body:{ robot_key:key, name, ssh_user:user, ssh_pass:pass, workspace:ws, description:desc }});
+  }
+  if (!d.ok) { err.textContent=d.error; err.style.display='block'; return; }
+  notif(id ? 'Updated!' : 'Added!', 'ok');
+  closeModal('modal-robot');
+  loadRobots();
+}
+
+// ── Demo / Simulation robot (ไม่ต้องมี ROS จริง) ───────────────
+function uuid(){
+  // crypto.randomUUID มีเฉพาะ secure context (https/localhost) — มี fallback ให้ http://ip
+  if (window.crypto && crypto.randomUUID) { try { return crypto.randomUUID(); } catch(e){} }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random()*16|0; return (c==='x'?r:(r&0x3|0x8)).toString(16);
+  });
+}
+async function addSimRobot(){
+  const key  = 'SIM-' + uuid();
+  const name = 'SIM Robot ' + key.slice(4, 10);
+  const d = await api('/api/robots', { method:'POST',
+    body:{ robot_key:key, name, ssh_user:'sim', ssh_pass:'', workspace:'~/ros2_ws' }});
+  if (!d.ok) { notif(d.error, 'err'); return; }
+  notif('เพิ่มหุ่นยนต์จำลองแล้ว — กด Connect แล้วลองใช้ได้เลย', 'ok');
+  loadRobots();
+}
+
+// ── Delete ─────────────────────────────────────────────────────
+let _delId = null;
+function showDeleteModal(id){
+  _delId = id;
+  document.getElementById('del-robot-name').textContent = robots.find(r=>r.id===id)?.name || '';
+  openModal('modal-delete');
+}
+async function confirmDelete(){
+  if (!_delId) return;
+  const d = await api(`/api/robots/${_delId}`, { method:'DELETE' });
+  if (!d.ok) { notif(d.error, 'err'); return; }
+  notif('Deleted', 'ok');
+  closeModal('modal-delete');
+  loadRobots();
+}
+
+// ── Modal helpers ──────────────────────────────────────────────
+function openModal(id){ document.getElementById(id).classList.add('show'); }
+function closeModal(id){ document.getElementById(id).classList.remove('show');
+  document.getElementById('f-key').disabled = false;
+  document.getElementById('edit-robot-id').value = '';
+  document.getElementById('modal-title').textContent = 'Add Robot';
+  document.getElementById('btn-save-robot').textContent = 'Add Robot';
+}
+
+// ── Notification ───────────────────────────────────────────────
+function notif(msg, type='ok'){
+  const el = document.getElementById('notif');
+  el.textContent = msg; el.className = `notif show ${type}`;
+  setTimeout(()=>el.classList.remove('show'), 3000);
+}
+
+// ── Auth ───────────────────────────────────────────────────────
+async function logout(){
+  try{ await api('/api/auth/logout', { method:'POST' }); }catch(e){}
+  localStorage.clear();
+  location.replace('/');
+}
+
+// ── Init ───────────────────────────────────────────────────────
+loadRobots();
+</script>
+</body>
+</html>

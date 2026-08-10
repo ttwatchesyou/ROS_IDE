@@ -1,0 +1,16 @@
+node_modules/
+agent/node_modules/
+.env
+.env.*
+!.env.example
+server.log
+*.zip
+*.bak
+*.backup
+build/
+install/
+log/
+sim_ws/
+tmp/
+__pycache__/
+*.pyc

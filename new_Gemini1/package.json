@@ -1,0 +1,19 @@
+{
+  "name": "ros2-ide-cloud",
+  "version": "5.0.0",
+  "description": "ROS2 IDE — Cloud Broker with Auth & Robot Management",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "setup": "node setup.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.6",
+    "express": "^4.22.2",
+    "mysql2": "^3.23.0",
+    "ws": "^8.21.1"
+  }
+}

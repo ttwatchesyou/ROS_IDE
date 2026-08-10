@@ -1,0 +1,13 @@
+{
+  "name": "ros2-ide-agent",
+  "version": "2.0.0",
+  "description": "ROS2 IDE — Robot Agent (runs on Ubuntu robot)",
+  "main": "agent.js",
+  "scripts": {
+    "start": "node agent.js"
+  },
+  "dependencies": {
+    "node-pty": "^1.0.0",
+    "ws": "^8.21.3"
+  }
+}
