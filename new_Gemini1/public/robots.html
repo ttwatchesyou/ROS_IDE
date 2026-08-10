@@ -6,245 +6,217 @@
 <title>ROS2 IDE — Robots</title>
 <script src="/theme.js"></script>
 <style>
-/* ══ DARK THEME (default) ══ */
-:root, [data-theme="dark"] {
-  --bg:#0d0f18;--bg2:#1a1d2e;--bg3:#12141f;--brd:#2a2d3e;--fg:#e2e4ec;--mt:#8b8fa8;
-  --acc:#4f8ef7;--grn:#3ecf8e;--red:#f06767;--amb:#f5a623;--dim:#555;--pur:#9f7aea;
-  --mono:'JetBrains Mono',monospace;
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=Mitr:wght@400;500;600&family=Nunito:wght@600;700;800;900&display=swap');
+
+:root,[data-theme="dark"]{
+  --bg:#0d1024;--bg2:#171b35;--bg3:#11152c;--brd:rgba(176,188,255,.16);--fg:#f7f8ff;
+  --mt:#b4bad7;--dim:#8890b3;--acc:#6c63ff;--acc2:#8d83ff;--cyan:#32d5f2;
+  --grn:#3ed598;--red:#ff718b;--amb:#ffbf5b;--pur:#bd78ff;--mono:'IBM Plex Mono',monospace;
+  --shadow:0 18px 55px rgba(2,5,24,.32);--card-shadow:0 10px 28px rgba(3,6,27,.22);
 }
-
-/* ══ LIGHT THEME ══ */
-[data-theme="light"] {
-  --bg:#f5f5f0;--bg2:#ffffff;--bg3:#e4e3db;--brd:rgba(0,0,0,0.08);--fg:#1a1c23;--mt:#5a5e72;
-  --acc:#1a6ef5;--grn:#1a8c5a;--red:#c0392b;--amb:#b87010;--dim:#a0a3b4;--pur:#6c3ec9;
+[data-theme="light"]{
+  --bg:#f4f5ff;--bg2:#fff;--bg3:#f7f7ff;--brd:rgba(77,69,154,.13);--fg:#252744;
+  --mt:#646b8e;--dim:#7e85a6;--acc:#645bdb;--acc2:#7a71ef;--cyan:#0ea5c6;
+  --grn:#159769;--red:#dc4968;--amb:#d88917;--pur:#914bd2;
+  --shadow:0 18px 55px rgba(75,69,145,.13);--card-shadow:0 10px 28px rgba(75,69,145,.09);
 }
+*,*::before,*::after{box-sizing:border-box;transition:background-color .18s,border-color .18s,color .12s,transform .18s,box-shadow .18s}
+*{margin:0;padding:0}
+body{min-height:100vh;color:var(--fg);font-family:'Nunito','Mitr',system-ui,sans-serif;background:
+  radial-gradient(circle at 8% 5%,rgba(108,99,255,.18),transparent 27rem),
+  radial-gradient(circle at 95% 36%,rgba(50,213,242,.10),transparent 26rem),var(--bg)}
+button,input{font:inherit}button:focus-visible,input:focus-visible{outline:3px solid rgba(50,213,242,.35);outline-offset:2px}
+::-webkit-scrollbar{width:7px;height:7px}::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--brd);border-radius:10px}::-webkit-scrollbar-thumb:hover{background:var(--dim)}
 
-/* ══ THEME TRANSITION ══ */
-*,*::before,*::after{ transition:background-color .18s ease,border-color .18s ease,color .12s ease; }
+.topbar{height:68px;padding:0 max(20px,calc((100vw - 1180px)/2));display:flex;align-items:center;gap:20px;
+  background:color-mix(in srgb,var(--bg2) 88%,transparent);backdrop-filter:blur(16px);border-bottom:1px solid var(--brd);position:sticky;top:0;z-index:100}
+.topbar-logo{display:flex;align-items:center;gap:10px;font-size:19px;font-weight:900;letter-spacing:-.3px;white-space:nowrap}
+.logo-bot{width:38px;height:38px;display:grid;place-items:center;border-radius:13px;background:linear-gradient(135deg,var(--acc),var(--pur));box-shadow:0 7px 18px rgba(108,99,255,.34);font-size:21px}
+.logo-lab{color:var(--cyan)}
+.topbar-nav{display:flex;gap:5px;margin-left:18px}.tnav{padding:9px 15px;border-radius:11px;font-size:13px;font-weight:800;cursor:pointer;color:var(--mt)}
+.tnav:hover{background:rgba(108,99,255,.1);color:var(--fg)}.tnav.active{background:rgba(108,99,255,.16);color:var(--acc2)}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:9px}.user-badge{min-height:36px;padding:6px 12px;border-radius:12px;background:var(--bg3);font-size:12px;color:var(--mt);display:flex;align-items:center;gap:7px;font-weight:700}
+.user-avatar{width:22px;height:22px;display:grid;place-items:center;border-radius:8px;background:linear-gradient(135deg,var(--amb),#ff8263);font-size:12px}
+.btn{min-height:38px;padding:8px 15px;border:1px solid var(--brd);border-radius:12px;background:var(--bg3);color:var(--fg);font-size:12px;font-weight:800;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:7px}
+.btn:hover:not(:disabled){border-color:var(--acc);color:var(--acc2);transform:translateY(-2px);box-shadow:0 8px 18px rgba(20,20,60,.12)}
+.btn:disabled{opacity:.48;cursor:not-allowed}.btn-acc{border:0;background:linear-gradient(135deg,var(--acc),var(--pur));color:#fff;box-shadow:0 8px 20px rgba(108,99,255,.25)}
+.btn-acc:hover:not(:disabled){color:#fff;box-shadow:0 11px 24px rgba(108,99,255,.34)}.btn-red{color:var(--red);background:rgba(255,113,139,.08)}
+#btn-theme{width:38px;height:38px;flex-shrink:0;display:grid;place-items:center;padding:0;border:1px solid var(--brd);border-radius:12px;background:var(--bg3);cursor:pointer}
+#btn-theme:hover{transform:rotate(8deg);border-color:var(--acc)}#btn-theme svg{width:17px;height:17px;fill:none;stroke:var(--mt);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 
-*{margin:0;padding:0;box-sizing:border-box;}
-body{background:var(--bg);color:var(--fg);font-family:'Inter',system-ui,sans-serif;min-height:100vh;}
+.main{max-width:1180px;margin:0 auto;padding:30px 24px 56px}.hero{position:relative;min-height:228px;padding:34px 37% 32px 38px;border:1px solid rgba(141,131,255,.25);border-radius:28px;overflow:hidden;
+  background:linear-gradient(130deg,rgba(108,99,255,.22),rgba(50,213,242,.10) 58%,rgba(189,120,255,.17));box-shadow:var(--shadow)}
+.hero::before,.hero::after{content:"";position:absolute;border-radius:50%;border:1px solid rgba(255,255,255,.12)}.hero::before{width:260px;height:260px;right:-48px;top:-112px}.hero::after{width:160px;height:160px;right:24%;bottom:-115px}
+.eyebrow{display:inline-flex;align-items:center;gap:7px;padding:6px 11px;border-radius:999px;background:rgba(50,213,242,.14);color:var(--cyan);font-size:11px;font-weight:900;letter-spacing:.7px;text-transform:uppercase}
+.hero h1{margin-top:13px;font-family:'Mitr','Nunito',sans-serif;font-size:clamp(27px,3.2vw,42px);line-height:1.22;font-weight:600;letter-spacing:-.6px}.hero h1 span{color:var(--cyan)}
+.hero p{max-width:570px;margin-top:9px;color:var(--mt);font-family:'Mitr','Nunito',sans-serif;font-size:14px;line-height:1.75}.hero-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:20px}.hero-actions .btn{min-height:44px;padding:10px 18px;font-size:13px}
+.hero-robot{position:absolute;right:7%;top:29px;width:190px;height:174px;display:grid;place-items:center;filter:drop-shadow(0 18px 22px rgba(20,16,80,.27));animation:floatBot 3.5s ease-in-out infinite}
+.robot-head{position:relative;width:146px;height:112px;border:7px solid rgba(255,255,255,.9);border-radius:42px;background:linear-gradient(145deg,#8178ff,#5348cf);box-shadow:inset 0 -11px 25px rgba(35,25,108,.22)}
+.robot-head::before{content:"";position:absolute;width:7px;height:28px;background:#fff;left:63px;top:-31px;border-radius:8px}.robot-head::after{content:"";position:absolute;width:17px;height:17px;background:var(--amb);left:58px;top:-42px;border:4px solid #fff;border-radius:50%}
+.bot-face{position:absolute;inset:22px 17px 20px;border-radius:25px;background:#171a37;display:flex;align-items:center;justify-content:center;gap:24px}.bot-eye{width:14px;height:22px;border-radius:10px;background:var(--cyan);box-shadow:0 0 15px rgba(50,213,242,.7)}
+.bot-smile{position:absolute;width:34px;height:15px;left:39px;bottom:13px;border-bottom:4px solid #fff;border-radius:0 0 20px 20px}.bot-ear{position:absolute;width:17px;height:42px;top:34px;border:5px solid #fff;background:var(--pur)}.bot-ear.left{left:-21px;border-radius:12px 4px 4px 12px}.bot-ear.right{right:-21px;border-radius:4px 12px 12px 4px}
+.bot-shadow{position:absolute;width:126px;height:19px;bottom:1px;border-radius:50%;background:rgba(10,12,40,.25);filter:blur(6px)}
+@keyframes floatBot{0%,100%{transform:translateY(0) rotate(-1deg)}50%{transform:translateY(-9px) rotate(1deg)}}
 
-/* ── Custom Scrollbar ── */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--brd); border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: var(--mt); }
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:18px 0 28px}.stat-card{min-height:82px;padding:16px 19px;border:1px solid var(--brd);border-radius:18px;background:color-mix(in srgb,var(--bg2) 92%,transparent);display:flex;align-items:center;gap:13px;box-shadow:var(--card-shadow)}
+.stat-icon{width:43px;height:43px;display:grid;place-items:center;flex-shrink:0;border-radius:14px;font-size:20px}.stat-icon.purple{background:rgba(108,99,255,.16)}.stat-icon.green{background:rgba(62,213,152,.14)}.stat-icon.orange{background:rgba(255,191,91,.15)}
+.stat-number{font-size:22px;line-height:1;font-weight:900}.stat-label{margin-top:5px;color:var(--dim);font-size:11px;font-weight:800}
+.page-header{display:flex;align-items:end;justify-content:space-between;margin-bottom:17px}.page-title{font-family:'Mitr','Nunito',sans-serif;font-size:22px;font-weight:600}.page-sub{margin-top:3px;color:var(--dim);font-size:12px}.section-tag{color:var(--acc2);font-size:11px;font-weight:900;letter-spacing:.5px;text-transform:uppercase}
 
-/* ── Topbar ── */
-.topbar{display:flex;align-items:center;gap:12px;padding:0 24px;height:56px;
-  background:var(--bg2);border-bottom:1px solid var(--brd);position:sticky;top:0;z-index:100;}
-.topbar-logo{font-size:20px;font-weight:700;color:var(--fg);display:flex;align-items:center;gap:8px;}
-.topbar-nav{display:flex;gap:4px;margin-left:24px;}
-.tnav{padding:6px 14px;border-radius:7px;font-size:13px;cursor:pointer;color:var(--mt);transition:all .15s;}
-.tnav:hover{background:rgba(139,143,168,.1);color:var(--fg);}
-.tnav.active{background:rgba(79,142,247,.15);color:var(--acc);}
-.topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px;}
-.user-badge{font-size:12px;color:var(--dim);display:flex;align-items:center;gap:6px;}
-.btn{background:var(--bg3);border:1px solid var(--brd);border-radius:7px;color:var(--fg);
-  padding:6px 14px;font-size:12px;cursor:pointer;transition:all .15s;}
-.btn:hover{border-color:var(--acc);color:var(--acc);}
-.btn-acc{background:var(--acc);border-color:var(--acc);color:#fff;}
-.btn-acc:hover{opacity:.88;color:#fff;}
-.btn-red{border-color:var(--red);color:var(--red);}
+.robot-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(315px,1fr));gap:17px}.robot-card{position:relative;overflow:hidden;padding:20px;border:1px solid var(--brd);border-radius:21px;background:var(--bg2);box-shadow:var(--card-shadow)}
+.robot-card::before{content:"";position:absolute;left:0;right:0;top:0;height:4px;background:var(--dim)}.robot-card.online::before{background:linear-gradient(90deg,var(--grn),var(--cyan))}
+.robot-card:hover{border-color:rgba(108,99,255,.45);transform:translateY(-4px);box-shadow:0 16px 35px rgba(5,7,30,.20)}
+.rc-head{display:flex;align-items:flex-start;gap:13px;margin-bottom:16px}.rc-icon{width:50px;height:50px;display:grid;place-items:center;flex-shrink:0;border-radius:16px;background:linear-gradient(145deg,rgba(108,99,255,.19),rgba(50,213,242,.11));font-size:27px}
+.rc-title{font-size:16px;line-height:1.25;font-weight:900;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rc-desc{min-height:17px;margin-top:4px;color:var(--dim);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rc-status{display:flex;align-items:center;gap:6px;padding:5px 9px;border-radius:999px;font-size:10px;font-weight:900}.rc-status.online{color:var(--grn);background:rgba(62,213,152,.12)}.rc-status.offline{color:var(--dim);background:rgba(126,133,166,.12)}
+.dot{width:7px;height:7px;border-radius:50%}.dot.on{background:var(--grn);box-shadow:0 0 0 4px rgba(62,213,152,.11)}.dot.off{background:var(--dim)}
+.rc-meta{display:grid;grid-template-columns:1fr 1fr;gap:8px;color:var(--dim);font-size:11px}.rc-meta>span{min-width:0;display:flex;align-items:center;gap:7px;padding:8px 9px;border-radius:10px;background:var(--bg3);overflow:hidden}.rc-meta .meta-wide{grid-column:1/-1}.rc-meta code{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rc-owner{color:var(--acc2)!important;background:rgba(108,99,255,.11)!important;font-weight:800}.rc-actions{display:grid;grid-template-columns:1fr 42px 42px;gap:7px;margin-top:15px;padding-top:15px;border-top:1px solid var(--brd)}.rc-actions .btn{padding:7px;min-height:40px}.btn-open.online-action{border-color:rgba(62,213,152,.35);background:linear-gradient(135deg,rgba(62,213,152,.16),rgba(50,213,242,.12));color:var(--grn)}
+.empty{grid-column:1/-1;padding:55px 20px;text-align:center;border:2px dashed var(--brd);border-radius:24px;background:rgba(108,99,255,.045);color:var(--dim)}.empty-icon{width:84px;height:84px;margin:0 auto 15px;display:grid;place-items:center;border-radius:28px;background:linear-gradient(145deg,rgba(108,99,255,.18),rgba(50,213,242,.13));font-size:43px;animation:floatBot 3.5s ease-in-out infinite}.empty-title{margin-bottom:7px;color:var(--fg);font-size:17px;font-weight:900}.empty-desc{max-width:350px;margin:0 auto 19px;font-size:12px;line-height:1.6}
 
-/* ══ THEME TOGGLE BUTTON ══ */
-#btn-theme{
-  width:34px;height:34px;border-radius:8px;border:1px solid var(--brd);
-  background:var(--bg2);cursor:pointer;display:flex;align-items:center;
-  justify-content:center;transition:all .15s;flex-shrink:0;padding:0;
-}
-#btn-theme:hover{border-color:var(--brd);background:var(--bg3);}
-#btn-theme svg{width:16px;height:16px;fill:none;stroke:var(--mt);
-  stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;transition:stroke .12s;}
-#btn-theme:hover svg{stroke:var(--fg);}
+.modal{position:fixed;inset:0;z-index:9999;padding:20px;display:none;align-items:center;justify-content:center;background:rgba(5,7,26,.73);backdrop-filter:blur(7px)}.modal.show{display:flex}.modal-box{width:520px;max-width:100%;max-height:90vh;overflow-y:auto;border:1px solid var(--brd);border-radius:22px;background:var(--bg2);box-shadow:0 28px 75px rgba(0,0,0,.38)}
+.modal-hdr{display:flex;align-items:center;justify-content:space-between;padding:19px 22px;border-bottom:1px solid var(--brd)}.modal-hdr h3{font-family:'Mitr','Nunito',sans-serif;font-size:17px;font-weight:600}.modal-close{width:34px;height:34px;border:0;border-radius:11px;background:var(--bg3);color:var(--dim);font-size:17px;cursor:pointer}.modal-close:hover{color:var(--red);transform:rotate(5deg)}
+.modal-body{padding:22px}.field{margin-bottom:16px}label{display:block;margin-bottom:7px;color:var(--mt);font-size:12px;font-weight:800}input,select,textarea{width:100%;padding:11px 13px;border:1px solid var(--brd);border-radius:11px;outline:none;background:var(--bg3);color:var(--fg);font-size:13px}input:focus,select:focus,textarea:focus{border-color:var(--acc);box-shadow:0 0 0 3px rgba(108,99,255,.11)}
+.modal-foot{display:flex;justify-content:flex-end;gap:8px;padding:16px 22px;border-top:1px solid var(--brd)}.install-layout{display:flex;gap:22px;align-items:stretch}.install-guide{flex:1.15;min-width:0}.install-form{flex:.85;min-width:0;padding:22px;border:1px solid var(--brd);border-radius:16px;background:var(--bg3);display:flex;flex-direction:column;justify-content:center}
+.script-box{margin-bottom:16px;padding:14px;border:1px solid var(--brd);border-radius:11px;background:#0b1023;color:#72e6ba;font-family:var(--mono);font-size:11px;overflow-x:auto;white-space:pre}.step{display:flex;gap:12px;margin-bottom:20px}.step-num{width:30px;height:30px;display:grid;place-items:center;flex-shrink:0;border-radius:11px;background:linear-gradient(135deg,var(--acc),var(--pur));color:#fff;font-size:12px;font-weight:900;box-shadow:0 6px 14px rgba(108,99,255,.22)}.step-body{flex:1;min-width:0}.step-title{margin-bottom:5px;font-size:13px;font-weight:900}.step-desc{color:var(--dim);font-size:12px;line-height:1.65}
+.notif{position:fixed;top:82px;right:20px;z-index:99999;max-width:min(360px,calc(100vw - 40px));padding:13px 18px;border:1px solid var(--brd);border-radius:13px;background:var(--bg2);box-shadow:var(--shadow);font-size:13px;font-weight:800;transform:translateX(130%)}.notif.show{transform:translateX(0)}.notif.ok{border-left:4px solid var(--grn)}.notif.err{border-left:4px solid var(--red)}.err-msg{display:none;margin-bottom:14px;padding:11px 14px;border:1px solid var(--red);border-radius:11px;background:rgba(255,113,139,.1);color:var(--red);font-size:12px}
 
-/* ── Main layout ── */
-.main{max-width:1100px;margin:32px auto;padding:0 24px;}
-.page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;}
-.page-title{font-size:22px;font-weight:700;}
-.page-sub{font-size:13px;color:var(--dim);margin-top:4px;}
-
-/* ── Robot grid ── */
-.robot-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;}
-.robot-card{background:var(--bg2);border:1px solid var(--brd);border-radius:12px;padding:20px;
-  transition:border-color .2s;cursor:pointer;}
-.robot-card:hover{border-color:var(--acc);}
-.robot-card.online{border-left:3px solid var(--grn);}
-.robot-card.offline{border-left:3px solid var(--dim);}
-.rc-head{display:flex;align-items:flex-start;gap:12px;margin-bottom:14px;}
-.rc-icon{font-size:28px;flex-shrink:0;}
-.rc-title{font-size:15px;font-weight:600;flex:1;}
-.rc-desc{font-size:11px;color:var(--dim);margin-top:3px;}
-.rc-status{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;}
-.rc-status.online{color:var(--grn);}
-.rc-status.offline{color:var(--dim);}
-.dot{width:8px;height:8px;border-radius:50%;}
-.dot.on{background:var(--grn);box-shadow:0 0 6px rgba(62,207,142,.4);}
-.dot.off{background:var(--dim);}
-.rc-meta{font-size:11px;color:var(--dim);display:flex;flex-direction:column;gap:3px;}
-.rc-meta span{display:flex;align-items:center;gap:6px;}
-.rc-owner{background:rgba(99,102,241,.15);border:1px solid var(--acc);color:var(--acc);padding:2px 8px;border-radius:6px;font-weight:600;align-self:flex-start;}
-.rc-actions{display:flex;gap:6px;margin-top:14px;padding-top:14px;border-top:1px solid var(--brd);}
-.rc-actions .btn{flex:1;text-align:center;padding:5px 8px;font-size:11px;}
-
-/* ── Empty state ── */
-.empty{text-align:center;padding:60px 20px;color:var(--dim);}
-.empty-icon{font-size:48px;margin-bottom:16px;}
-
-/* ── Modal ── */
-.modal{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:9999;
-  display:flex;align-items:center;justify-content:center;display:none;}
-.modal.show{display:flex;}
-.modal-box{background:var(--bg2);border:1px solid var(--brd);border-radius:12px;
-  width:520px;max-height:90vh;overflow-y:auto;box-shadow:0 24px 64px rgba(0,0,0,.3);}
-.modal-hdr{display:flex;align-items:center;justify-content:space-between;
-  padding:18px 22px;border-bottom:1px solid var(--brd);}
-.modal-hdr h3{font-size:16px;font-weight:700;}
-.modal-close{background:none;border:none;color:var(--dim);font-size:20px;cursor:pointer;}
-.modal-body{padding:22px;}
-.field{margin-bottom:16px;}
-label{display:block;font-size:12px;color:var(--mt);margin-bottom:6px;font-weight:500;}
-input,select,textarea{width:100%;background:var(--bg3);border:1px solid var(--brd);
-  border-radius:7px;color:var(--fg);font-size:13px;padding:9px 12px;outline:none;
-  font-family:inherit;transition:border .2s;}
-input:focus,select:focus,textarea:focus{border-color:var(--acc);}
-.modal-foot{display:flex;justify-content:flex-end;gap:8px;padding:16px 22px;
-  border-top:1px solid var(--brd);}
-
-/* ── Install script modal ── */
-.script-box{background:var(--bg3);border:1px solid var(--brd);border-radius:8px;
-  padding:16px;font-family:var(--mono);font-size:12px;color:var(--grn);
-  overflow-x:auto;white-space:pre;margin-bottom:16px;}
-.step{display:flex;gap:12px;margin-bottom:20px;}
-.step-num{width:28px;height:28px;border-radius:50%;background:var(--acc);color:#fff;
-  font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
-.step-body{flex:1;min-width:0;}
-.step-title{font-size:13px;font-weight:600;margin-bottom:6px;}
-.step-desc{font-size:12px;color:var(--dim);line-height:1.6;}
-
-/* ── Notification ── */
-.notif{position:fixed;top:70px;right:20px;background:var(--bg2);border:1px solid var(--brd);
-  border-radius:8px;padding:12px 18px;font-size:13px;z-index:99999;
-  box-shadow:0 8px 24px rgba(0,0,0,.2);transform:translateX(120%);transition:transform .3s;}
-.notif.show{transform:translateX(0);}
-.notif.ok{border-left:3px solid var(--grn);}
-.notif.err{border-left:3px solid var(--red);}
-
-.err-msg{background:rgba(240,103,103,.12);border:1px solid var(--red);border-radius:7px;
-  padding:10px 14px;font-size:12px;color:var(--red);margin-bottom:14px;display:none;}
+@media(max-width:760px){.topbar{height:62px;padding:0 15px;gap:9px}.topbar-nav{display:none}.topbar-logo{font-size:16px}.logo-bot{width:34px;height:34px}.user-badge{padding:6px}.user-badge span:last-child{display:none}.signout-text{display:none}.main{padding:18px 14px 38px}.hero{min-height:330px;padding:25px 24px 145px;border-radius:23px}.hero-robot{width:145px;height:128px;right:calc(50% - 72px);top:auto;bottom:12px;transform:scale(.78);transform-origin:center;animation:none}.stats{gap:8px;margin:12px 0 24px}.stat-card{min-height:74px;padding:12px 8px;gap:8px;flex-direction:column;text-align:center}.stat-icon{width:35px;height:35px;border-radius:11px;font-size:17px}.stat-number{font-size:18px}.stat-label{font-size:9px}.page-header{align-items:start}.robot-grid{grid-template-columns:1fr}.install-layout{flex-direction:column}.modal{padding:10px}.modal-body{padding:18px}.two-cols{grid-template-columns:1fr!important}.rc-meta{grid-template-columns:1fr}.rc-meta .meta-wide{grid-column:auto}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 </style>
 </head>
 <body>
 
 <!-- Topbar -->
 <div class="topbar">
-  <div class="topbar-logo">🤖 <span>ROS2 IDE</span></div>
+  <div class="topbar-logo"><span class="logo-bot">🤖</span><span>ROS2 <span class="logo-lab">LAB</span></span></div>
   <div class="topbar-nav">
-    <div class="tnav active" onclick="location.href='/robots'">Robots</div>
-    <div class="tnav" id="nav-ide" onclick="goToIDE()" style="display:none">Open IDE</div>
+    <div class="tnav active" onclick="location.href='/robots'">🤖 ห้องหุ่นยนต์</div>
+    <div class="tnav" id="nav-ide" onclick="goToIDE()" style="display:none">เปิด IDE</div>
   </div>
   <div class="topbar-right">
-    <div class="user-badge">👤 <span id="username-display">—</span></div>
+    <div class="user-badge"><span class="user-avatar">👋</span><span id="username-display">—</span></div>
     
     <!-- Theme Toggle Button -->
-    <button id="btn-theme" onclick="toggleTheme()" title="Toggle light / dark mode">
+    <button id="btn-theme" onclick="toggleTheme()" title="เปลี่ยนโหมดสี" aria-label="เปลี่ยนโหมดสี">
       <svg id="icon-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
       <svg id="icon-sun" viewBox="0 0 24 24" style="display:none"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
     </button>
     
-    <button class="btn" onclick="logout()">Sign out</button>
+    <button class="btn" onclick="logout()"><span>↪</span><span class="signout-text">ออกจากระบบ</span></button>
   </div>
 </div>
 
 <!-- Main -->
 <div class="main">
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="eyebrow">✨ My Robot Lab</div>
+    <h1 id="hero-title">พร้อมปลุกหุ่นยนต์<br><span>ให้มีชีวิตหรือยัง?</span></h1>
+    <p>เลือกหุ่นยนต์คู่ใจแล้วเริ่มเขียนโปรแกรม ทดลอง และเรียนรู้ ROS2 แบบสนุก ๆ ไปด้วยกัน</p>
+    <div class="hero-actions">
+      <button class="btn btn-acc" onclick="addSimRobot()" title="ทดลองได้ทันทีโดยไม่ต้องมีหุ่นยนต์จริง">🧪 ลองหุ่นยนต์จำลอง</button>
+      <button class="btn" onclick="showAddModal()">＋ เพิ่มหุ่นยนต์จริง</button>
+    </div>
+    <div class="hero-robot" aria-hidden="true">
+      <div class="bot-shadow"></div>
+      <div class="robot-head">
+        <span class="bot-ear left"></span><span class="bot-ear right"></span>
+        <div class="bot-face"><span class="bot-eye"></span><span class="bot-eye"></span><span class="bot-smile"></span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="stats" aria-label="สรุปหุ่นยนต์">
+    <div class="stat-card"><span class="stat-icon purple">🤖</span><div><div class="stat-number" id="stat-total">—</div><div class="stat-label">หุ่นยนต์ทั้งหมด</div></div></div>
+    <div class="stat-card"><span class="stat-icon green">⚡</span><div><div class="stat-number" id="stat-online">—</div><div class="stat-label">พร้อมใช้งาน</div></div></div>
+    <div class="stat-card"><span class="stat-icon orange">🚀</span><div><div class="stat-number" id="stat-missions">พร้อม!</div><div class="stat-label">เริ่มภารกิจใหม่</div></div></div>
+  </section>
+
   <div class="page-header">
     <div>
-      <div class="page-title">Robots</div>
-      <div class="page-sub">Manage your ROS2 robots</div>
+      <div class="section-tag">Your robot team</div>
+      <div class="page-title">ทีมเพื่อนหุ่นยนต์ของฉัน</div>
+      <div class="page-sub">เลือกตัวที่ออนไลน์ แล้วออกไปสร้างโปรเจกต์เจ๋ง ๆ กันเลย</div>
     </div>
-    <div style="display:flex;gap:8px">
-      <button class="btn" onclick="addSimRobot()" title="สร้างหุ่นยนต์จำลอง ทดสอบได้โดยไม่ต้องมี ROS จริง">🧪 Demo (Sim)</button>
-      <button class="btn btn-acc" onclick="showAddModal()">＋ Add Robot</button>
-    </div>
+    <button class="btn btn-acc" onclick="showAddModal()">＋ เพิ่มหุ่นยนต์</button>
   </div>
   <div class="robot-grid" id="robot-grid">
-    <div class="empty"><div class="empty-icon">🤖</div><div>Loading...</div></div>
+    <div class="empty"><div class="empty-icon">🤖</div><div class="empty-title">กำลังเรียกเพื่อนหุ่นยนต์...</div></div>
   </div>
 </div>
 
 <!-- Add/Edit Robot Modal -->
-<div class="modal" id="modal-robot">
+<div class="modal" id="modal-robot" role="dialog" aria-modal="true" aria-labelledby="modal-title">
   <div class="modal-box">
     <div class="modal-hdr">
-      <h3 id="modal-title">Add Robot</h3>
+      <h3 id="modal-title">แก้ไขข้อมูลหุ่นยนต์</h3>
       <button class="modal-close" onclick="closeModal('modal-robot')">✕</button>
     </div>
     <div class="modal-body">
       <div class="err-msg" id="robot-err"></div>
       <input type="hidden" id="edit-robot-id">
       <div class="field">
-        <label>Robot Name *</label>
-        <input id="f-name" placeholder="e.g. Turtle Bot 1">
+        <label>ชื่อหุ่นยนต์ *</label>
+        <input id="f-name" placeholder="เช่น น้องเต่า, Robo One">
       </div>
       <div class="field">
-        <label>Robot Key * <span style="color:var(--dim);font-size:10px">(จาก install script)</span></label>
+        <label>Robot Key * <span style="color:var(--dim);font-size:10px">(จากคำสั่งติดตั้ง)</span></label>
         <input id="f-key" placeholder="xxxxxxxx-xxxx-4xxx-xxxx-xxxxxxxxxxxx" style="font-family:var(--mono)">
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="two-cols" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div class="field">
-          <label>SSH Username</label>
+          <label>ชื่อผู้ใช้ SSH</label>
           <input id="f-user" placeholder="ubuntu">
         </div>
         <div class="field">
-          <label>SSH Password</label>
+          <label>รหัสผ่าน SSH</label>
           <input id="f-pass" type="password" placeholder="••••••••">
         </div>
       </div>
       <div class="field">
-        <label>Workspace Path</label>
+        <label>ตำแหน่ง Workspace</label>
         <input id="f-ws" placeholder="~/ros2_ws">
       </div>
       <div class="field">
-        <label>Description</label>
-        <input id="f-desc" placeholder="e.g. Differential drive robot">
+        <label>คำอธิบายสั้น ๆ</label>
+        <input id="f-desc" placeholder="เช่น หุ่นยนต์สองล้อสำหรับวิชาวิทยาการคำนวณ">
       </div>
     </div>
     <div class="modal-foot">
-      <button class="btn" onclick="closeModal('modal-robot')">Cancel</button>
-      <button class="btn btn-acc" id="btn-save-robot" onclick="saveRobot()">Add Robot</button>
+      <button class="btn" onclick="closeModal('modal-robot')">ยกเลิก</button>
+      <button class="btn btn-acc" id="btn-save-robot" onclick="saveRobot()">บันทึกข้อมูล</button>
     </div>
   </div>
 </div>
 
 <!-- ── ปรับ Layout Install Script Modal ให้เป็น 2 คอลัมน์กว้างๆ สวยงาม (เพิ่ม min-width: 0) ── -->
-<div class="modal" id="modal-install">
-  <div class="modal-box" style="width: 860px; max-width: 95vw;">
+<div class="modal" id="modal-install" role="dialog" aria-modal="true" aria-labelledby="install-modal-title">
+  <div class="modal-box" style="width:860px">
     <div class="modal-hdr">
-      <h3>Add New Robot</h3>
+      <h3 id="install-modal-title">🤝 ชวนหุ่นยนต์ตัวใหม่เข้าทีม</h3>
       <button class="modal-close" onclick="closeModal('modal-install')">✕</button>
     </div>
     
-    <div class="modal-body" style="display: flex; gap: 24px; align-items: stretch;">
+    <div class="modal-body install-layout">
       
       <!-- ฝั่งซ้าย: คำแนะนำการเชื่อมต่อ -->
-      <div style="flex: 1.15; min-width: 0;">
+      <div class="install-guide">
         <div class="step">
           <div class="step-num">1</div>
           <div class="step-body">
-            <div class="step-title">รัน Install Script บนเครื่อง Robot</div>
-            <div class="step-desc">เปิด Terminal บนหุ่นยนต์ แล้วรันคำสั่งนี้:</div>
+            <div class="step-title">ติดตั้งตัวช่วยบนหุ่นยนต์</div>
+            <div class="step-desc">เปิด Terminal บนเครื่องหุ่นยนต์ แล้ววางคำสั่งนี้:</div>
             <div class="script-box" id="install-cmd" style="margin-bottom:8px">curl -sSL http://YOUR_SERVER/install.sh | bash</div>
-            <button class="btn" onclick="copyInstallCmd()">📋 Copy Command</button>
+            <button class="btn" onclick="copyInstallCmd()">📋 คัดลอกคำสั่ง</button>
           </div>
         </div>
 
         <div class="step">
           <div class="step-num">2</div>
           <div class="step-body">
-            <div class="step-title">รับ Robot Key</div>
-            <div class="step-desc">เมื่อติดตั้งเสร็จ จะแสดง Robot Key ออกมา หรือตรวจสอบด้วยคำสั่ง:</div>
+            <div class="step-title">รับรหัส Robot Key</div>
+            <div class="step-desc">เมื่อติดตั้งเสร็จ ระบบจะแสดง Robot Key หรือตรวจสอบอีกครั้งด้วยคำสั่ง:</div>
             <div class="script-box" style="margin-bottom:0">ros2ide-agent key</div>
           </div>
         </div>
@@ -252,35 +224,35 @@ input:focus,select:focus,textarea:focus{border-color:var(--acc);}
         <div class="step" style="margin-bottom:0">
           <div class="step-num">3</div>
           <div class="step-body">
-            <div class="step-title">กรอกข้อมูลเพื่อเชื่อมต่อ</div>
-            <div class="step-desc">นำ Key มากรอกลงในฟอร์มด้านขวา พร้อมตั้งชื่อให้หุ่นยนต์ของคุณ</div>
+            <div class="step-title">ตั้งชื่อแล้วเชื่อมต่อ</div>
+            <div class="step-desc">นำ Key มากรอกในฟอร์ม พร้อมตั้งชื่อสุดเท่ให้เพื่อนหุ่นยนต์ของเรา</div>
           </div>
         </div>
       </div>
 
       <!-- ฝั่งขวา: ฟอร์มกรอกข้อมูล (เพิ่ม min-width: 0 เพื่อไม่ให้กล่องฟอร์มถูกบีบ) -->
-      <div style="flex: 0.85; min-width: 0; background:var(--bg3); border:1px solid var(--brd); border-radius:12px; padding:24px; display:flex; flex-direction:column; justify-content:center;">
+      <div class="install-form">
         <div class="err-msg" id="install-err"></div>
         <div class="field">
           <label>Robot Key *</label>
           <input id="if-key" placeholder="xxxxxxxx-xxxx-4xxx-xxxx-xxxxxxxxxxxx" style="font-family:var(--mono)">
         </div>
         <div class="field">
-          <label>Robot Name *</label>
-          <input id="if-name" placeholder="e.g. TurtleBot3 Burger">
+          <label>ชื่อหุ่นยนต์ *</label>
+          <input id="if-name" placeholder="เช่น TurtleBot นักสำรวจ">
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="two-cols" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
           <div class="field">
-            <label>SSH User</label>
+            <label>ชื่อผู้ใช้ SSH</label>
             <input id="if-user" value="ubuntu">
           </div>
           <div class="field">
-            <label>SSH Password</label>
+            <label>รหัสผ่าน SSH</label>
             <input id="if-pass" type="password" placeholder="(เว้นว่างถ้าใช้ key)">
           </div>
         </div>
         <div class="field" style="margin-bottom:0">
-          <label>Workspace Path</label>
+          <label>ตำแหน่ง Workspace</label>
           <input id="if-ws" value="~/ros2_ws">
         </div>
       </div>
@@ -288,28 +260,28 @@ input:focus,select:focus,textarea:focus{border-color:var(--acc);}
     </div>
     
     <div class="modal-foot">
-      <button class="btn" onclick="closeModal('modal-install')">Cancel</button>
-      <button class="btn btn-acc" onclick="addRobotFromInstall()">Add Robot</button>
+      <button class="btn" onclick="closeModal('modal-install')">ไว้ทีหลัง</button>
+      <button class="btn btn-acc" onclick="addRobotFromInstall()">🤖 เพิ่มเข้าทีม</button>
     </div>
   </div>
 </div>
 
 <!-- Delete confirm -->
-<div class="modal" id="modal-delete">
+<div class="modal" id="modal-delete" role="dialog" aria-modal="true" aria-labelledby="delete-modal-title">
   <div class="modal-box" style="width:400px">
     <div class="modal-hdr">
-      <h3>Delete Robot</h3>
+      <h3 id="delete-modal-title">นำหุ่นยนต์ออกจากทีม?</h3>
       <button class="modal-close" onclick="closeModal('modal-delete')">✕</button>
     </div>
     <div class="modal-body">
       <p style="font-size:13px;color:var(--mt);line-height:1.7">
-        Are you sure you want to delete <strong id="del-robot-name"></strong>?<br>
-        This action cannot be undone.
+        ต้องการนำ <strong id="del-robot-name"></strong> ออกจากทีมใช่ไหม?<br>
+        เมื่อลบแล้วจะไม่สามารถย้อนกลับได้
       </p>
     </div>
     <div class="modal-foot">
-      <button class="btn" onclick="closeModal('modal-delete')">Cancel</button>
-      <button class="btn btn-red" id="btn-confirm-del" onclick="confirmDelete()">Delete</button>
+      <button class="btn" onclick="closeModal('modal-delete')">ยกเลิก</button>
+      <button class="btn btn-red" id="btn-confirm-del" onclick="confirmDelete()">นำออกจากทีม</button>
     </div>
   </div>
 </div>
@@ -336,6 +308,7 @@ let robots = [];
 let statusWs = null;
 
 function connectStatusWs() {
+  if (statusWs && (statusWs.readyState === WebSocket.OPEN || statusWs.readyState === WebSocket.CONNECTING)) return;
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   statusWs = new WebSocket(`${proto}//${location.host}/ws/robot-status`, ['ros2ide', TOKEN]);
   statusWs.onmessage = e => {
@@ -359,9 +332,14 @@ function updateCardStatus(r) {
   const stat = card.querySelector('.rc-status');
   if (dot)  { dot.className  = 'dot ' + (r.online ? 'on' : 'off'); }
   if (stat) { stat.className = 'rc-status ' + (r.online ? 'online' : 'offline');
-              stat.querySelector('span').textContent = r.online ? 'Online' : 'Offline'; }
+              stat.querySelector('span').textContent = r.online ? 'พร้อมใช้งาน' : 'ออฟไลน์'; }
   const openBtn = card.querySelector('.btn-open');
-  if (openBtn) openBtn.disabled = !r.online;
+  if (openBtn) {
+    openBtn.disabled = !r.online;
+    openBtn.classList.toggle('online-action', r.online);
+    openBtn.textContent = r.online ? '🚀 เริ่มภารกิจ' : '🚀 รอเชื่อมต่อ';
+  }
+  updateStats();
 }
 
 // ── Load robots ────────────────────────────────────────────────
@@ -375,12 +353,16 @@ async function loadRobots() {
 
 function renderGrid() {
   const grid = document.getElementById('robot-grid');
+  updateStats();
   if (!robots.length) {
     grid.innerHTML = `<div class="empty">
       <div class="empty-icon">🤖</div>
-      <div style="font-size:15px;font-weight:600;margin-bottom:8px">No robots yet</div>
-      <div style="font-size:13px;color:var(--dim);margin-bottom:20px">Add your first robot to get started</div>
-      <button class="btn btn-acc" onclick="showAddModal()">＋ Add Robot</button>
+      <div class="empty-title">ทีมของเรายังว่างอยู่</div>
+      <div class="empty-desc">เพิ่มหุ่นยนต์ตัวแรก หรือสร้างตัวจำลองเพื่อเริ่มเรียนรู้ได้ทันที</div>
+      <div style="display:flex;justify-content:center;flex-wrap:wrap;gap:8px">
+        <button class="btn btn-acc" onclick="addSimRobot()">🧪 ลองตัวจำลอง</button>
+        <button class="btn" onclick="showAddModal()">＋ เพิ่มหุ่นยนต์จริง</button>
+      </div>
     </div>`;
     return;
   }
@@ -390,36 +372,40 @@ function renderGrid() {
         <span class="rc-icon">🤖</span>
         <div style="flex:1;min-width:0">
           <div class="rc-title">${escH(r.name)}</div>
-          <div class="rc-desc">${escH(r.description||'')}</div>
+          <div class="rc-desc">${escH(r.description||'เพื่อนหุ่นยนต์พร้อมทำภารกิจ')}</div>
         </div>
         <div class="rc-status ${r.online?'online':'offline'}">
           <div class="dot ${r.online?'on':'off'}"></div>
-          <span>${r.online?'Online':'Offline'}</span>
+          <span>${r.online?'พร้อมใช้งาน':'ออฟไลน์'}</span>
         </div>
       </div>
       <div class="rc-meta">
-        <span>🔑 <code style="font-family:var(--mono);font-size:10px">${r.robot_key.slice(0,18)}…</code></span>
-        <span>👤 ${escH(r.ssh_user||'ubuntu')}</span>
-        <span>📁 ${escH(r.workspace||'~/ros2_ws')}</span>
-        ${r.added_by_name?`<span class="rc-owner" title="เจ้าของหุ่นยนต์">🪪 เจ้าของ: ${escH(r.added_by_name)}</span>`:''}
-        ${r.last_connected?`<span>🕐 Last seen: ${new Date(r.last_connected).toLocaleString('th-TH')}</span>`:''}
+        <span title="Robot Key">🔑 <code>${escH(r.robot_key.slice(0,18))}…</code></span>
+        <span title="ผู้ใช้ SSH">👤 ${escH(r.ssh_user||'ubuntu')}</span>
+        <span class="meta-wide" title="Workspace">📁 ${escH(r.workspace||'~/ros2_ws')}</span>
+        ${r.added_by_name?`<span class="rc-owner meta-wide" title="เจ้าของหุ่นยนต์">🪪 ผู้ดูแล: ${escH(r.added_by_name)}</span>`:''}
+        ${r.last_connected?`<span class="meta-wide">🕐 พบล่าสุด ${new Date(r.last_connected).toLocaleString('th-TH',{dateStyle:'short',timeStyle:'short'})}</span>`:''}
       </div>
       <div class="rc-actions">
-        <button class="btn btn-open" ${r.online?'':'disabled'} onclick="openIDE(${r.id})"
-          style="${r.online?'background:rgba(62,207,142,.15);border-color:var(--grn);color:var(--grn)':''}">
-          ▶ Open IDE
+        <button class="btn btn-open ${r.online?'online-action':''}" ${r.online?'':'disabled'} onclick="openIDE(${r.id})">
+          🚀 ${r.online?'เริ่มภารกิจ':'รอเชื่อมต่อ'}
         </button>
-        <button class="btn" onclick="showEditModal(${r.id})" title="Edit">✏️</button>
-        <button class="btn btn-red" onclick="showDeleteModal(${r.id})" title="Delete">🗑️</button>
+        <button class="btn" onclick="showEditModal(${r.id})" title="แก้ไขข้อมูล" aria-label="แก้ไขข้อมูล ${escH(r.name)}">✏️</button>
+        <button class="btn btn-red" onclick="showDeleteModal(${r.id})" title="นำออกจากทีม" aria-label="ลบ ${escH(r.name)}">🗑️</button>
       </div>
     </div>`).join('');
+}
+
+function updateStats(){
+  document.getElementById('stat-total').textContent = robots.length;
+  document.getElementById('stat-online').textContent = robots.filter(r => r.online).length;
 }
 
 function escH(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 // ── Open IDE ───────────────────────────────────────────────────
 async function openIDE(robotId) {
-  notif('Connecting...', 'ok');
+  notif('กำลังเชื่อมต่อกับหุ่นยนต์...', 'ok');
   const d = await api('/api/connect', { method:'POST', body:{ robotId } });
   if (!d.ok) { notif(d.error, 'err'); return; }
   // Store session
@@ -443,7 +429,7 @@ function setInstallCmd(){
 
 function copyInstallCmd(){
   const cmd = document.getElementById('install-cmd').textContent;
-  navigator.clipboard.writeText(cmd).then(()=>notif('Copied!','ok'));
+  navigator.clipboard.writeText(cmd).then(()=>notif('คัดลอกคำสั่งแล้ว!','ok'));
 }
 
 async function addRobotFromInstall(){
@@ -454,20 +440,20 @@ async function addRobotFromInstall(){
   const ws   = document.getElementById('if-ws').value.trim();
   const err  = document.getElementById('install-err');
   err.style.display = 'none';
-  if (!key || !name) { err.textContent='Robot Key and Name are required'; err.style.display='block'; return; }
+  if (!key || !name) { err.textContent='กรุณากรอก Robot Key และชื่อหุ่นยนต์'; err.style.display='block'; return; }
   // Normalize key: trim whitespace and any accidental chars
   const cleanKey = key.trim().replace(/[^a-f0-9-]/gi,'');
   const d = await api('/api/robots', { method:'POST', body:{ robot_key:cleanKey, name, ssh_user:user||'ubuntu', ssh_pass:pass, workspace:ws||'~/ros2_ws' }});
   if (!d.ok) { err.textContent=d.error; err.style.display='block'; return; }
-  notif('Robot added!', 'ok');
+  notif('เพิ่มเพื่อนหุ่นยนต์เข้าทีมแล้ว!', 'ok');
   closeModal('modal-install');
   loadRobots();
 }
 
 function showEditModal(id){
   const r = robots.find(x=>x.id===id); if(!r) return;
-  document.getElementById('modal-title').textContent = 'Edit Robot';
-  document.getElementById('btn-save-robot').textContent = 'Save Changes';
+  document.getElementById('modal-title').textContent = '✏️ แก้ไขข้อมูลหุ่นยนต์';
+  document.getElementById('btn-save-robot').textContent = 'บันทึกการแก้ไข';
   document.getElementById('edit-robot-id').value = id;
   document.getElementById('f-name').value  = r.name;
   document.getElementById('f-key').value   = r.robot_key;
@@ -489,16 +475,16 @@ async function saveRobot(){
   const desc = document.getElementById('f-desc').value.trim();
   const err  = document.getElementById('robot-err');
   err.style.display = 'none';
-  if (!name) { err.textContent='Name is required'; err.style.display='block'; return; }
+  if (!name) { err.textContent='กรุณาตั้งชื่อให้หุ่นยนต์'; err.style.display='block'; return; }
   let d;
   if (id) {
     d = await api(`/api/robots/${id}`, { method:'PUT', body:{ name, ssh_user:user, ssh_pass:pass||undefined, workspace:ws, description:desc }});
   } else {
-    if (!key) { err.textContent='Robot Key required'; err.style.display='block'; return; }
+    if (!key) { err.textContent='กรุณากรอก Robot Key'; err.style.display='block'; return; }
     d = await api('/api/robots', { method:'POST', body:{ robot_key:key, name, ssh_user:user, ssh_pass:pass, workspace:ws, description:desc }});
   }
   if (!d.ok) { err.textContent=d.error; err.style.display='block'; return; }
-  notif(id ? 'Updated!' : 'Added!', 'ok');
+  notif(id ? 'บันทึกข้อมูลใหม่แล้ว!' : 'เพิ่มหุ่นยนต์แล้ว!', 'ok');
   closeModal('modal-robot');
   loadRobots();
 }
@@ -517,7 +503,7 @@ async function addSimRobot(){
   const d = await api('/api/robots', { method:'POST',
     body:{ robot_key:key, name, ssh_user:'sim', ssh_pass:'', workspace:'~/ros2_ws' }});
   if (!d.ok) { notif(d.error, 'err'); return; }
-  notif('เพิ่มหุ่นยนต์จำลองแล้ว — กด Connect แล้วลองใช้ได้เลย', 'ok');
+  notif('สร้างเพื่อนหุ่นยนต์จำลองแล้ว — พร้อมออกทำภารกิจ!', 'ok');
   loadRobots();
 }
 
@@ -532,7 +518,7 @@ async function confirmDelete(){
   if (!_delId) return;
   const d = await api(`/api/robots/${_delId}`, { method:'DELETE' });
   if (!d.ok) { notif(d.error, 'err'); return; }
-  notif('Deleted', 'ok');
+  notif('นำหุ่นยนต์ออกจากทีมแล้ว', 'ok');
   closeModal('modal-delete');
   loadRobots();
 }
@@ -542,9 +528,18 @@ function openModal(id){ document.getElementById(id).classList.add('show'); }
 function closeModal(id){ document.getElementById(id).classList.remove('show');
   document.getElementById('f-key').disabled = false;
   document.getElementById('edit-robot-id').value = '';
-  document.getElementById('modal-title').textContent = 'Add Robot';
-  document.getElementById('btn-save-robot').textContent = 'Add Robot';
+  document.getElementById('modal-title').textContent = 'แก้ไขข้อมูลหุ่นยนต์';
+  document.getElementById('btn-save-robot').textContent = 'บันทึกข้อมูล';
 }
+
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  const modal = document.querySelector('.modal.show');
+  if (modal) closeModal(modal.id);
+});
+document.querySelectorAll('.modal').forEach(modal => modal.addEventListener('click', e => {
+  if (e.target === modal) closeModal(modal.id);
+}));
 
 // ── Notification ───────────────────────────────────────────────
 function notif(msg, type='ok'){
