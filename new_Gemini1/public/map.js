@@ -14,6 +14,7 @@ let mapTool = 'wall';
 const MAP_LIDAR_CATALOG = {
   slamtec: {
     label: 'SLAMTEC',
+    driverRepository: 'https://github.com/CreedyNZ/rplidar_ros2',
     models: [
       { id:'rplidar_a1m8', label:'RPLIDAR A1M8', sensorType:'2D · 360°', driverPackage:'rplidar_ros' },
       { id:'rplidar_c1m1', label:'RPLIDAR C1M1', sensorType:'2D · 360°', driverPackage:'rplidar_ros' },
@@ -22,9 +23,10 @@ const MAP_LIDAR_CATALOG = {
   },
   ydlidar: {
     label: 'YDLIDAR',
+    driverRepository: 'https://github.com/YDLIDAR/ydlidar_ros2',
     models: [
-      { id:'x4', label:'X4', sensorType:'2D · 360°', driverPackage:'ydlidar_ros2_driver' },
-      { id:'g4', label:'G4', sensorType:'2D · 360°', driverPackage:'ydlidar_ros2_driver' },
+      { id:'x4', label:'X4', sensorType:'2D · 360°', driverPackage:'ydlidar' },
+      { id:'g4', label:'G4', sensorType:'2D · 360°', driverPackage:'ydlidar' },
     ],
   },
   hokuyo: {
@@ -51,7 +53,7 @@ const mapData = {
   bounds: [-4, -4, 4, 4],   // [xmin, ymin, xmax, ymax]
   walls: [],                // [[x1,y1,x2,y2], ...]
   start: [0, 0],           // [x, y]
-  lidar: { brand:'', model:'', sensorType:'', driverPackage:'' },
+  lidar: { brand:'', model:'', sensorType:'', driverPackage:'', driverRepository:'' },
 };
 const mapView = { cx: 0, cy: 0, scale: 60, zoom: 1 }; // scale px/m, zoom multiplier
 let mapPolyline = [];       // จุดของเส้นกำแพงที่กำลังวาด (world)
@@ -66,7 +68,7 @@ let mapPinchDist = null;
 let mapPinchMid = null;
 
 function mapStoreKey() { return 'map_' + (sessionId || 'default'); }
-function mapStatus(t) { const el = document.getElementById('map-status'); if (el) el.textContent = t || ''; }
+function mapStatus(t) { const el = document.getElementById('map3d-status') || document.getElementById('map-status'); if (el) el.textContent = t || ''; }
 function mapActiveTool() { return mapTool; }
 
 // ── coordinate transforms (CSS px) ──
@@ -481,6 +483,7 @@ function mapNormalizeLidarConfig() {
     model: model?.id || '',
     sensorType: model?.sensorType || '',
     driverPackage: model?.driverPackage || '',
+    driverRepository: model ? (MAP_LIDAR_CATALOG[brand]?.driverRepository || '') : '',
   };
 }
 
@@ -502,7 +505,7 @@ function mapSyncLidarInputs() {
 
 function mapLidarBrandChanged() {
   const brand = document.getElementById('map-lidar-brand')?.value || '';
-  mapData.lidar = { brand, model:'', sensorType:'', driverPackage:'' };
+  mapData.lidar = { brand, model:'', sensorType:'', driverPackage:'', driverRepository:'' };
   mapSyncLidarInputs();
   mapSaveLocal();
   mapStatus(brand ? '📡 เลือกยี่ห้อแล้ว — เลือกรุ่น LiDAR ต่อได้เลย' : 'ยังไม่ได้เลือก LiDAR');
@@ -517,6 +520,7 @@ function mapLidarModelChanged() {
     model: model?.id || '',
     sensorType: model?.sensorType || '',
     driverPackage: model?.driverPackage || '',
+    driverRepository: model ? (MAP_LIDAR_CATALOG[brand]?.driverRepository || '') : '',
   };
   mapRenderLidarSummary();
   mapSaveLocal();
@@ -528,6 +532,11 @@ function mapRenderLidarSummary() {
   if (!el) return;
   const brand = MAP_LIDAR_CATALOG[mapData.lidar?.brand];
   const model = brand?.models.find(item => item.id === mapData.lidar.model);
+  const driverButton = document.getElementById('map-lidar-driver');
+  if (driverButton) {
+    driverButton.disabled = !model || !brand?.driverRepository;
+    driverButton.title = model && brand?.driverRepository ? `เปิด ${brand.driverRepository}` : 'ยังไม่มีไดรเวอร์สำหรับรุ่นที่เลือก';
+  }
   if (!brand || !model) {
     el.className = 'map-lidar-summary empty';
     el.innerHTML = '<span>📡</span><div><strong>ยังไม่ได้เลือกรุ่น</strong><small>เลือกอุปกรณ์ที่จะใช้กับหุ่นยนต์จริงในภายหลัง</small></div>';
@@ -535,6 +544,13 @@ function mapRenderLidarSummary() {
   }
   el.className = 'map-lidar-summary';
   el.innerHTML = `<span>📡</span><div><strong>${brand.label} · ${model.label}</strong><small>${model.sensorType}${model.driverPackage ? ` · ${model.driverPackage}` : ''}</small></div>`;
+}
+
+function mapOpenLidarDriver() {
+  mapNormalizeLidarConfig();
+  const repository = mapData.lidar?.driverRepository;
+  if (!repository) { mapStatus('ยังไม่มีลิงก์ไดรเวอร์สำหรับ LiDAR ที่เลือก'); return; }
+  window.open(repository, '_blank', 'noopener,noreferrer');
 }
 
 // ── save / load ──

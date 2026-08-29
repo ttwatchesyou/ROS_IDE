@@ -2,7 +2,7 @@
 // ตรวจสอบ token จาก localStorage ก่อนโหลดหน้า IDE
 // ไม่ทำ async verify เพื่อป้องกัน redirect loop
 (function(){
-  const token = localStorage.getItem('ros2ide_token');
+  const token = getAuthToken();
   if(!token){
     // ไม่มี token → ไปหน้า login ทันที
     window.location.replace('/');
@@ -11,6 +11,7 @@
 
   // โหลด session ที่บันทึกไว้จากหน้า robots
   const savedSession   = localStorage.getItem('ros2ide_session');
+  const savedRobotId   = localStorage.getItem('ros2ide_robotid');
   const savedRosInfo   = localStorage.getItem('ros2ide_rosinfo');
   const savedWorkspace = localStorage.getItem('ros2ide_workspace');
   const savedUsername  = localStorage.getItem('ros2ide_username');
@@ -20,6 +21,7 @@
   if(savedSession){
     window._restoredSession = {
       sessionId: savedSession,
+      robotId:   savedRobotId,
       rosInfo:   savedRosInfo ? JSON.parse(savedRosInfo) : null,
       workspace: savedWorkspace || '~/ros2_ws',
       username:  savedUsername  || 'ubuntu',
@@ -34,15 +36,68 @@
 
 let connectionMode = 'ssh';
 let _connTimeouts = []; 
+const SIMULATION_PAGES = new Set(['map', 'playground']);
+const WIZARD_RETURN_SAVE_TARGETS={editor:'#btn-save',flow:'#btn-flow-save',transformation:'#tf-right-panel .tf-save-action',map:'#map3d-save','3dcomp':'#dc-save-component'};
+
+function positionWorkspaceWizardReturn(page){
+  const button=document.getElementById('workspace-wizard-return'),pages=document.getElementById('pages');
+  if(!button||!pages)return;
+  button.parentElement?.classList.remove('wizard-save-dock-host');
+  if(button.parentElement!==pages)pages.appendChild(button);
+  button.classList.remove('docked','playground-header-action','terminal-header-action');button.hidden=page==='dashboard';
+  if(button.hidden)return;
+  if(page==='playground'){
+    const actions=document.querySelector('#page-playground .pg-head-actions');
+    if(actions){actions.appendChild(button);button.classList.add('docked','playground-header-action');return;}
+  }
+  if(page==='terminal'){
+    const actions=document.querySelector('#page-terminal .term-head-actions');
+    if(actions){actions.appendChild(button);button.classList.add('docked','terminal-header-action');return;}
+  }
+  const selector=WIZARD_RETURN_SAVE_TARGETS[page],save=selector?document.querySelector(selector):null;
+  if(!save||save.closest('.pg-mode-hidden'))return;
+  save.parentElement?.classList.add('wizard-save-dock-host');
+  save.insertAdjacentElement('afterend',button);button.classList.add('docked');
+}
+
+function applySimulationVisibility(){
+  if(typeof document === 'undefined') return;
+  const simulationEnabled = isSimWorkspace === true;
+  document.documentElement.classList.toggle('simulation-mode', simulationEnabled);
+  document.documentElement.classList.toggle('real-robot-mode', !simulationEnabled);
+  document.querySelectorAll('[data-simulation-only]').forEach(element=>{
+    element.hidden = !simulationEnabled;
+    element.setAttribute('aria-hidden', String(!simulationEnabled));
+  });
+  document.querySelectorAll('[data-real-only]').forEach(element=>{
+    element.hidden = simulationEnabled;
+    element.setAttribute('aria-hidden', String(simulationEnabled));
+  });
+  const exportButton = document.getElementById('btn-nav-export');
+  if(exportButton) exportButton.disabled = !simulationEnabled || !sessionId;
+  if(!simulationEnabled && [...SIMULATION_PAGES].some(page=>document.getElementById('page-'+page)?.classList.contains('show'))){
+    switchPage('dashboard');
+  }
+}
 
 // ══ PAGE SWITCH ══
 function switchPage(p){
+  if(p==='terminal'&&!terminalPlanAccess){
+    p='dashboard';
+    if(terminalPlanAccessResolved&&typeof sbMsg==='function') sbMsg('Terminal สำหรับสมาชิกแพลนชำระเงินและ Admin',2800);
+  }
+  if(!isSimWorkspace && SIMULATION_PAGES.has(p)){
+    p='dashboard';
+    if(typeof sbMsg==='function') sbMsg('เครื่องมือนี้ใช้เฉพาะระบบ Simulation',2800);
+  }
   document.querySelectorAll('.page').forEach(el=>el.classList.remove('show'));
   document.querySelectorAll('.mnav').forEach(el=>el.classList.remove('active'));
   document.getElementById('btn-wizard')?.classList.toggle('active',p==='dashboard');
   document.getElementById('btn-status')?.classList.toggle('active',p==='status');
   document.getElementById('page-'+p)?.classList.add('show');
   document.getElementById('nav-'+p)?.classList.add('active');
+  positionWorkspaceWizardReturn(p);
+  if(typeof pageGuidePageChanged==='function') pageGuidePageChanged(p);
 
   const sbNormal = document.getElementById('sb-normal');
   const sbFlow   = document.getElementById('sb-flow');
@@ -56,14 +111,22 @@ function switchPage(p){
 
   if(p==='terminal') setTimeout(()=>{ if(typeof termFitActive==='function') termFitActive(); },80);
   if(p==='monitor')  { setTimeout(()=>{ if(typeof monGraphRedraw==='function') monGraphRedraw(); },100); }
-  if(p==='rviz')     { setTimeout(()=>{ if(typeof rvizResize==='function') rvizResize(); if(typeof rviz3d!=='undefined'&&!rviz3d.renderer&&typeof initRviz==='function') initRviz(); },100); }
-  else { if(typeof rvizTeleopStop==='function') rvizTeleopStop(); }   // ออกจากหน้า RViz → หยุดส่ง cmd_vel (หุ่นไม่วิ่งต่อ)
+  if(p==='rviz')     { if(typeof rvizUseDesktopLayout==='function') rvizUseDesktopLayout(); setTimeout(()=>{ if(typeof rvizResize==='function') rvizResize(); if(typeof rviz3d!=='undefined'&&!rviz3d.renderer&&typeof initRviz==='function') initRviz(); },100); }
+  else if(p==='playground'){ setTimeout(()=>{if(typeof initRobotPlayground==='function')initRobotPlayground();},60); }
+  else { if(typeof rvizTeleopStop==='function') rvizTeleopStop(); }   // ออกจากหน้า RViz/Playground → หยุดส่ง cmd_vel (หุ่นไม่วิ่งต่อ)
   if(p==='transformation'){ setTimeout(()=>{ if(typeof initTransformation==='function') initTransformation(); if(typeof tfResize==='function') tfResize(); },100); }
   if(p==='3dcomp'){ setTimeout(()=>{ if(typeof init3DComponent==='function') init3DComponent(); if(typeof dcResize==='function') dcResize(); },100); }
   if(p==='map'){ setTimeout(()=>{ if(typeof initMapEditor==='function') initMapEditor(); },100); }
+  if(p==='lidar'){ setTimeout(()=>{ if(typeof initLidarSetup==='function') initLidarSetup(); },80); }
+  else if(typeof stopLidarScan==='function') stopLidarScan();
   // Wizard และ Status ใช้ข้อมูลชุดเดียวกัน; หน้า Status อัปเดต ROS graph แบบ live
   if(p==='dashboard'||p==='status'){ if(typeof startDashAutoRefresh==='function') startDashAutoRefresh(); }
   else { if(typeof stopDashAutoRefresh==='function') stopDashAutoRefresh(); }
+}
+
+function returnToRosWizard(){
+  switchPage('dashboard');
+  if(typeof loadDashboard==='function')loadDashboard(true);
 }
 
 // ══ MODAL & AUTH ══
@@ -157,6 +220,12 @@ async function doConnect(){
     sessionId = res.sessionId;
     rosInfo = res.rosInfo;
     isSimWorkspace = res.isSim === true;
+    localStorage.setItem('ros2ide_session',res.sessionId);
+    if(res.robotId)localStorage.setItem('ros2ide_robotid',String(res.robotId));
+    localStorage.setItem('ros2ide_rosinfo',JSON.stringify(res.rosInfo||{}));
+    localStorage.setItem('ros2ide_workspace',res.workspace||wsPath);
+    localStorage.setItem('ros2ide_username',res.username||user);
+    localStorage.setItem('ros2ide_robotname',res.robotName||pairingCode);
     localStorage.setItem('ros2ide_is_sim', String(isSimWorkspace));
     if(stat) stat.textContent = 'Connected!';
 
@@ -194,9 +263,10 @@ async function onConnected(host,user,ri){
   if(btnDisc){ btnDisc.disabled=false; btnDisc.style.display=''; }
   const btnBuild = document.getElementById('btn-build');
   if(btnBuild) btnBuild.disabled=false;
-  ['ab-wizard','ab-source','ab-run','btn-refresh-status'].forEach(id=>{
+  ['ab-wizard','ab-source','ab-run','btn-refresh-status','btn-nav-export'].forEach(id=>{
     const el=document.getElementById(id);if(el)el.disabled=false;
   });
+  applySimulationVisibility();
   
   document.getElementById('sb-conn').textContent=`${user}@${host}`;
   document.getElementById('sb-ros').textContent=`${ri.distro} (ROS${ri.version})`;
@@ -234,6 +304,7 @@ async function onConnected(host,user,ri){
 async function doDisconnect(){
   if(sessionId) await API('/api/disconnect',{sessionId});
   sessionId=null; rosInfo=null; isSimWorkspace=false;
+  applySimulationVisibility();
   if(typeof window.termWs!=='undefined'&&window.termWs){window.termWs.close();window.termWs=null;}
   if(typeof window.dashInterval !== 'undefined' && window.dashInterval){clearInterval(window.dashInterval);window.dashInterval=null;}
   
@@ -254,12 +325,13 @@ async function doDisconnect(){
   document.getElementById('term-badge').className='badge br';
   document.getElementById('file-tree').innerHTML='<div class="ti" style="color:var(--dim);font-size:11px;padding-left:14px">เชื่อมต่อระบบก่อน</div>';
   
-  ['ab-wizard','ab-source','ab-run','btn-refresh-status','btn-run-refresh','btn-run-buildall'].forEach(id=>{
+  ['ab-wizard','ab-source','ab-run','btn-refresh-status','btn-run-refresh','btn-run-buildall','btn-nav-export'].forEach(id=>{
     const el=document.getElementById(id);if(el)el.disabled=true;
   });
   if(typeof window.RUN !== 'undefined') { window.RUN.packages=[]; window.RUN.selected=null; }
   // Clear localStorage session and go back to robot selection
   localStorage.removeItem('ros2ide_session');
+  localStorage.removeItem('ros2ide_robotid');
   localStorage.removeItem('ros2ide_rosinfo');
   localStorage.removeItem('ros2ide_workspace');
   localStorage.removeItem('ros2ide_username');
@@ -927,7 +999,7 @@ class ${cls}(Node):
 
   return `#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""${cls} — generated by ROS2 IDE Package Wizard"""
+"""${cls} — generated by Mecha Rayong Learing Workspace"""
 
 ${importLines.join('\n')}
 ${body}
@@ -964,7 +1036,7 @@ function wizGenCppNode(cls, exe, pkg, template, deps) {
     service_srv: `\n${pkg}::${cls}::${cls}(const rclcpp::NodeOptions & options)\n: Node("${exe}_node", options)\n{\n  srv_ = create_service<std_srvs::srv::SetBool>(\n    "/${exe}/enable",\n    std::bind(&${cls}::handle, this, std::placeholders::_1, std::placeholders::_2));\n}`,
   };
 
-  return `// ${cls} — generated by ROS2 IDE Package Wizard\n#include "${pkg}/${exe}_node.hpp"\n#include <algorithm>\n\n${bodies[template] || bodies.publisher}\n\nint main(int argc, char ** argv)\n{\n  rclcpp::init(argc, argv);\n  rclcpp::spin(std::make_shared<${pkg}::${cls}>());\n  rclcpp::shutdown();\n  return 0;\n}\n\n// Register as composable component\n#include "rclcpp_components/register_node_macro.hpp"\nRCLCPP_COMPONENTS_REGISTER_NODE(${pkg}::${cls})\n`;
+  return `// ${cls} — generated by Mecha Rayong Learing Workspace\n#include "${pkg}/${exe}_node.hpp"\n#include <algorithm>\n\n${bodies[template] || bodies.publisher}\n\nint main(int argc, char ** argv)\n{\n  rclcpp::init(argc, argv);\n  rclcpp::spin(std::make_shared<${pkg}::${cls}>());\n  rclcpp::shutdown();\n  return 0;\n}\n\n// Register as composable component\n#include "rclcpp_components/register_node_macro.hpp"\nRCLCPP_COMPONENTS_REGISTER_NODE(${pkg}::${cls})\n`;
 }
 
 // ══ CONTEXT MENU ══
@@ -1232,16 +1304,31 @@ if(typeof window !== 'undefined'){
     const MIN = 140, MAX = 520, DEFAULT = 220;
 
     window.addEventListener('DOMContentLoaded', () => {
+      applySimulationVisibility();
+      loadTerminalPlanAccess();
       // ── Apply restored session from robots page ──
       if(window._restoredSession){
-        const rs = window._restoredSession;
-        sessionId = rs.sessionId;
-        rosInfo   = rs.rosInfo || {distro:'humble',setupBash:'/opt/ros/humble/setup.bash',version:'2'};
-        wsPath    = rs.workspace || '~/ros2_ws';
-        isSimWorkspace = rs.isSim === true;
-
-        // รอ DOM โหลดเสร็จก่อน apply UI
-        setTimeout(()=>{
+        const saved = window._restoredSession;
+        setTimeout(async()=>{
+          const restored=await API('/api/session/restore',{sessionId:saved.sessionId,robotId:saved.robotId}).catch(()=>null);
+          if(!restored?.ok){
+            ['ros2ide_session','ros2ide_robotid','ros2ide_rosinfo','ros2ide_workspace','ros2ide_username','ros2ide_robotname','ros2ide_is_sim'].forEach(key=>localStorage.removeItem(key));
+            window.location.replace('/robots');
+            return;
+          }
+          const rs={...saved,...restored};
+          sessionId=rs.sessionId;
+          rosInfo=rs.rosInfo||{distro:'humble',setupBash:'/opt/ros/humble/setup.bash',version:'2'};
+          wsPath=rs.workspace||'~/ros2_ws';
+          isSimWorkspace=rs.isSim===true;
+          applySimulationVisibility();
+          localStorage.setItem('ros2ide_session',sessionId);
+          localStorage.setItem('ros2ide_robotid',String(rs.robotId));
+          localStorage.setItem('ros2ide_rosinfo',JSON.stringify(rosInfo));
+          localStorage.setItem('ros2ide_workspace',wsPath);
+          localStorage.setItem('ros2ide_username',rs.username||'ubuntu');
+          localStorage.setItem('ros2ide_robotname',rs.robotName||'Robot');
+          localStorage.setItem('ros2ide_is_sim',String(isSimWorkspace));
           // เรียก onConnected เพื่อ setup UI และ Terminal ครบ
           if(typeof onConnected === 'function'){
             onConnected(rs.robotName||'robot', rs.username||'ubuntu', rosInfo);
@@ -1257,14 +1344,14 @@ if(typeof window !== 'undefined'){
             if(typeof openTermWs==='function') openTermWs(rs.username||'ubuntu', rs.robotName||'robot');
             if(typeof loadTree==='function') loadTree(wsPath,'file-tree',0);
           }
-          console.log('[APP] Session restored:', rs.sessionId);
+          console.log('[APP] Session restored:',rs.sessionId,restored.restored?'reused':'renewed');
           // Trigger flow + dashboard refresh after session ready
           setTimeout(()=>{
             if(typeof flowLoadPackages==='function') flowLoadPackages();
             if(typeof loadDashboard==='function')    loadDashboard();
             if(typeof loadTopics==='function')       loadTopics();
           }, 800);
-        }, 300);
+        },150);
       }
 
       const sidebar  = document.getElementById('sidebar');

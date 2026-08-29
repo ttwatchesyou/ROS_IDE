@@ -179,7 +179,7 @@ function monStartSub(){
   if(MON.subWs){ try{MON.subWs.close();}catch(e){} MON.subWs=null; }
 
   const proto = location.protocol==='https:'?'wss:':'ws:';
-  const token = localStorage.getItem('ros2ide_token') || '';
+  const token = getAuthToken();
   const url   = `${proto}//${location.host}/ws/monitor`;
 
   // อัปเดต UI ทันทีที่กดเพื่อบอกผู้ใช้ว่ากำลังเชื่อมต่อ

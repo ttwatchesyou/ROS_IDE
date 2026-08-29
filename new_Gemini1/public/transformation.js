@@ -23,12 +23,25 @@ const tf = {
   comps: [], selected: null, _nid: 1,
   transformControls: null, gizmoDragging: false, snap: false,
   showLabels: true,
+  saving: false,
   groupVis: {},
   userComps: [],
   cam: { theta: Math.PI / 4, phi: Math.PI / 3, radius: 6, target: { x: 0, y: 0, z: 0 }, drag: false, rightDrag: false, lx: 0, ly: 0 },
   container: null, ray: null, selBox: null,
   odom: { wheels: [], pattern: 'differential', ppr: 1024, channels: 4 },
 };
+
+function tfWorkspaceBgColor() {
+  const value = getComputedStyle(document.documentElement).getPropertyValue('--bg2').trim();
+  return value || '#1a1d27';
+}
+function tfApplyWorkspaceTheme() {
+  const color = tfWorkspaceBgColor();
+  if (tf.renderer) tf.renderer.setClearColor(color, 1);
+  if (tfPrev && tfPrev.renderer) tfPrev.renderer.setClearColor(color, 1);
+  if (tfCadPrev && tfCadPrev.renderer) tfCadPrev.renderer.setClearColor(color, 1);
+}
+window.addEventListener('roside-theme-change', tfApplyWorkspaceTheme);
 const tfTypeMeta = {
   base:     { label: '🤖 Chassis',   color: 0x4f8ef7, hasSize: true },
   wheel:    { label: '⚙️ Wheel',     color: 0xf2b134, hasSize: true },
@@ -84,6 +97,7 @@ function tfSave() {
 // turn a plain comp array (from localStorage or the server) into live tf.comps
 function tfApplyComps(arr) {
   if (!Array.isArray(arr) || !arr.length) return false;
+  tfClearRenderedComponents(tf.comps);
   tf.comps = arr.map(d => Object.assign({ group: null, _mat: null, viewGroup: '', customId: '' }, d));
   // keep the id counter ahead of any loaded ids so new comps never collide
   let max = 0;
@@ -185,6 +199,66 @@ function tfAddWheelSet(n) {
   }
   tfAfterChange();
   sbMsg('เพิ่มล้อ ' + n + ' ตัว');
+}
+
+const TF_ROBOT_TEMPLATES = {
+  differential: { icon:'🚗', name:'Differential 2WD', hint:'ล้อขับซ้าย–ขวา 2 ล้อ', pattern:'differential', wheels:2 },
+  skid:         { icon:'🚙', name:'Skid-steer 4WD', hint:'ล้อขับ 4 ล้อ เหมาะกับหุ่นภาคพื้น', pattern:'skid', wheels:4 },
+  omni3:        { icon:'🔺', name:'Omni 3 ล้อ', hint:'เคลื่อนที่ได้รอบทิศทางแบบ 120°', pattern:'omni3', wheels:3 },
+  omni4:        { icon:'✣', name:'Omni 4 ล้อ', hint:'เคลื่อนที่รอบทิศทางด้วยล้อ Omni', pattern:'omni4', wheels:4 },
+  mecanum:      { icon:'✖️', name:'Mecanum 4 ล้อ', hint:'เดินหน้า ถอยหลัง และสไลด์ด้านข้าง', pattern:'mecanum', wheels:4 },
+  rover6:       { icon:'🛰️', name:'Rover 6WD', hint:'ฐานยาว ล้อ 6 ล้อ สำหรับพื้นที่ขรุขระ', pattern:'skid', wheels:6 },
+};
+
+function tfTemplateComp(type, name, parent, pos, params, rpy) {
+  return {
+    id:'c' + (tf._nid++), type, name, parent:parent || '',
+    pos:{ x:pos[0], y:pos[1], z:pos[2] },
+    rpy:Object.assign({ r:0, p:0, y:0 }, rpy || {}),
+    params:Object.assign(tfDefaultParams(type), params || {}),
+    group:null, _mat:null, viewGroup:type === 'wheel' || type === 'omni' ? 'ระบบขับเคลื่อน' : '',
+  };
+}
+
+function tfTemplateDriveParts(kind) {
+  const standard=(name,x,y)=>tfTemplateComp('wheel',name,'base_link',[x,y,-0.03],{radius:0.09,width:0.055});
+  const omni=(name,x,y,yaw=0)=>tfTemplateComp('omni',name,'base_link',[x,y,-0.03],{radius:0.09,width:0.055,rollerR:0.018},{y:yaw});
+  if(kind==='differential') return [standard('wheel_left',0,.23),standard('wheel_right',0,-.23)];
+  if(kind==='skid') return [standard('wheel_fl',.22,.23),standard('wheel_fr',.22,-.23),standard('wheel_rl',-.22,.23),standard('wheel_rr',-.22,-.23)];
+  if(kind==='rover6') return [.3,0,-.3].flatMap((x,i)=>[standard(`wheel_${['front','mid','rear'][i]}_left`,x,.23),standard(`wheel_${['front','mid','rear'][i]}_right`,x,-.23)]);
+  if(kind==='omni3') return [[0,.25,90],[-.217,-.125,210],[.217,-.125,330]].map((p,i)=>omni(`omni_${i+1}`,p[0],p[1],p[2]));
+  if(kind==='omni4') return [[.2,.2,135],[.2,-.2,45],[-.2,.2,225],[-.2,-.2,315]].map((p,i)=>omni(`omni_${i+1}`,p[0],p[1],p[2]));
+  return [[.22,.23,45],[.22,-.23,-45],[-.22,.23,-45],[-.22,-.23,45]].map((p,i)=>omni(`mecanum_${['fl','fr','rl','rr'][i]}`,p[0],p[1],p[2]));
+}
+
+function tfOpenTemplateModal() {
+  const grid=document.getElementById('tf-template-grid');
+  if(grid) grid.innerHTML=Object.entries(TF_ROBOT_TEMPLATES).map(([id,t])=>`
+    <button type="button" class="tf-template-card" onclick="tfApplyRobotTemplate('${id}')">
+      <span class="tf-template-icon">${t.icon}</span><span><b>${t.name}</b><small>${t.hint}</small><em>${t.wheels} ล้อ · ${t.pattern}</em></span>
+    </button>`).join('');
+  const modal=document.getElementById('tf-template-modal');if(modal)modal.style.display='flex';
+}
+function tfCloseTemplateModal() { const modal=document.getElementById('tf-template-modal');if(modal)modal.style.display='none'; }
+function tfApplyRobotTemplate(kind) {
+  const template=TF_ROBOT_TEMPLATES[kind];if(!template)return;
+  if(tf.comps.length>1&&!window.confirm(`แทนที่โมเดลปัจจุบันด้วย ${template.name} หรือไม่?`))return;
+  tfClearRenderedComponents(tf.comps);
+  tf._nid=1;tf.selected=null;tf.groupVis={};
+  const longBase=kind==='rover6';
+  const driveParts=tfTemplateDriveParts(kind);
+  const encoderParts=driveParts.map(wheel=>tfTemplateComp('encoder',`encoder_${wheel.name}`,'base_link',[wheel.pos.x,wheel.pos.y,wheel.pos.z],{}));
+  tf.comps=[
+    tfTemplateComp('base','base_link','',[0,0,.12],{sx:longBase ? .82 : .58,sy:.4,sz:.18}),
+    ...driveParts,
+    ...encoderParts,
+    tfTemplateComp('lidar','laser_link','base_link',[.12,0,.15],{radius:.055,height:.09}),
+    tfTemplateComp('imu','imu_link','base_link',[0,0,.12],{s:.045}),
+  ];
+  tf.odom={wheels:[],pattern:template.pattern,ppr:1024,channels:4};
+  tfOdomDetect();tf.odom.pattern=template.pattern;tfOdomSave();
+  tfAfterChange();tfSelect(tf.comps[0].id);tfResetView();tfCloseTemplateModal();
+  sbMsg(`สร้าง Template ${template.name} แล้ว · พร้อมบันทึก TF / ODOM / Model`,4500);
 }
 // เพิ่มคู่ เอนโคเดอร์ + ล้อ Omni (encoder เป็น parent, omni เป็นลูกที่ปลาย shaft)
 function tfAddEncoderOmni() {
@@ -483,9 +557,40 @@ function tfMakeAxes(size) {
 }
 
 // ── build scene graph ──
+function tfDisposeRenderedObject(root) {
+  if(!root||typeof root.traverse!=='function')return;
+  root.traverse(object=>{
+    if(object.geometry?.dispose)object.geometry.dispose();
+    const materials=Array.isArray(object.material)?object.material:[object.material];
+    materials.filter(Boolean).forEach(material=>{
+      for(const key of ['map','alphaMap','normalMap','roughnessMap','metalnessMap','emissiveMap']) {
+        if(material[key]?.dispose)material[key].dispose();
+      }
+      if(material.dispose)material.dispose();
+    });
+  });
+}
+function tfClearRenderedComponents(components=tf.comps) {
+  if(tf.transformControls?.object)tf.transformControls.detach();
+  const groups=new Set((Array.isArray(components)?components:[]).map(component=>component?.group).filter(Boolean));
+  groups.forEach(group=>{
+    if(group.parent?.remove)group.parent.remove(group);
+    else if(tf.scene?.remove)tf.scene.remove(group);
+    tfDisposeRenderedObject(group);
+  });
+  (Array.isArray(components)?components:[]).forEach(component=>{
+    if(!component)return;
+    component.group=null;component.label=null;component._mat=null;
+  });
+  if(tf.selBox){
+    if(tf.selBox.parent?.remove)tf.selBox.parent.remove(tf.selBox);
+    else if(tf.scene?.remove)tf.scene.remove(tf.selBox);
+    tfDisposeRenderedObject(tf.selBox);tf.selBox=null;
+  }
+}
 function tfBuildScene() {
   if (!tf.scene) return;
-  tf.comps.forEach(c => { if (c.group) { tf.scene.remove(c.group); c.group = null; } });
+  tfClearRenderedComponents(tf.comps);
   const byName = {};
   tf.comps.forEach(c => byName[c.name] = c);
   tf.comps.forEach(c => {
@@ -798,22 +903,49 @@ function tfSyncPropInputs(c) {
 function tfRenderAddGrid() {
   tfLoadCustom();
   const el = document.getElementById('tf-add-grid'); if (!el) return;
-  const order = ['base', 'wheel', 'lidar', 'camera', 'imu', 'box', 'cylinder', 'encoder', 'omni'];
-  const labels = { base: 'Chassis', wheel: 'Wheel', lidar: 'Lidar', camera: 'Camera', imu: 'IMU', box: 'Box', cylinder: 'Cylinder', encoder: 'Encoder', omni: 'Omni' };
-  let html = order.map(t =>
-    `<button class="tf-comp-btn" onclick="tfAddComp('${t}')"><span class="tf-comp-ico">${tfIcons[t]}</span><span>+ ${labels[t]}</span></button>`
-  ).join('');
-  html += `<button class="tf-comp-btn tf-comp-special" onclick="tfAddWheelSet(4)"><span class="tf-comp-ico">${tfIcons.wheel}</span><span>+ 4 Wheels</span></button>`;
-  html += `<button class="tf-comp-btn tf-comp-special" onclick="tfAddEncoderOmni()"><span class="tf-comp-ico">${tfIcons.encoder}</span><span>+ Encoder + Omni</span></button>`;
-  html += `<div class="tf-add-sep"></div>`;
-  html += `<button class="tf-comp-btn tf-comp-create" onclick="tfOpenCustom()"><span class="tf-comp-ico">➕</span><span>+ สร้าง Component</span></button>`;
-  html += `<button class="tf-comp-btn tf-comp-create" onclick="tfOpenCadImport()"><span class="tf-comp-ico">⤓</span><span>+ Import CAD</span></button>`;
+  const labels = {
+    base: 'ตัวถัง',
+    wheel: 'ล้อ',
+    lidar: 'LiDAR',
+    camera: 'กล้อง',
+    imu: 'IMU',
+    box: 'กล่อง',
+    cylinder: 'ทรงกระบอก',
+    encoder: 'Encoder',
+    omni: 'ล้อ Omni',
+  };
+  const hints = {
+    base: 'ฐานหลัก',
+    wheel: 'ล้อขับ',
+    lidar: 'วัดระยะ',
+    camera: 'มองภาพ',
+    imu: 'จับเอียง',
+    box: 'กล่องเสริม',
+    cylinder: 'แกน/เสา',
+    encoder: 'วัดรอบ',
+    omni: 'ล้อพิเศษ',
+  };
+  const compButton = t => `<button class="tf-comp-btn" onclick="tfAddComp('${t}')"><span class="tf-comp-ico">${tfIcons[t]}</span><span><b>+ ${labels[t]}</b><small>${hints[t]}</small></span></button>`;
+  const deviceGroup = (title, icon, body, count, open) => `<details class="tf-device-group" ${open ? 'open' : ''}>
+    <summary><span>${icon}</span><span>${title}</span><span class="tf-device-count">${count}</span></summary>
+    <div class="tf-device-grid">${body}</div>
+  </details>`;
+
+  let html = deviceGroup('โครงสร้างและตัวถัง', '▣', ['base', 'box', 'cylinder'].map(compButton).join(''), 3, true);
+  html += deviceGroup('ระบบขับเคลื่อน', '⚙', ['wheel', 'omni', 'encoder'].map(compButton).join(''), 3, false);
+  html += deviceGroup('เซนเซอร์', '◉', ['lidar', 'camera', 'imu'].map(compButton).join(''), 3, true);
+  const quick = `<button class="tf-comp-btn tf-comp-special" onclick="tfAddWheelSet(4)"><span class="tf-comp-ico">${tfIcons.wheel}</span><span><b>+ ชุดล้อ 4 ล้อ</b><small>เริ่มเร็ว</small></span></button>
+    <button class="tf-comp-btn tf-comp-special" onclick="tfAddEncoderOmni()"><span class="tf-comp-ico">${tfIcons.encoder}</span><span><b>+ Encoder + Omni</b><small>ชุดวัดรอบ</small></span></button>`;
+  html += deviceGroup('ชุดอุปกรณ์สำเร็จ', '✦', quick, 2, false);
+
+  let custom = `<button class="tf-comp-btn tf-comp-create" onclick="tfOpenCustom()"><span class="tf-comp-ico">＋</span><span><b>+ สร้างเอง</b><small>ชิ้นส่วนใหม่</small></span></button>
+    <button class="tf-comp-btn tf-comp-create" onclick="tfOpenCadImport()"><span class="tf-comp-ico">⇩</span><span><b>+ นำเข้า CAD</b><small>STL/OBJ</small></span></button>`;
   const uc = tf.userComps || [];
   if (uc.length) {
-    html += `<div class="tf-add-hd">★ Custom (${escH(tfCurrentUser())})</div>`;
-    html += uc.map(d => `<button class="tf-comp-btn" onclick="tfAddCustomComp(decodeURIComponent('${encArg(d.id)}'))" title="เพิ่ม ${escH(d.name)} (offset ${d.offset.pos.x},${d.offset.pos.y},${d.offset.pos.z})">
-      <span class="tf-comp-ico" style="color:#${('000000' + d.color.toString(16)).slice(-6)}">◆</span><span>${escH(d.name)}</span></button>`).join('');
+    custom += uc.map(d => `<button class="tf-comp-btn" onclick="tfAddCustomComp(decodeURIComponent('${encArg(d.id)}'))" title="เพิ่ม ${escH(d.name)} (offset ${d.offset.pos.x},${d.offset.pos.y},${d.offset.pos.z})">
+      <span class="tf-comp-ico" style="color:#${('000000' + d.color.toString(16)).slice(-6)}">◆</span><span><b>${escH(d.name)}</b><small>ของฉัน</small></span></button>`).join('');
   }
+  html += deviceGroup('อุปกรณ์ของฉัน', '★', custom, uc.length + 2, false);
   el.innerHTML = html;
 }
 
@@ -836,7 +968,7 @@ function tfInitCustomPreview() {
   if (tfPrev && tfPrev.renderer) return; // สร้างครั้งเดียว
   const r = new THREE.WebGLRenderer({ canvas: cv, antialias: true });
   r.setSize(220, 220, false);
-  r.setClearColor(0x1b2030, 1);
+  r.setClearColor(tfWorkspaceBgColor(), 1);
   const sc = new THREE.Scene();
   sc.add(new THREE.AmbientLight(0xffffff, 0.85));
   const dl = new THREE.DirectionalLight(0xffffff, 0.6); dl.position.set(2, 4, 3); sc.add(dl);
@@ -1157,7 +1289,7 @@ function tfCadInitPreview() {
   const cv = document.getElementById('tf-cad-prev'); if (!cv || !window.THREE) return;
   if (tfCadPrev && tfCadPrev.renderer) return;
   const r = new THREE.WebGLRenderer({ canvas: cv, antialias: true });
-  r.setSize(220, 220, false); r.setClearColor(0x1b2030, 1);
+  r.setSize(220, 220, false); r.setClearColor(tfWorkspaceBgColor(), 1);
   const sc = new THREE.Scene();
   sc.add(new THREE.AmbientLight(0xffffff, 0.85));
   const dl = new THREE.DirectionalLight(0xffffff, 0.6); dl.position.set(2, 4, 3); sc.add(dl);
@@ -1414,7 +1546,7 @@ async function tfInitThree() {
   tf.container = c;
   tf.renderer = new THREE.WebGLRenderer({ antialias: true });
   tf.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-  tf.renderer.setClearColor(0x161a22, 1);
+  tf.renderer.setClearColor(tfWorkspaceBgColor(), 1);
   tf.renderer.domElement.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;outline:none;cursor:grab;touch-action:none;';
   c.appendChild(tf.renderer.domElement);
   tf.scene = new THREE.Scene();
@@ -1584,18 +1716,18 @@ function tfRenderProps() {
     omni: `<div class="tf-grid3"><div><label>รัศมีล้อ (m)</label><input id="tf-p-radius" type="number" step="0.01" min="0.01" value="${p.radius}"></div><div><label>กว้างล้อ (m)</label><input id="tf-p-width" type="number" step="0.01" min="0.01" value="${p.width}"></div><div><label>รัศมีลูก (m)</label><input id="tf-p-rollerR" type="number" step="0.005" value="${p.rollerR}"></div></div>`,
   }[c.type] || '';
   if (c.type === 'custom' && def) {
-    sizeRows = ({
+    const customSizes = {
       box: `<div class="tf-grid3"><div><label class="tf-axis-x">ยาว X (m)</label><input id="tf-p-sx" type="number" step="0.01" value="${p.sx}"></div><div><label class="tf-axis-y">กว้าง Y (m)</label><input id="tf-p-sy" type="number" step="0.01" value="${p.sy}"></div><div><label class="tf-axis-z">สูง Z (m)</label><input id="tf-p-sz" type="number" step="0.01" value="${p.sz}"></div></div>`,
       cylinder: `<div class="tf-grid2"><div><label>รัศมี (m)</label><input id="tf-p-radius" type="number" step="0.01" min="0.01" value="${p.radius}"></div><div><label>สูง (m)</label><input id="tf-p-height" type="number" step="0.01" value="${p.height}"></div></div>`,
       lidar: `<div class="tf-grid2"><div><label>รัศมี (m)</label><input id="tf-p-radius" type="number" step="0.01" min="0.01" value="${p.radius}"></div><div><label>สูง (m)</label><input id="tf-p-height" type="number" step="0.01" value="${p.height}"></div></div>`,
       camera: `<div class="tf-grid3"><div><label>กว้าง W (m)</label><input id="tf-p-w" type="number" step="0.01" value="${p.w}"></div><div><label>สูง H (m)</label><input id="tf-p-h" type="number" step="0.01" value="${p.h}"></div><div><label>ลึก D (m)</label><input id="tf-p-d" type="number" step="0.01" value="${p.d}"></div></div>`,
       sphere: `<div class="tf-grid2"><div><label>รัศมี (m)</label><input id="tf-p-radius" type="number" step="0.01" min="0.01" value="${p.radius}"></div></div>`,
       cone: `<div class="tf-grid2"><div><label>รัศมี (m)</label><input id="tf-p-radius" type="number" step="0.01" min="0.01" value="${p.radius}"></div><div><label>สูง (m)</label><input id="tf-p-height" type="number" step="0.01" min="0.01" value="${p.height}"></div></div>`,
-      cad: `<div class="tf-prop"><label>CAD mesh (imported)</label><div style="font-size:11px;color:var(--dim);font-family:var(--mono)">${def.bbox ? 'ขนาด ' + def.bbox.map(v => (v * 100).toFixed(1)).join('×') + ' cm' : 'mesh'} · ${((def.mesh && def.mesh.pos ? def.mesh.pos.length / 9 : 0) | 0).toLocaleString()} tri</div></div>
+      cad: `<div class="tf-prop"><label>CAD mesh (imported)</label><div style="font-size:11px;color:#6a7186;font-family:var(--mono)">${def.bbox ? 'ขนาด ' + def.bbox.map(v => (v * 100).toFixed(1)).join('×') + ' cm' : 'mesh'} · ${((def.mesh && def.mesh.pos ? def.mesh.pos.length / 9 : 0) | 0).toLocaleString()} tri</div></div>
            <div class="tf-prop"><label>สี (ใช้เมื่อไม่มีสีจาก MTL/texture)</label><input id="tf-p-color" type="color" value="#${('000000' + (def.color != null ? def.color : 0x8aa0b5).toString(16)).slice(-6)}" style="height:30px;padding:2px;width:100%"></div>`,
-    })[def.shape] || '';
+    };
+    sizeRows = customSizes[def.shape] || '';
   }
-
   const typeName = c.type === 'custom' ? (def ? def.name : 'Custom') : (meta.label.split(' ')[1] || meta.label).trim();
   const axisIcon = `<svg class="tf-axis-ico" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M12 12 20 6" stroke="#4488ff"/><path d="M12 12 6 20" stroke="#ff4444"/><path d="M12 12 12 3" stroke="#44ff66"/><circle cx="12" cy="12" r="1.5" fill="#fff"/></svg>`;
   el.innerHTML = `
@@ -1620,9 +1752,7 @@ function tfRenderProps() {
       <button class="btn btn-r tf-del-btn" onclick="tfDeleteCompConfirm(decodeURIComponent('${encArg(c.id)}'))">🗑 ลบคอมโพเนนต์นี้</button>
     </div>
   `;
-  // bind
   const bind = (id, fn) => { const e = document.getElementById(id); if (e) e.addEventListener('input', fn); };
-  // numeric transform/size edits update the 3D IN PLACE (gizmo stays attached, no full rebuild)
   const bindLive = (id, fn) => bind(id, e => { fn(e); tfSyncGroup(c); tfSave(); });
   bind('tf-p-name', e => { c.name = e.target.value.trim() || c.name; tfAfterChange(); });
   bind('tf-p-parent', e => { c.parent = e.target.value; tfAfterChange(); tfRenderProps(); });
@@ -1639,7 +1769,6 @@ function tfRenderProps() {
   pbl('tf-p-radius', 'radius'); pbl('tf-p-width', 'width'); pbl('tf-p-height', 'height');
   pbl('tf-p-w', 'w'); pbl('tf-p-h', 'h'); pbl('tf-p-d', 'd'); pbl('tf-p-s', 's');
   pbl('tf-p-bodyR', 'bodyR'); pbl('tf-p-bodyH', 'bodyH'); pbl('tf-p-shaftR', 'shaftR'); pbl('tf-p-shaftH', 'shaftH');
-  // เปลี่ยนสี CAD (ใช้กับเมชที่ไม่มีสี/texture จาก MTL)
   const colEl = document.getElementById('tf-p-color');
   if (colEl && def) colEl.addEventListener('input', e => {
     def.color = parseInt((e.target.value || '#8aa0b5').replace('#', ''), 16) || 0x8aa0b5;
@@ -1647,7 +1776,6 @@ function tfRenderProps() {
   });
   pbl('tf-p-rollerR', 'rollerR');
 }
-
 // ══ EXPORT ══
 function tfRad(d) { return THREE.MathUtils.degToRad(d); }
 function tfR3(x) { return (+x).toFixed(3); }
@@ -1688,7 +1816,8 @@ function tfBuildURDF() {
     if (c.type === 'wheel')    return `<cylinder radius="${tfR3(p.radius)}" length="${tfR3(p.width)}"/>`;
     if (c.type === 'lidar' || c.type === 'cylinder') return `<cylinder radius="${tfR3(p.radius)}" length="${tfR3(p.height)}"/>`;
     if (c.type === 'camera')   return `<box size="${tfR3(p.w)} ${tfR3(p.d)} ${tfR3(p.h)}"/>`;
-    if (c.type === 'imu' || c.type === 'box') return `<box size="${tfR3(p.s)} ${tfR3(p.s)} ${tfR3(p.s)}"/>`;
+    if (c.type === 'imu') return `<box size="${tfR3(p.s)} ${tfR3(p.s)} ${tfR3(p.s)}"/>`;
+    if (c.type === 'box') return `<box size="${tfR3(p.sx)} ${tfR3(p.sy)} ${tfR3(p.sz)}"/>`;
     if (c.type === 'encoder')  return `<cylinder radius="${tfR3(p.bodyR)}" length="${tfR3(p.bodyH)}"/><!-- + shaft r=${tfR3(p.shaftR)} h=${tfR3(p.shaftH)} -->`;
     if (c.type === 'omni')    return `<cylinder radius="${tfR3(p.rollerR)}" length="${tfR3(p.width)}"/><!-- omni rollers x4 -->`;
     if (c.type === 'custom') {
@@ -1801,12 +1930,16 @@ function tfPkgXml() {
   <version>0.1.0</version>
   <description>Robot TF model — generated by Robot Config page</description>
   <maintainer email="sim@ros2ide.local">sim</maintainer>
+  <license>Apache-2.0</license>
   <buildtool_depend>ament_python</buildtool_depend>
   <exec_depend>rclpy</exec_depend>
   <exec_depend>tf2_ros</exec_depend>
   <exec_depend>robot_state_publisher</exec_depend>
   <exec_depend>std_msgs</exec_depend>
   <exec_depend>ament_index_python</exec_depend>
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
 </package>
 `;
 }
@@ -1976,6 +2109,7 @@ function tfOdomPkgXml() {
   <version>0.1.0</version>
   <description>Robot odometry node — generated by Robot Config (Odometry)</description>
   <maintainer email="sim@ros2ide.local">sim</maintainer>
+  <license>Apache-2.0</license>
   <buildtool_depend>ament_python</buildtool_depend>
   <exec_depend>rclpy</exec_depend>
   <exec_depend>tf2_ros</exec_depend>
@@ -1984,6 +2118,9 @@ function tfOdomPkgXml() {
   <exec_depend>sensor_msgs</exec_depend>
   <exec_depend>std_msgs</exec_depend>
   <exec_depend>ament_index_python</exec_depend>
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
 </package>
 `;
 }
@@ -2068,9 +2205,11 @@ function tfOpenExport() {
 }
 function tfCloseExport() { document.getElementById('tf-export-modal').style.display = 'none'; }
 // ── save confirmation modal ──
-function tfShowSaveAlert(msg) {
+function tfShowSaveAlert(msg, isError = false) {
   const m = document.getElementById('tf-save-modal');
   const body = document.getElementById('tf-save-modal-body');
+  const title = document.getElementById('tf-save-modal-title');
+  if (title) title.textContent = isError ? '⚠️ บันทึกไม่สำเร็จ' : '💾 บันทึกเรียบร้อย';
   if (body) body.innerHTML = msg;
   if (m) m.style.display = 'flex';
 }
@@ -2091,47 +2230,110 @@ function tfDownloadExport() {
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click();
   sbMsg('ดาวน์โหลด ' + name);
 }
+async function tfResolveSaveSession() {
+  if (sessionId) return sessionId;
+  const persisted = localStorage.getItem('ros2ide_session');
+  // app.js restores the server-side session asynchronously on page load.
+  // Give that flow a moment to return a renewed id before using the cached one.
+  if (persisted && window._restoredSession) {
+    for (let i = 0; i < 30 && !sessionId; i++) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+  }
+  return sessionId || persisted;
+}
 async function tfSaveToWorkspace() {
-  if (!sessionId) { sbMsg('ต้องเชื่อมต่อหุ่นก่อนจึงจะบันทึก package ได้'); return; }
-  if (!tf.comps.length) { sbMsg('ยังไม่มีโมเดล — เพิ่มคอมโพเนนต์ก่อน'); return; }
-  // สร้างแพ็กเกจ sim_robot_tf เต็มรูปแบบ (สร้างใหม่ หรือแก้ไขถ้ามีอยู่แล้ว)
-  const files = {
-    'package.xml':                     tfPkgXml(),
-    'setup.py':                        tfPkgSetupPy(),
-    'resource/sim_robot_tf':           '',                       // ament marker (ไฟล์ว่าง)
-    'sim_robot_tf/__init__.py':        '',
-    'sim_robot_tf/tf.py':            tfTfPy(),               // โมดูล TF publisher (console_scripts → lib/<pkg>/tf)
-    'scripts/tf':                    tfTfPy(),               // สคริปต์ standalone (data_files → lib/<pkg>/tf สำหรับ ros2 run/launch)
-    'urdf/robot.urdf':                 tfBuildURDF(),            // โมเดลหุ่นยนต์
-    'launch/tf_static.launch.py':      tfPkgLaunchPy(),         // รัน TF tree (แสดงบน rviz)
-    'tf_model.json':                    tfBuildModelJSON(),        // บันทึกโมเดลแบบแก้ไขได้ (models + TFs) เพื่อโหลดกลับตอนเปิด workspace
-  };
-  // ตรวจล้ออัตโนมัติ → ถ้ามีล้อ ให้ gen แพ็กเกจ sim_robot_odom ไปพร้อมกัน (export ด้วยกัน)
-  if (!tf.odom || !tf.odom.wheels || !tf.odom.wheels.length) tfOdomDetect();
-  const odomFiles = (tf.odom && tf.odom.wheels && tf.odom.wheels.length) ? tfOdomPackageFiles() : null;
+  // Session restore is asynchronous. The persisted id is already valid and lets
+  // Save work even when the user opens Robot Config immediately after page load.
+  const activeSessionId = await tfResolveSaveSession();
+  if (!activeSessionId) {
+    const detail = 'กรุณาเชื่อมต่อหุ่นหรือเปิด Simulation workspace ก่อนบันทึก';
+    sbMsg(detail, 5000);
+    tfShowSaveAlert(`<b>บันทึกไม่ได้</b><br><span style="color:var(--mt)">${detail}</span>`, true);
+    return;
+  }
+  if (!tf.comps.length) {
+    const detail = 'กรุณาเพิ่มชิ้นส่วนหุ่นยนต์อย่างน้อยหนึ่งชิ้นก่อนบันทึก';
+    sbMsg(detail, 5000);
+    tfShowSaveAlert(`<b>บันทึกไม่ได้</b><br><span style="color:var(--mt)">${detail}</span>`, true);
+    return;
+  }
+  if (tf.saving) return;
+  tf.saving = true;
+  const saveButtons = Array.from(document.querySelectorAll('.tf-save-action'));
+  saveButtons.forEach(button => {
+    button.dataset.idleHtml = button.innerHTML;
+    button.disabled = true;
+    button.innerHTML = 'กำลังบันทึก...';
+  });
   try {
-    const r = await API('/api/sim/save-tf-package', { sessionId, files });
-    if (!r.ok) { sbMsg('บันทึก TF ไม่สำเร็จ: ' + (r.error || '')); return; }
+    // Persist the editable browser state first; the same state is also written
+    // into tf_model.json below so reopening Robot Config restores the model.
+    tfSave();
+    // สร้างแพ็กเกจ sim_robot_tf เต็มรูปแบบ (สร้างใหม่ หรือแก้ไขถ้ามีอยู่แล้ว)
+    const files = {
+      'package.xml':                     tfPkgXml(),
+      'setup.py':                        tfPkgSetupPy(),
+      'resource/sim_robot_tf':           '',
+      'sim_robot_tf/__init__.py':        '',
+      'sim_robot_tf/tf.py':              tfTfPy(),
+      'scripts/tf':                      tfTfPy(),
+      'urdf/robot.urdf':                 tfBuildURDF(),
+      'launch/tf_static.launch.py':      tfPkgLaunchPy(),
+      'tf_model.json':                   tfBuildModelJSON(),
+    };
+    // มีล้อเมื่อใด จึงสร้างแพ็กเกจ sim_robot_odom จากค่าล้อ/encoder ไปพร้อมกัน
+    tfOdomDetect();
+    const odomFiles = (tf.odom && tf.odom.wheels && tf.odom.wheels.length) ? tfOdomPackageFiles() : null;
+    // ใช้ endpoints เดิมที่ server ทุกเวอร์ชันรองรับ เพื่อให้หน้าเว็บที่
+    // deploy ใหม่ยังบันทึกกับ process เดิมได้โดยไม่เจอ HTML 404 แทน JSON.
+    const r = await API('/api/sim/save-tf-package', {
+      sessionId: activeSessionId,
+      files,
+    });
+    if (!r || !r.ok) throw new Error('บันทึก TF/Model ไม่สำเร็จ: ' + ((r && r.error) || 'ไม่ทราบสาเหตุ'));
     const verb = r.created ? 'สร้างแพ็กเกจใหม่' : 'อัปเดต';
-    let msg = `✅ บันทึก${verb}แพ็กเกจ <b>sim_robot_tf</b> เรียบร้อยแล้ว<br><span style="color:var(--dim);font-size:12px">(${r.written.length} ไฟล์) → src/sim_robot_tf</span>`;
+    const tfWritten = Array.isArray(r.written) ? r.written.length : Object.keys(files).length;
+    let msg = `✅ ${verb} <b>sim_robot_tf</b> เรียบร้อยแล้ว<br><span style="color:var(--mt);font-size:12px">TF + URDF model + tf_model.json (${tfWritten} ไฟล์) → src/sim_robot_tf</span>`;
     // ถ้ามีล้อ → สร้างแพ็กเกจ sim_robot_odom แยกต่างหาก (เหมือน TF ทุกประการ)
     if (odomFiles) {
-      const ro = await API('/api/sim/save-odom-package', { sessionId, files: odomFiles });
-      if (ro.ok) {
+      const ro = await API('/api/sim/save-odom-package', {
+        sessionId: activeSessionId,
+        files: odomFiles,
+      });
+      if (ro && ro.ok) {
         const v2 = ro.created ? 'สร้างแพ็กเกจใหม่' : 'อัปเดต';
-        msg += `<br>✅ บันทึก${v2}แพ็กเกจ <b>sim_robot_odom</b> เรียบร้อยแล้ว<br><span style="color:var(--dim);font-size:12px">(${ro.written.length} ไฟล์) → src/sim_robot_odom</span>`;
-        sbMsg('บันทึก sim_robot_tf + sim_robot_odom แล้ว');
+        const odomWritten = Array.isArray(ro.written) ? ro.written.length : Object.keys(odomFiles).length;
+        msg += `<br>✅ ${v2} <b>sim_robot_odom</b> เรียบร้อยแล้ว<br><span style="color:var(--mt);font-size:12px">Wheel odometry + config (${odomWritten} ไฟล์) → src/sim_robot_odom</span>`;
+        sbMsg('บันทึก TF + ODOM + Model และสร้าง packages แล้ว');
       } else {
-        msg += `<br>⚠️ บันทึก sim_robot_odom ไม่สำเร็จ: ` + (ro.error || '');
-        sbMsg('⚠️ บันทึก sim_robot_odom ไม่สำเร็จ: ' + (ro.error || ''));
+        throw new Error('บันทึก ODOM ไม่สำเร็จ: ' + ((ro && ro.error) || 'ไม่ทราบสาเหตุ'));
       }
     } else {
-      sbMsg(`${verb} sim_robot_tf แล้ว`);
+      msg += '<br><span style="color:var(--mt);font-size:12px">ไม่สร้าง sim_robot_odom เนื่องจากยังไม่มีล้อในโมเดล</span>';
+      sbMsg(`${verb} sim_robot_tf และบันทึก model แล้ว`);
     }
     tfShowSaveAlert(msg);
-    // เซฟเสร็จ → ปิด modal อัตโนมัติ (แสดงข้อความยืนยัน briefly แล้วปิดทั้ง export + alert)
-    setTimeout(() => { tfCloseSaveAlert(); tfCloseExport(); }, 1800);
-  } catch (e) { sbMsg('บันทึกไม่สำเร็จ: ' + e.message); }
+    // เซฟครบทั้ง TF/model และ ODOM แล้วจึงกลับไปหน้า ROS Wizzard
+    // เพื่อให้ผู้ใช้ทำภารกิจขั้นถัดไปต่อได้ทันที.
+    setTimeout(() => {
+      tfCloseSaveAlert();
+      tfCloseExport();
+      if (typeof window.switchPage === 'function') window.switchPage('dashboard');
+      if (typeof loadDashboard === 'function') loadDashboard();
+    }, 1200);
+  } catch (e) {
+    const detail = e && e.message ? e.message : String(e || 'ไม่ทราบสาเหตุ');
+    sbMsg('บันทึกไม่สำเร็จ: ' + detail, 6000);
+    tfShowSaveAlert(`<b>บันทึกไม่สำเร็จ</b><br><span style="color:var(--red)">${escH(detail)}</span>`, true);
+  } finally {
+    tf.saving = false;
+    saveButtons.forEach(button => {
+      button.disabled = false;
+      button.innerHTML = button.dataset.idleHtml || 'บันทึกทั้งหมด';
+      delete button.dataset.idleHtml;
+    });
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2171,6 +2373,20 @@ function tfDetectWheels() {
       radius: +R.toFixed(3),
     };
   });
+}
+function tfDetectEncoders() {
+  return tf.comps.filter(c => c.type === 'encoder').map(c => {
+    const wp=tfWorldPosOf(c);
+    return {name:c.name,parent:c.parent||'',x:+wp.x.toFixed(3),y:+wp.y.toFixed(3),z:+wp.z.toFixed(3)};
+  });
+}
+function tfMatchEncoderWheel(encoder,wheels) {
+  const direct=wheels.find(w=>w.name===encoder.parent)||wheels.find(w=>{
+    const component=tf.comps.find(c=>c.name===w.name);return component?.parent===encoder.name;
+  });
+  if(direct)return direct.name;
+  let nearest=null,distance=Infinity;for(const wheel of wheels){const d=Math.hypot(wheel.x-encoder.x,wheel.y-encoder.y,wheel.z-encoder.z);if(d<distance){nearest=wheel;distance=d;}}
+  return nearest?.name||'';
 }
 
 // เดา pattern จากจำนวน/ชนิดล้อ
@@ -2248,26 +2464,45 @@ function tfOdomKey() { return 'tf_odom_' + (sessionId || 'default'); }
 function tfOdomLoad() { try { const r = localStorage.getItem(tfOdomKey()); return r ? JSON.parse(r) : null; } catch (e) { return null; } }
 function tfOdomSave() {
   try {
-    const saved = { pattern: tf.odom.pattern, wheels: tf.odom.wheels.map(w => ({ name: w.name, ppr: w.ppr, channels: w.channels, invert: w.invert })) };
+    const saved = { pattern: tf.odom.pattern, wheels: tf.odom.wheels.map(w => ({
+      name: w.name, ppr: w.ppr, channels: w.channels, invert: w.invert,
+      motorEnabled: w.motorEnabled !== false, motorRole: w.motorRole,
+      encoderEnabled: w.encoderEnabled !== false, encoderRole: w.encoderRole,
+    })), encoders:(tf.odom.encoders||[]).map(e=>({name:e.name,attachedWheel:e.attachedWheel,enabled:e.enabled!==false,role:e.role,ppr:e.ppr,channels:e.channels,invert:e.invert})) };
     localStorage.setItem(tfOdomKey(), JSON.stringify(saved));
   } catch (e) {}
+}
+function tfDefaultMotorRole(w, index, pattern, count) {
+  if (count === 2) return w.y >= 0 ? 'left' : 'right';
+  if (count === 4) return `${w.x >= 0 ? 'front' : 'rear'}_${w.y >= 0 ? 'left' : 'right'}`;
+  return pattern.indexOf('omni') === 0 ? `omni_${index + 1}` : `wheel_${index + 1}`;
+}
+function tfDefaultEncoderRole(pattern) {
+  return pattern === 'mecanum' || pattern.indexOf('omni') === 0 ? 'odom_xy' : 'odom_x';
 }
 function tfOdomDetect() {
   let wheels = tfDetectWheels();
   if (!wheels.length) { tf.odom = { wheels: [], pattern: 'differential', ppr: 1024, channels: 4 }; return; }
   const saved = tfOdomLoad();
   const savedMap = {}; (saved && saved.wheels || []).forEach(w => savedMap[w.name] = w);
-  wheels = wheels.map(w => ({
+  const savedEncoderMap={};(saved?.encoders||[]).forEach(encoder=>savedEncoderMap[encoder.name]=encoder);
+  const pat = (saved && saved.pattern) || tfSuggestPattern(wheels);
+  wheels = wheels.map((w, index) => ({
     ...w,
     ppr:   (savedMap[w.name] && savedMap[w.name].ppr)     || 1024,
     channels: (savedMap[w.name] && savedMap[w.name].channels) || 4,
     invert:  (savedMap[w.name] && savedMap[w.name].invert)  || 1,
+    motorEnabled: savedMap[w.name]?.motorEnabled !== false,
+    motorRole: savedMap[w.name]?.motorRole || tfDefaultMotorRole(w, index, pat, wheels.length),
+    encoderEnabled: savedMap[w.name]?.encoderEnabled !== false,
+    encoderRole: savedMap[w.name]?.encoderRole || tfDefaultEncoderRole(pat),
   }));
-  const pat = (saved && saved.pattern) || tfSuggestPattern(wheels);
-  tf.odom = { wheels, pattern: pat, ppr: 1024, channels: 4 };
+  const detected=tfDetectEncoders(),encoders=detected.map(encoder=>{const old=savedEncoderMap[encoder.name]||{};return{...encoder,attachedWheel:old.attachedWheel||tfMatchEncoderWheel(encoder,wheels),enabled:old.enabled!==false,role:old.role||tfDefaultEncoderRole(pat),ppr:Math.max(1,Number(old.ppr)||1024),channels:Number(old.channels)||4,invert:Number(old.invert)===-1?-1:1};});
+  for(const wheel of wheels){const encoder=encoders.find(item=>item.attachedWheel===wheel.name);if(encoder){wheel.encoderEnabled=encoder.enabled;wheel.encoderRole=encoder.role;wheel.ppr=encoder.ppr;wheel.channels=encoder.channels;wheel.invert=encoder.invert;}else if(detected.length){wheel.encoderEnabled=false;}}
+  tf.odom = { wheels, encoders, pattern: pat, ppr: 1024, channels: 4 };
 }
 function tfOpenOdom() {
-  if (!tf.odom || !tf.odom.wheels || !tf.odom.wheels.length) tfOdomDetect();
+  tfOdomDetect();
   const m = document.getElementById('tf-odom-modal'); if (m) m.style.display = 'flex';
   tfRenderOdom();
 }
@@ -2277,6 +2512,19 @@ function tfOdomSetPattern(p) { tf.odom.pattern = p; tfOdomSave(); tfRenderOdom()
 function tfOdomSetPpr(name, v) { const w = tf.odom.wheels.find(x => x.name === name); if (w) { w.ppr = Math.max(1, parseInt(v) || 1024); tfOdomUpdateKpis(); tfOdomSave(); } }
 function tfOdomSetCh(name, v) { const w = tf.odom.wheels.find(x => x.name === name); if (w) { w.channels = parseInt(v) || 4; tfOdomUpdateKpis(); tfOdomSave(); } }
 function tfOdomSetInv(name, chk) { const w = tf.odom.wheels.find(x => x.name === name); if (w) { w.invert = chk ? -1 : 1; tfOdomSave(); } }
+function tfOdomSetAssignment(name, key, value) {
+  const w = tf.odom.wheels.find(x => x.name === name); if (!w) return;
+  if (key === 'motorEnabled' || key === 'encoderEnabled') w[key] = !!value;
+  else w[key] = String(value);
+  tfOdomSave(); tfRenderOdom();
+}
+function tfOdomSetEncoder(name,key,value){
+  const encoder=(tf.odom.encoders||[]).find(item=>item.name===name);if(!encoder)return;
+  if(key==='enabled')encoder.enabled=!!value;else if(key==='ppr')encoder.ppr=Math.max(1,parseInt(value)||1024);else if(key==='channels')encoder.channels=parseInt(value)||4;else if(key==='invert')encoder.invert=value?-1:1;else encoder[key]=String(value);
+  if(key==='attachedWheel'&&encoder.attachedWheel)for(const other of tf.odom.encoders){if(other!==encoder&&other.attachedWheel===encoder.attachedWheel)other.attachedWheel='';}
+  for(const wheel of tf.odom.wheels){const assigned=tf.odom.encoders.find(item=>item.attachedWheel===wheel.name);wheel.encoderEnabled=!!assigned?.enabled;if(assigned){wheel.encoderRole=assigned.role;wheel.ppr=assigned.ppr;wheel.channels=assigned.channels;wheel.invert=assigned.invert;}}
+  tfOdomSave();tfRenderOdom();
+}
 
 function tfRenderOdom() {
   const body = document.getElementById('tf-odom-body'); if (!body) return;
@@ -2293,32 +2541,32 @@ function tfRenderOdom() {
     const auto = (tfSuggestPattern(o.wheels) === k) ? '<span class="auto">⚡ auto</span>' : '';
     return `<button class="tf-pat-btn ${o.pattern === k ? 'active' : ''}" onclick="tfOdomSetPattern('${k}')">${m.label}${auto}</button>`;
   }).join('');
+  const motorRoles = [
+    ['left','ขับล้อซ้าย'],['right','ขับล้อขวา'],['front_left','ขับล้อหน้าซ้าย'],['front_right','ขับล้อหน้าขวา'],
+    ['rear_left','ขับล้อหลังซ้าย'],['rear_right','ขับล้อหลังขวา'],['auxiliary','มอเตอร์เสริม'],
+  ];
+  const encoderRoles = [['odom_x','PID + ODOM แกน X'],['odom_y','PID + ODOM แกน Y'],['odom_xy','PID + ODOM แกน X/Y'],['motor_feedback','PID ความเร็วมอเตอร์เท่านั้น'],['unused','ไม่นำไปคำนวณ']];
   const rows = o.wheels.map(w => {
     const icon = w.type === 'omni' ? '🛞' : '⚙️';
     return `<tr>
       <td>${icon} ${escH(w.name)}</td>
-      <td style="color:var(--dim)">${w.type}</td>
-      <td style="color:var(--dim)">${w.x}, ${w.y}</td>
-      <td style="color:var(--dim)">${w.radius}</td>
-      <td><input type="number" min="1" step="1" value="${w.ppr}" oninput="tfOdomSetPpr('${escH(w.name)}',this.value)"></td>
-      <td><select onchange="tfOdomSetCh('${escH(w.name)}',this.value)">
-            <option value="1" ${w.channels == 1 ? 'selected' : ''}>1 (ธรรมดา)</option>
-            <option value="4" ${w.channels == 4 ? 'selected' : ''}>4 (quad)</option>
-          </select></td>
-      <td style="text-align:center"><input type="checkbox" ${w.invert === -1 ? 'checked' : ''} onchange="tfOdomSetInv('${escH(w.name)}',this.checked)"></td>
+      <td><label class="tf-assign-toggle"><input type="checkbox" ${w.motorEnabled !== false ? 'checked' : ''} onchange="tfOdomSetAssignment('${escH(w.name)}','motorEnabled',this.checked)"> ใช้</label><select ${w.motorEnabled === false ? 'disabled' : ''} onchange="tfOdomSetAssignment('${escH(w.name)}','motorRole',this.value)">${motorRoles.map(([value,label])=>`<option value="${value}" ${w.motorRole===value?'selected':''}>${label}</option>`).join('')}</select></td>
+      <td style="color:var(--dim)">${escH(w.x)}, ${escH(w.y)}</td>
     </tr>`;
   }).join('');
   body.innerHTML = `
-    <div class="tf-odom-sec">🛞 ล้อที่ตรวจพบจากโมเดล TF <span class="tf-odom-sub">(ตำแหน่ง/รัศมีคำนวณจากการติดตั้ง TF อัตโนมัติ)</span></div>
+    <div class="tf-odom-sec">🔌 กำหนดหน้าที่ Motor และ Encoder <span class="tf-odom-sub">(หนึ่งแถวต่อล้อที่ตรวจพบจาก TF)</span></div>
     <table class="tf-wheel-tbl">
-      <thead><tr><th>เฟรม</th><th>ชนิด</th><th>ตำแหน่ง(x,y)</th><th>R(m)</th><th>PPR encoder</th><th>channels</th><th>inv</th></tr></thead>
+      <thead><tr><th>ล้อ / เฟรม</th><th>หน้าที่ Motor</th><th>ตำแหน่ง x,y</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
+    <div class="tf-odom-sec">🟠 Encoder ทั้งหมดจาก Robot Model <span class="tf-odom-sub">(${(o.encoders||[]).length} ตัว)</span></div>
+    ${(o.encoders||[]).length?`<table class="tf-wheel-tbl"><thead><tr><th>Encoder</th><th>ติดกับล้อ</th><th>หน้าที่</th><th>PPR</th><th>channels</th><th>กลับทิศ</th></tr></thead><tbody>${o.encoders.map(e=>`<tr><td><label class="tf-assign-toggle"><input type="checkbox" ${e.enabled!==false?'checked':''} onchange="tfOdomSetEncoder('${escH(e.name)}','enabled',this.checked)"> ${escH(e.name)}</label></td><td><select onchange="tfOdomSetEncoder('${escH(e.name)}','attachedWheel',this.value)"><option value="">Encoder อิสระ</option>${o.wheels.map(w=>`<option value="${escH(w.name)}" ${e.attachedWheel===w.name?'selected':''}>${escH(w.name)}</option>`).join('')}</select></td><td><select onchange="tfOdomSetEncoder('${escH(e.name)}','role',this.value)">${encoderRoles.map(([value,label])=>`<option value="${value}" ${e.role===value?'selected':''}>${label}</option>`).join('')}</select></td><td><input type="number" min="1" value="${e.ppr}" onchange="tfOdomSetEncoder('${escH(e.name)}','ppr',this.value)"></td><td><select onchange="tfOdomSetEncoder('${escH(e.name)}','channels',this.value)"><option value="1" ${e.channels==1?'selected':''}>1</option><option value="4" ${e.channels==4?'selected':''}>4 quad</option></select></td><td><input type="checkbox" ${e.invert===-1?'checked':''} onchange="tfOdomSetEncoder('${escH(e.name)}','invert',this.checked)"></td></tr>`).join('')}</tbody></table>`:'<div class="tf-odom-note">ยังไม่มีชิ้นส่วน Encoder ใน Robot Model — เพิ่ม Encoder แล้วเปิดหน้านี้อีกครั้ง</div>'}
     <div class="tf-odom-sec">🎛 รูปแบบขับเคลื่อน (drive pattern)</div>
     <div class="tf-odom-pat">${patBtns}</div>
     <div class="tf-odom-sec">📐 ค่าที่คำนวณอัตโนมัติ <span class="tf-odom-sub">(จาก TF + PPR — อัปเดตตามที่พิมพ์)</span></div>
     <div class="tf-odom-kpis" id="tf-odom-kpis"></div>
-    <div class="tf-odom-note">💡 ระบบเดา pattern จากจำนวน/ชนิดล้ออัตโนมัติ (กดปุ่มด้านบนเปลี่ยนได้) — คุณระบุแค่ <b>PPR ของ encoder</b> และ <b>channels</b> ต่อล้อ<br>
+    <div class="tf-odom-note">💡 เลือกว่ามอเตอร์แต่ละตัวขับล้อใด และ Encoder ใช้ควบคุม PID หรือคำนวณ ODOM แกน X/Y อย่างไร ข้อมูลนี้จะส่งต่อไปหน้า Hardware อัตโนมัติ<br>
       ✅ กด <b>▶ Run in Sim</b> (ที่นี่หรือปุ่มในแถบซ้าย) → ระบบ generate จากดีไซน์ปัจจุบัน → รันหุ่นใน Sim → สลับไป RViz อัตโนมัติ (generic ถูกหยุดให้อัตโนมัติ ไม่มี /odom ซ้อน) — ส่ง /cmd_vel จากแผง Teleop หุ่นจะเดินตามค่าล้อ/PPR ที่ตั้ง</div>
   `;
   tfOdomUpdateKpis();
@@ -2364,7 +2612,10 @@ function tfBuildOdomConfig() {
     wheels: o.wheels.map(w => ({
       name: w.name, type: w.type, x: w.x, y: w.y, radius: w.radius,
       ppr: w.ppr, channels: w.channels, invert: w.invert, beta_deg: tfBeta(w, o.pattern),
+      motor: { enabled: w.motorEnabled !== false, role: w.motorRole || 'auxiliary' },
+      encoder: { enabled: w.encoderEnabled !== false, role: w.encoderRole || tfDefaultEncoderRole(o.pattern), mounted_to_motor: w.motorEnabled !== false },
     })),
+    encoders:(o.encoders||[]).map(e=>({name:e.name,parent:e.parent,attached_wheel:e.attachedWheel,enabled:e.enabled!==false,role:e.role,ppr:e.ppr,channels:e.channels,invert:e.invert,x:e.x,y:e.y,z:e.z})),
   };
   return JSON.stringify(cfg, null, 2);
 }

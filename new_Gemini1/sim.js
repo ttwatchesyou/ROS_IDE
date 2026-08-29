@@ -37,6 +37,22 @@ function rayCast(ox, oy, ang, maxR, walls=WALLS) {
   return best;
 }
 
+const ROBOT_RADIUS = 0.24;
+function pointSegmentDistance(px,py,x1,y1,x2,y2){
+  const dx=x2-x1,dy=y2-y1,length2=dx*dx+dy*dy;
+  if(length2<1e-12)return Math.hypot(px-x1,py-y1);
+  const t=Math.max(0,Math.min(1,((px-x1)*dx+(py-y1)*dy)/length2));
+  return Math.hypot(px-(x1+t*dx),py-(y1+t*dy));
+}
+function robotCollides(x,y,walls=WALLS,radius=ROBOT_RADIUS){
+  return walls.some(([x1,y1,x2,y2])=>pointSegmentDistance(x,y,x1,y1,x2,y2)<radius);
+}
+function motionIsClear(x1,y1,x2,y2,walls=WALLS,radius=ROBOT_RADIUS){
+  const steps=Math.max(1,Math.ceil(Math.hypot(x2-x1,y2-y1)/0.05));
+  for(let i=1;i<=steps;i++){const t=i/steps;if(robotCollides(x1+(x2-x1)*t,y1+(y2-y1)*t,walls,radius))return false;}
+  return true;
+}
+
 // ── Seed ต่อหุ่น: ให้แต่ละ simulation (robot_key) มีสถานะเริ่มต้นต่างกัน ──
 // ไม่ให้ topic / ข้อมูลของ sim หนึ่งไปปรากฏในอีก sim หนึ่ง (ดูเหมือน "ทับกัน")
 function hashSeed(k) {
@@ -121,8 +137,9 @@ class SimEngine {
       this.v = Math.abs(err) < 0.3 ? Math.min(0.5, dist) : 0.05;
     }
     this.th += this.w * dt;
-    this.x  += this.v * Math.cos(this.th) * dt;
-    this.y  += this.v * Math.sin(this.th) * dt;
+    const nextX=this.x+this.v*Math.cos(this.th)*dt,nextY=this.y+this.v*Math.sin(this.th)*dt;
+    if(motionIsClear(this.x,this.y,nextX,nextY,this.walls)){this.x=nextX;this.y=nextY;}
+    else this.v=0;
 
     for (let i = 0; i < 360; i++) {
       const a = this.th + this.scan.amin + i * this.scan.ainc;
@@ -193,6 +210,7 @@ BE = QoSProfile(depth=10, reliability=QoSReliabilityPolicy.BEST_EFFORT)
 ST = QoSProfile(depth=10, reliability=QoSReliabilityPolicy.RELIABLE, durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
 
 CMD_TIMEOUT = 0.5   # วินาที — หยุดหุ่นถ้าไม่ได้รับ /cmd_vel ใหม่ภายในเวลานี้
+ROBOT_RADIUS = 0.24
 
 WALLS = [(-4,-4,4,-4),(4,-4,4,4),(4,4,-4,4),(-4,4,-4,-4),
          (-1,-1,1,-1),(1,-1,1,1),(1,1,-1,1),(-1,1,-1,-1),(2.5,-3,2.5,-1)]
@@ -207,6 +225,17 @@ def rayCast(ox,oy,ang,maxR):
         u=((x1-ox)*dy-(y1-oy)*dx)/den
         if t>0 and t<best and 0<=u<=1: best=t
     return best
+
+def pointSegmentDistance(px,py,x1,y1,x2,y2):
+    dx,dy=x2-x1,y2-y1; length2=dx*dx+dy*dy
+    if length2<1e-12: return math.hypot(px-x1,py-y1)
+    t=max(0.0,min(1.0,((px-x1)*dx+(py-y1)*dy)/length2))
+    return math.hypot(px-(x1+t*dx),py-(y1+t*dy))
+
+def robotCollides(x,y): return any(pointSegmentDistance(x,y,*wall)<ROBOT_RADIUS for wall in WALLS)
+def motionIsClear(x1,y1,x2,y2):
+    steps=max(1,int(math.ceil(math.hypot(x2-x1,y2-y1)/0.05)))
+    return all(not robotCollides(x1+(x2-x1)*i/steps,y1+(y2-y1)*i/steps) for i in range(1,steps+1))
 
 CORNERS=[(-3.0,-3.0),(3.0,-3.0),(3.0,3.0),(-3.0,3.0)]
 # ── โหลดแผนที่จาก ~/map.json (ถ้ามี) → กำแพง/ขอบเขต/จุดเริ่ม ของ simulation ──
@@ -288,8 +317,9 @@ class SimState(Node):
                 self.w=max(-1.2,min(1.2,2.0*err))
                 self.v=min(0.5,dist) if abs(err)<0.3 else 0.05
         self.th+=self.w*0.05
-        self.x+=self.v*math.cos(self.th)*0.05
-        self.y+=self.v*math.sin(self.th)*0.05
+        next_x=self.x+self.v*math.cos(self.th)*0.05; next_y=self.y+self.v*math.sin(self.th)*0.05
+        if motionIsClear(self.x,self.y,next_x,next_y): self.x,self.y=next_x,next_y
+        else: self.v=0.0; self.cmd_v=0.0
         now=self.get_clock().now().to_msg()
         qz=math.sin(self.th/2); qw=math.cos(self.th/2)
         tf=TransformStamped(); tf.header.stamp=now; tf.header.frame_id='odom'; tf.child_frame_id='base_link'
@@ -341,17 +371,19 @@ function seed(root) {
     // ใน sim: ~/ros2_ws คือ workspace และสัมพันธ์กับ root ของหุ่นนี้โดยตรง (sim_ws/SIM-xxx)
     const marker = path.join(root, 'src', 'sim_robot');
     if (fss.existsSync(marker)) return;   // เคย seed แล้ว
-    const dirs = ['src/sim_robot/sim_robot','src/sim_robot/launch','build','install','log'];
+    const dirs = ['src/sim_robot/sim_robot','src/sim_robot/launch','src/sim_robot/resource','build','install','log'];
     dirs.forEach(d => fss.mkdirSync(path.join(root, d), { recursive:true }));
     fss.writeFileSync(path.join(root, 'src/sim_robot/package.xml'),
-      `<?xml version="1.0"?>\n<package format="3">\n  <name>sim_robot</name>\n  <version>0.1.0</version>\n  <description>ROS2 IDE Sim sample package</description>\n  <maintainer email="sim@ros2ide.local">sim</maintainer>\n  <buildtool_depend>ament_python</buildtool_depend>\n  <exec_depend>rclpy</exec_depend>\n</package>\n`);
+      `<?xml version="1.0"?>\n<package format="3">\n  <name>sim_robot</name>\n  <version>0.1.0</version>\n  <description>ROS2 IDE Sim sample package</description>\n  <maintainer email="sim@ros2ide.local">sim</maintainer>\n  <license>Apache-2.0</license>\n  <buildtool_depend>ament_python</buildtool_depend>\n  <exec_depend>rclpy</exec_depend>\n  <exec_depend>std_msgs</exec_depend>\n  <exec_depend>launch_ros</exec_depend>\n  <export><build_type>ament_python</build_type></export>\n</package>\n`);
     fss.writeFileSync(path.join(root, 'src/sim_robot/setup.py'),
-      `from setuptools import setup\nsetup(name='sim_robot', packages=['sim_robot'])\n`);
+      `from setuptools import setup\nfrom glob import glob\npackage_name='sim_robot'\nsetup(name=package_name,version='0.1.0',packages=[package_name],data_files=[('share/ament_index/resource_index/packages',['resource/'+package_name]),('share/'+package_name,['package.xml']),('share/'+package_name+'/launch',glob('launch/*.launch.py'))],entry_points={'console_scripts':['talker = sim_robot.talker:main']},install_requires=['setuptools'],zip_safe=False)\n`);
+    fss.writeFileSync(path.join(root, 'src/sim_robot/setup.cfg'), '[develop]\nscript_dir=$base/lib/sim_robot\n[install]\ninstall_scripts=$base/lib/sim_robot\n');
+    fss.writeFileSync(path.join(root, 'src/sim_robot/resource/sim_robot'), '');
     fss.writeFileSync(path.join(root, 'src/sim_robot/sim_robot/__init__.py'), '');
     fss.writeFileSync(path.join(root, 'src/sim_robot/sim_robot/talker.py'),
-      `import rclpy\nfrom rclpy.node import Node\nfrom std_msgs.msg import String\n\nclass Talker(Node):\n    def __init__(self):\n        super().__init__('talker')\n        self.pub = self.create_publisher(String, '/chatter', 10)\n        self.i = 0\n        self.timer = self.create_timer(1.0, self.cb)\n    def cb(self):\n        msg = String(); msg.data = f'hello sim {self.i}'; self.i += 1\n        self.pub.publish(msg); self.get_logger().info(f'Pub: {msg.data}')\n\nif __name__ == '__main__':\n    rclpy.init(); rclpy.spin(Talker()); rclpy.shutdown()\n`);
+      `import rclpy\nfrom rclpy.node import Node\nfrom std_msgs.msg import String\n\nclass Talker(Node):\n    def __init__(self):\n        super().__init__('talker')\n        self.pub = self.create_publisher(String, '/chatter', 10)\n        self.i = 0\n        self.timer = self.create_timer(1.0, self.cb)\n    def cb(self):\n        msg = String(); msg.data = f'hello sim {self.i}'; self.i += 1\n        self.pub.publish(msg); self.get_logger().info(f'Pub: {msg.data}')\n\ndef main():\n    rclpy.init(); node=Talker()\n    try: rclpy.spin(node)\n    finally: node.destroy_node(); rclpy.shutdown()\n\nif __name__ == '__main__': main()\n`);
     fss.writeFileSync(path.join(root, 'src/sim_robot/launch/sim.launch.py'),
-      `from launch import LaunchDescription\nfrom launch_ros.actions import Node\n\ndef generate_launch_description():\n    return LaunchDescription([\n        Node(package='sim_robot', executable='talker.py', name='talker'),\n    ])\n`);
+      `from launch import LaunchDescription\nfrom launch_ros.actions import Node\n\ndef generate_launch_description():\n    return LaunchDescription([\n        Node(package='sim_robot', executable='talker', name='talker'),\n    ])\n`);
     fss.writeFileSync(path.join(root, 'README.md'), '# SIM Workspace\nแก้ไข/รันไฟล์ได้เลย โดยไม่ต้องมี ROS จริง\n');
     // ── copy Gazebo sim package (robot urdf/world/controllers/launcher) ──
     try {
@@ -398,9 +430,11 @@ function createSimAgent(robotKey, deps) {
   //  dummy fallback: กล่องชั่วคราว กันหน้าว่างก่อนออกแบบ + รองรับ Teleop (/cmd_vel)
   //  (Gazebo auto-start ปิดไปตามนโยบาย dummy-primary; โฟลเดอร์ sim_gazebo/ ยังคงอยู่บนดิสก์ หากต้องการรันเอง)
   try { fss.mkdirSync(path.join(root, 'tmp'), { recursive: true }); } catch (e) {}
+  const simPubPidFile = path.join(root, 'tmp', '_sim_state_pub.pid');
   let _rosSetup = '';
   try { const ds = fss.readdirSync('/opt/ros').filter(d => /^[a-z]+$/.test(d)).sort(); if (ds.length) _rosSetup = `/opt/ros/${ds[ds.length - 1]}/setup.bash`; } catch (e) {}
-  // ฆ่า backend ตัวเก่าที่ค้าง (dummy pub + user wheel_odom) ก่อนรันใหม่ → กัน /odom ซ้อนกัน
+  // ฆ่า backend ตัวเก่าที่ค้างทุกชนิดก่อนรัน fallback ใหม่ → ให้หนึ่ง
+  // simulation มีเจ้าของ /tf, /odom และ /scan เพียง process เดียวเสมอ
   // ⚠️ ต้องรอ pkill จบก่อน spawn ใหม่ (รัน spawn ใน callback ของ exec)
   //    ถ้าสั่ง pkill แล้ว spawn ต่อกันแบบ async → pkill จะฆ่า node ที่เพิ่ง spawn ไปเอง (race → sim ว่างเปล่า)
   const startBackend = () => {
@@ -417,10 +451,11 @@ function createSimAgent(robotKey, deps) {
       detached: true,
       stdio: _pubStdio,
     });
+    try { fss.writeFileSync(simPubPidFile, String(simPubChild.pid)); } catch (e) {}
     simPubChild.unref();
     console.log('[SIM] dummy SIM_STATE_PUB fallback for', robotKey, '(wheel_odom เปิดด้วยตัวเองผ่าน Run in Sim)');
   };
-  try { exec(`pkill -f '${root}/.*_sim_state_pub[.]py' 2>/dev/null; pkill -f '${root}/.*wheel_odom' 2>/dev/null`, () => startBackend()); }
+  try { exec(`PID=$(cat '${root}/tmp/_mapsim.pid' 2>/dev/null); [ -n "$PID" ] && kill -9 "$PID" 2>/dev/null; pkill -9 -f '${root}/install/.*/[m]apsim' 2>/dev/null; pkill -f '${root}/.*_sim_state_pub[.]py' 2>/dev/null; pkill -f '${root}/.*wheel_odom' 2>/dev/null; rm -f '${root}/tmp/_mapsim.pid'`, () => startBackend()); }
   catch (e) { startBackend(); }
 
   const cwdState = new Map();               // termId → relative path (cwd)
@@ -676,7 +711,7 @@ function createSimAgent(robotKey, deps) {
           if (pid) try { process.kill(pid, 'SIGKILL'); } catch (e) {}
         }
       } catch (e) {}
-      try { exec(`pkill -f '${root}/.*_sim_gazebo[.]sh' 2>/dev/null; pkill -f '${root}/.*_sim_state_pub[.]py' 2>/dev/null`, () => {}); } catch (e) {}
+      try { exec(`PID=$(cat '${root}/tmp/_mapsim.pid' 2>/dev/null); [ -n "$PID" ] && kill -9 "$PID" 2>/dev/null; pkill -9 -f '${root}/install/.*/[m]apsim' 2>/dev/null; pkill -f '${root}/.*_sim_gazebo[.]sh' 2>/dev/null; pkill -f '${root}/.*_sim_state_pub[.]py' 2>/dev/null; rm -f '${root}/tmp/_mapsim.pid'`, () => {}); } catch (e) {}
     },
   };
 
@@ -687,8 +722,8 @@ function createSimAgent(robotKey, deps) {
       try { fss.writeFileSync(path.join(root, 'map.json'), typeof mapJson === 'string' ? mapJson : JSON.stringify(mapJson)); } catch (e) {}
       try { eng.applyMap(typeof mapJson==='string'?JSON.parse(mapJson):mapJson); } catch (e) {}
     }
-    // pkill ตัวเก่า (dummy + wheel_odom) แล้วรัน backend ใหม่ → dummy โหลด ~/map.json ใหม่
-    try { exec(`pkill -f '${root}/.*_sim_state_pub[.]py' 2>/dev/null; pkill -f '${root}/.*wheel_odom' 2>/dev/null`, () => startBackend()); }
+    // Map apply also changes the kinematic owner back to exactly one fallback.
+    try { exec(`PID=$(cat '${root}/tmp/_mapsim.pid' 2>/dev/null); [ -n "$PID" ] && kill -9 "$PID" 2>/dev/null; pkill -9 -f '${root}/install/.*/[m]apsim' 2>/dev/null; pkill -f '${root}/.*_sim_state_pub[.]py' 2>/dev/null; pkill -f '${root}/.*wheel_odom' 2>/dev/null; rm -f '${root}/tmp/_mapsim.pid'`, () => startBackend()); }
     catch (e) { startBackend(); }
   }
 
@@ -775,19 +810,22 @@ function genMapsimFiles() {
   // Python node that publishes /map + /scan + TF + responds to /cmd_vel
   const mapsimPy = `#!/usr/bin/env python3
 """sim_robot_mapsim - Static map publisher + laser simulator + TF tree for RViz"""
-import json, math, os, time
+import json, math, os, time, heapq
 import rclpy
 from rclpy.node import Node
+from rclpy.parameter import Parameter
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSDurabilityPolicy
-from geometry_msgs.msg import TransformStamped, Twist
+from geometry_msgs.msg import TransformStamped, Twist, PoseStamped, PoseWithCovarianceStamped
 from tf2_ros import StaticTransformBroadcaster, TransformBroadcaster
 from sensor_msgs.msg import LaserScan
-from nav_msgs.msg import OccupancyGrid
+from nav_msgs.msg import OccupancyGrid, Odometry, Path
 from std_msgs.msg import String
+from std_srvs.srv import Trigger
 
 BE = QoSProfile(depth=10, reliability=QoSReliabilityPolicy.BEST_EFFORT)
 ST = QoSProfile(depth=100, reliability=QoSReliabilityPolicy.RELIABLE, durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
 CMD_TIMEOUT = 0.5
+ROBOT_RADIUS = 0.24
 
 WALLS = [(-4,-4,4,-4),(4,-4,4,4),(4,4,-4,4),(-4,4,-4,-4),
          (-1,-1,1,-1),(1,-1,1,1),(1,1,-1,1),(-1,1,-1,1),(2.5,-3,2.5,-1)]
@@ -800,41 +838,304 @@ def ray_cast(ox,oy,ang,max_r):
         if t>0 and t<best and 0<=u<=1: best=t
     return best
 
+def point_segment_distance(px,py,x1,y1,x2,y2):
+    dx,dy=x2-x1,y2-y1; length2=dx*dx+dy*dy
+    if length2<1e-12: return math.hypot(px-x1,py-y1)
+    t=max(0.0,min(1.0,((px-x1)*dx+(py-y1)*dy)/length2))
+    return math.hypot(px-(x1+t*dx),py-(y1+t*dy))
+
+def robot_collides(x,y,radius=ROBOT_RADIUS):
+    return any(point_segment_distance(x,y,*wall)<radius for wall in WALLS)
+
+def motion_is_clear(x1,y1,x2,y2):
+    steps=max(1,int(math.ceil(math.hypot(x2-x1,y2-y1)/0.05)))
+    return all(not robot_collides(x1+(x2-x1)*i/steps,y1+(y2-y1)*i/steps) for i in range(1,steps+1))
+
 MAP_START=(0.0,0.0)
 try:
     with open(os.path.expanduser('~/map.json')) as _f: _m=json.load(_f)
     w=_m.get('walls') or []
     if w: WALLS=[tuple(float(v) for v in wall[:4]) for wall in w if len(wall)>=4]
     b=_m.get('bounds')
-    if b: WALLS=[(b[0],b[1],b[2],b[1]),(b[2],b[1],b[2],b[3]),(b[2],b[3],b[0],b[3]),(b[0],b[3],b[0],b[1])]
+    if b and not w: WALLS=[(b[0],b[1],b[2],b[1]),(b[2],b[1],b[2],b[3]),(b[2],b[3],b[0],b[3]),(b[0],b[3],b[0],b[1])]
     s=_m.get('start')
     if s: MAP_START=(float(s[0]),float(s[1]))
 except Exception:
     pass
+
+URDF='''<?xml version="1.0"?>
+<robot name="map_sim_robot">
+  <link name="base_link"><visual><origin xyz="0 0 0.12"/><geometry><box size="0.42 0.32 0.24"/></geometry><material name="kid_blue"><color rgba="0.18 0.58 0.96 1"/></material></visual></link>
+  <link name="laser_frame"/>
+  <joint name="laser_joint" type="fixed"><parent link="base_link"/><child link="laser_frame"/><origin xyz="0.20 0 0.20"/></joint>
+</robot>'''
 
 class MapSimNode(Node):
     def __init__(self):
         super().__init__('sim_robot_mapsim')
         self.declare_parameter('map_file', str(os.path.expanduser('~/map.json')))
         self.map_file=self.get_parameter('map_file').get_parameter_value().string_value
-        self.map_pub=self.create_publisher(OccupancyGrid,'/map',1)
+        self.map_pub=self.create_publisher(OccupancyGrid,'/map',ST)
+        self.slam_pub=self.create_publisher(OccupancyGrid,'/slam_map',ST)
         self.scan_pub=self.create_publisher(LaserScan,'/scan',1)
+        self.odom_pub=self.create_publisher(Odometry,'/odom',10)
+        self.desc_pub=self.create_publisher(String,'/robot_description',ST)
+        self.nav_status_pub=self.create_publisher(String,'/nav_status',ST)
+        self.nav_path_pub=self.create_publisher(Path,'/plan',ST)
         self.cmd_vel_sub=self.create_subscription(Twist,'/cmd_vel',self._cmd_vel_cb,1)
+        self.goal_sub=self.create_subscription(PoseStamped,'/goal_pose',self._goal_cb,10)
+        self.initial_pose_sub=self.create_subscription(PoseWithCovarianceStamped,'/initialpose',self._initial_pose_cb,10)
+        self.save_map_srv=self.create_service(Trigger,'/save_slam_map',self._save_slam_map)
+        self.cancel_nav_srv=self.create_service(Trigger,'/cancel_navigation',self._cancel_navigation)
+        self.declare_parameter('nav_enabled',False)
+        self.declare_parameter('nav_max_speed',0.55)
+        self.declare_parameter('nav_turn_speed',1.2)
+        self.declare_parameter('nav_goal_tolerance',0.20)
+        self.declare_parameter('nav_obstacle_distance',0.48)
+        self.declare_parameter('nav_inflation_radius',0.28)
+        self.declare_parameter('nav_lookahead_distance',0.45)
+        self.declare_parameter('nav_allow_unknown',False)
         self.static_br=StaticTransformBroadcaster(self)
         self.br=TransformBroadcaster(self)
         self.x,self.y,self.th=float(MAP_START[0]),float(MAP_START[1]),0.0
         self.last_cmd=Twist(); self.last_cmd_time=0.0
-        self.map_data=None; self._load_map()
+        self.nav_goal=None; self.nav_path=[]; self.nav_path_index=0; self._last_replan=0.0; self._nav_status='ready'; self._last_nav_status_time=0.0
+        self._web_goal_file=os.path.expanduser('~/tmp/_nav_goal.json')
+        try: self._web_goal_mtime=os.stat(self._web_goal_file).st_mtime_ns
+        except FileNotFoundError: self._web_goal_mtime=0
+        self._web_nav_config_file=os.path.expanduser('~/tmp/_nav_config.json'); self._web_nav_config_mtime=0
+        self.map_data=None; self.nav_map_data=None; self.nav_map_name=None; self._load_map(); self._load_selected_nav_map()
+        self._init_slam_map()
         self._publish_static_tfs()
-        self.timer=self.create_timer(0.05,self._tick)
+        # /map and the model are latched: subscribers receive them once without
+        # rebuilding a large texture on every simulation tick.
+        published_map=self.nav_map_data or self.map_data
+        published_map.header.stamp=self.get_clock().now().to_msg()
+        self.map_pub.publish(published_map)
+        self._publish_slam_map()
+        # Use the model saved by Robot Config; the built-in box is only a
+        # fallback for workspaces which do not have a saved robot yet.
+        robot_urdf=URDF
+        for urdf_path in [os.path.expanduser('~/src/sim_robot_tf/urdf/robot.urdf'),os.path.expanduser('~/ros2_ws/src/sim_robot_tf/urdf/robot.urdf')]:
+            try:
+                if os.path.isfile(urdf_path):
+                    with open(urdf_path,'r') as urdf_file: loaded_urdf=urdf_file.read()
+                    if '<robot' in loaded_urdf: robot_urdf=loaded_urdf; break
+            except Exception as e: self.get_logger().warning(f'Cannot load Robot Config URDF: {e}')
+        self._robot_urdf=robot_urdf
+        self.desc_pub.publish(String(data=self._robot_urdf))
+        self.desc_timer=self.create_timer(2.0,self._publish_description)
+        self.get_logger().info('Robot model: Robot Config' if robot_urdf != URDF else 'Robot model: MapSim fallback')
+        self._last_tick=time.monotonic()
+        self._last_slam_publish=0.0
+        self.timer=self.create_timer(0.1,self._tick)
         self.get_logger().info('sim_robot_mapsim started')
+    def _publish_description(self): self.desc_pub.publish(String(data=self._robot_urdf))
+    def _set_nav_status(self,state,message,distance=None):
+        now=time.monotonic()
+        if state!=self._nav_status or now-self._last_nav_status_time>1.0:
+            self._nav_status=state; self._last_nav_status_time=now
+            self.nav_status_pub.publish(String(data=json.dumps({'state':state,'message':message,'distance':distance})))
+    def _goal_cb(self,msg):
+        q=msg.pose.orientation; yaw=2.0*math.atan2(q.z,q.w)
+        self._accept_nav_goal(float(msg.pose.position.x),float(msg.pose.position.y),yaw)
+    def _check_web_goal(self):
+        try:
+            modified=os.stat(self._web_goal_file).st_mtime_ns
+            if modified==self._web_goal_mtime: return
+            self._web_goal_mtime=modified
+            with open(self._web_goal_file,'r') as goal_file: goal=json.load(goal_file)
+            goal_id=str(goal.get('id','')); x=float(goal['x']); y=float(goal['y']); yaw=float(goal.get('yaw',0.0))
+            if not all(math.isfinite(value) for value in (x,y,yaw)): raise ValueError('goal contains non-finite values')
+            accepted,error=self._accept_nav_goal(x,y,yaw)
+            ack_path=os.path.expanduser('~/tmp/_nav_goal_ack.json')
+            with open(ack_path,'w') as ack_file: json.dump({'id':goal_id,'accepted':accepted,'error':error,'x':x,'y':y},ack_file)
+            if accepted: self.get_logger().info('Robot Playground goal planned: %.2f, %.2f (%d points)'%(x,y,len(self.nav_path)))
+        except FileNotFoundError: pass
+        except Exception as error: self.get_logger().warning('Cannot accept Robot Playground goal: '+str(error))
+    def _check_web_nav_config(self):
+        try:
+            modified=os.stat(self._web_nav_config_file).st_mtime_ns
+            if modified==self._web_nav_config_mtime: return
+            self._web_nav_config_mtime=modified
+            with open(self._web_nav_config_file,'r') as config_file: config=json.load(config_file)
+            config_id=str(config.get('id','')); allowed={'nav_enabled':bool,'nav_max_speed':float,'nav_turn_speed':float,'nav_obstacle_distance':float,'nav_inflation_radius':float,'nav_lookahead_distance':float,'nav_goal_tolerance':float}
+            params=[]
+            for name,value_type in allowed.items():
+                if name in config: params.append(Parameter(name,value=value_type(config[name])))
+            results=self.set_parameters(params); errors=[result.reason for result in results if not result.successful]
+            ack={'id':config_id,'ok':not errors,'error':'; '.join(errors)}
+            with open(os.path.expanduser('~/tmp/_nav_config_ack.json'),'w') as ack_file: json.dump(ack,ack_file)
+            if errors: self.get_logger().warning('Navigation config rejected: '+ack['error'])
+            else: self.get_logger().info('Navigation config applied')
+        except FileNotFoundError: pass
+        except Exception as error:
+            try:
+                with open(os.path.expanduser('~/tmp/_nav_config_ack.json'),'w') as ack_file: json.dump({'id':locals().get('config_id',''),'ok':False,'error':str(error)},ack_file)
+            except Exception: pass
+            self.get_logger().warning('Cannot apply Navigation config: '+str(error))
+    def _initial_pose_cb(self,msg):
+        pose=msg.pose.pose; self.x=float(pose.position.x); self.y=float(pose.position.y)
+        self.th=2.0*math.atan2(pose.orientation.z,pose.orientation.w); self.nav_goal=None; self.nav_path=[]
+        self._set_nav_status('localized','ตั้งตำแหน่งเริ่มต้นแล้ว')
+    def _cancel_navigation(self,request,response):
+        self.nav_goal=None; self.nav_path=[]; self._publish_nav_path(); self._set_nav_status('canceled','ยกเลิกภารกิจนำทางแล้ว')
+        response.success=True; response.message='navigation canceled'; return response
+    def _publish_nav_path(self):
+        message=Path(); message.header.frame_id='map'; message.header.stamp=self.get_clock().now().to_msg()
+        for x,y in self.nav_path:
+            pose=PoseStamped(); pose.header=message.header; pose.pose.position.x=x; pose.pose.position.y=y; pose.pose.orientation.w=1.0; message.poses.append(pose)
+        self.nav_path_pub.publish(message)
+    def _nearest_free(self,cell,blocked,width,height,max_radius=20):
+        x,y=cell
+        for radius in range(max_radius+1):
+            for cy in range(max(0,y-radius),min(height,y+radius+1)):
+                for cx in range(max(0,x-radius),min(width,x+radius+1)):
+                    if max(abs(cx-x),abs(cy-y))==radius and not blocked[cy*width+cx]: return (cx,cy)
+        return None
+    def _plan_nav_path(self,gx,gy):
+        grid=self.nav_map_data or self.map_data; width,height=grid.info.width,grid.info.height; resolution=grid.info.resolution
+        ox,oy=grid.info.origin.position.x,grid.info.origin.position.y; allow_unknown=bool(self.get_parameter('nav_allow_unknown').value)
+        occupied=[value>=65 or (value<0 and not allow_unknown) for value in grid.data]
+        inflation=max(0,int(math.ceil(float(self.get_parameter('nav_inflation_radius').value)/resolution)))
+        blocked=occupied[:]
+        if inflation:
+            obstacles=[(index%width,index//width) for index,value in enumerate(occupied) if value]
+            for x,y in obstacles:
+                for dy in range(-inflation,inflation+1):
+                    for dx in range(-inflation,inflation+1):
+                        nx,ny=x+dx,y+dy
+                        if dx*dx+dy*dy<=inflation*inflation and 0<=nx<width and 0<=ny<height: blocked[ny*width+nx]=True
+        to_cell=lambda x,y:(int((x-ox)/resolution),int((y-oy)/resolution))
+        raw_start,raw_goal=to_cell(self.x,self.y),to_cell(gx,gy)
+        if not(0<=raw_goal[0]<width and 0<=raw_goal[1]<height) or occupied[raw_goal[1]*width+raw_goal[0]]: return []
+        start=self._nearest_free(raw_start,blocked,width,height); goal=self._nearest_free(raw_goal,blocked,width,height)
+        if start is None or goal is None: return []
+        queue=[(0.0,start)]; came={}; cost={start:0.0}; directions=[(-1,0,1),(1,0,1),(0,-1,1),(0,1,1),(-1,-1,1.414),(1,-1,1.414),(-1,1,1.414),(1,1,1.414)]
+        while queue:
+            _,current=heapq.heappop(queue)
+            if current==goal: break
+            cx,cy=current
+            for dx,dy,step in directions:
+                nx,ny=cx+dx,cy+dy
+                if not(0<=nx<width and 0<=ny<height) or blocked[ny*width+nx]: continue
+                if dx and dy and (blocked[cy*width+nx] or blocked[ny*width+cx]): continue
+                neighbor=(nx,ny); next_cost=cost[current]+step
+                if next_cost>=cost.get(neighbor,float('inf')): continue
+                cost[neighbor]=next_cost; came[neighbor]=current; heuristic=math.hypot(goal[0]-nx,goal[1]-ny); heapq.heappush(queue,(next_cost+heuristic,neighbor))
+        if goal not in cost: return []
+        cells=[goal]
+        while cells[-1]!=start: cells.append(came[cells[-1]])
+        cells.reverse(); points=[(ox+(x+0.5)*resolution,oy+(y+0.5)*resolution) for x,y in cells]
+        if math.hypot(points[-1][0]-gx,points[-1][1]-gy)>resolution*0.25: points.append((gx,gy))
+        return points
+    def _accept_nav_goal(self,x,y,yaw):
+        self._set_nav_status('planning','กำลังคำนวณเส้นทาง A*')
+        planned=self._plan_nav_path(x,y)
+        if not planned:
+            self.nav_goal=None; self.nav_path=[]; self._publish_nav_path(); self._set_nav_status('failed','หาเส้นทางไม่ได้ ลองเลือกจุดในพื้นที่ว่าง')
+            return False,'ไม่พบเส้นทางบน Saved Map'
+        self.nav_goal=(x,y,yaw); self.nav_path=planned; self.nav_path_index=1 if len(planned)>1 else 0; self._last_replan=time.monotonic(); self._publish_nav_path(); self._set_nav_status('navigating','สร้างเส้นทางแล้ว กำลังเดินทาง',math.hypot(x-self.x,y-self.y)); return True,''
+    def _nav_command(self):
+        if not self.get_parameter('nav_enabled').value or self.nav_goal is None: return 0.0,0.0
+        gx,gy,gyaw=self.nav_goal; dx,dy=gx-self.x,gy-self.y; distance=math.hypot(dx,dy)
+        tolerance=float(self.get_parameter('nav_goal_tolerance').value)
+        if distance<=tolerance:
+            self.th=gyaw; self.nav_goal=None; self.nav_path=[]; self._publish_nav_path(); self._set_nav_status('succeeded','ถึงจุดหมายแล้ว!',0.0); return 0.0,0.0
+        if not self.nav_path:
+            accepted,_=self._accept_nav_goal(gx,gy,gyaw)
+            if not accepted: return 0.0,0.0
+        lookahead=float(self.get_parameter('nav_lookahead_distance').value)
+        while self.nav_path_index<len(self.nav_path)-1 and math.hypot(self.nav_path[self.nav_path_index][0]-self.x,self.nav_path[self.nav_path_index][1]-self.y)<lookahead: self.nav_path_index+=1
+        tx,ty=self.nav_path[self.nav_path_index]; target=math.atan2(ty-self.y,tx-self.x); error=math.atan2(math.sin(target-self.th),math.cos(target-self.th))
+        max_speed=float(self.get_parameter('nav_max_speed').value); turn=float(self.get_parameter('nav_turn_speed').value)
+        obstacle=float(self.get_parameter('nav_obstacle_distance').value)
+        lx=self.x+0.20*math.cos(self.th); ly=self.y+0.20*math.sin(self.th)
+        front=self._ray(lx,ly,self.th,rng=max(1.0,obstacle+0.4))
+        if front<obstacle:
+            if time.monotonic()-self._last_replan>1.5:
+                replanned=self._plan_nav_path(gx,gy); self._last_replan=time.monotonic()
+                if replanned: self.nav_path=replanned; self.nav_path_index=1 if len(replanned)>1 else 0; self._publish_nav_path()
+            self._set_nav_status('replanning','เส้นทางถูกขวาง กำลังวางแผนใหม่',distance)
+            direction=1.0 if error>=0 else -1.0; return 0.0,direction*min(turn,max(0.45,abs(error)*1.5))
+        self._set_nav_status('navigating','กำลังตามเส้นทาง A* ไปยังธง',distance)
+        if abs(error)>0.38: return 0.0,max(-turn,min(turn,error*2.0))
+        heading_scale=max(0.25,1.0-abs(error)/0.6); return min(max_speed,max(0.08,distance*0.65))*heading_scale,max(-turn,min(turn,error*1.6))
+    def _init_slam_map(self):
+        self.slam_grid=[-1]*(self.map_data.info.width*self.map_data.info.height)
+        self.slam_data=OccupancyGrid(); self.slam_data.header.frame_id='map'
+        self.slam_data.info=self.map_data.info
+    def _publish_slam_map(self):
+        self.slam_data.header.stamp=self.get_clock().now().to_msg()
+        self.slam_data.data=self.slam_grid
+        self.slam_pub.publish(self.slam_data)
+    def _world_cell(self,x,y):
+        return (int((x-self.map_data.info.origin.position.x)/self.map_data.info.resolution),int((y-self.map_data.info.origin.position.y)/self.map_data.info.resolution))
+    def _integrate_slam_scan(self,ox,oy,angles,ranges,max_range):
+        width,height,res=self.map_data.info.width,self.map_data.info.height,self.map_data.info.resolution
+        sx,sy=self._world_cell(ox,oy)
+        for angle,rng in zip(angles,ranges):
+            hit=math.isfinite(rng) and rng<max_range
+            distance=float(rng) if hit else max_range
+            ex,ey=self._world_cell(ox+distance*math.cos(angle),oy+distance*math.sin(angle))
+            dx,dy=ex-sx,ey-sy; steps=max(abs(dx),abs(dy),1)
+            free_steps=steps if not hit else max(0,steps-1)
+            for step in range(free_steps+1):
+                t=step/steps; cx=int(round(sx+dx*t)); cy=int(round(sy+dy*t))
+                if 0<=cx<width and 0<=cy<height and self.slam_grid[cy*width+cx]!=100: self.slam_grid[cy*width+cx]=0
+            if hit and 0<=ex<width and 0<=ey<height: self.slam_grid[ey*width+ex]=100
+    def _save_slam_map(self,request,response):
+        try:
+            name='slam_map'
+            try:
+                with open(os.path.expanduser('~/tmp/_slam_map_name'),'r') as name_file: requested=name_file.read().strip()
+                if requested and all(ch.isalnum() or ch in '_-' for ch in requested): name=requested[:40]
+            except Exception: pass
+            home=os.path.expanduser('~'); export_dir=os.path.join(home,'maps',name); pkg=os.path.join(home,'src','sim_robot_nav_map')
+            os.makedirs(export_dir,exist_ok=True); os.makedirs(os.path.join(pkg,'maps'),exist_ok=True); os.makedirs(os.path.join(pkg,'launch'),exist_ok=True)
+            try: os.unlink(os.path.join(pkg,'CMakeLists.txt'))
+            except FileNotFoundError: pass
+            width,height=self.map_data.info.width,self.map_data.info.height
+            pixels=bytearray()
+            for y in range(height-1,-1,-1):
+                for x in range(width):
+                    value=self.slam_grid[y*width+x]; pixels.append(0 if value>=65 else (254 if value==0 else 205))
+            pgm=b'P5\\n%d %d\\n255\\n'%(width,height)+bytes(pixels)
+            ox=self.map_data.info.origin.position.x; oy=self.map_data.info.origin.position.y; resolution=self.map_data.info.resolution
+            yaml='image: map.pgm\\nmode: trinary\\nresolution: %.6f\\norigin: [%.6f, %.6f, 0.0]\\nnegate: 0\\noccupied_thresh: 0.65\\nfree_thresh: 0.25\\n'%(resolution,ox,oy)
+            for directory in [export_dir,os.path.join(pkg,'maps')]:
+                with open(os.path.join(directory,'map.pgm'),'wb') as pgm_file: pgm_file.write(pgm)
+                with open(os.path.join(directory,'map.yaml'),'w') as yaml_file: yaml_file.write(yaml)
+            with open(os.path.join(export_dir,'map.json'),'w') as json_file: json.dump({'resolution':resolution,'width':width,'height':height,'origin':[ox,oy,0.0],'data':self.slam_grid},json_file)
+            package_xml='''<?xml version="1.0"?><package format="3"><name>sim_robot_nav_map</name><version>0.0.1</version><description>SLAM map saved from Robot Playground</description><maintainer email="sim@ros2ide.local">sim</maintainer><license>Apache-2.0</license><buildtool_depend>ament_python</buildtool_depend><exec_depend>rclpy</exec_depend><exec_depend>nav_msgs</exec_depend><exec_depend>ament_index_python</exec_depend><exec_depend>launch_ros</exec_depend><export><build_type>ament_python</build_type></export></package>'''
+            setup_py='''from setuptools import setup\nfrom glob import glob\nimport os\npackage_name='sim_robot_nav_map'\nsetup(name=package_name,version='0.0.1',packages=[package_name],data_files=[('share/ament_index/resource_index/packages',['resource/'+package_name]),('share/'+package_name,['package.xml']),('share/'+package_name+'/maps',glob('maps/*')),('share/'+package_name+'/launch',glob('launch/*'))],entry_points={'console_scripts':['map_server = sim_robot_nav_map.map_server:main']},install_requires=['setuptools'],zip_safe=False)\n'''
+            setup_cfg='''[develop]\nscript_dir=$base/lib/sim_robot_nav_map\n[install]\ninstall_scripts=$base/lib/sim_robot_nav_map\n'''
+            map_server_py='''import os\nimport rclpy\nfrom rclpy.node import Node\nfrom rclpy.qos import QoSProfile,QoSReliabilityPolicy,QoSDurabilityPolicy\nfrom nav_msgs.msg import OccupancyGrid\nfrom ament_index_python.packages import get_package_share_directory\nclass PlaygroundMapServer(Node):\n    def __init__(self):\n        super().__init__('playground_map_server')\n        share=get_package_share_directory('sim_robot_nav_map'); yaml_path=os.path.join(share,'maps','map.yaml')\n        values={}\n        with open(yaml_path) as stream:\n            for line in stream:\n                if ':' in line:\n                    key,value=line.split(':',1); values[key.strip()]=value.strip()\n        resolution=float(values.get('resolution','0.1')); origin=[float(v.strip()) for v in values.get('origin','[0,0,0]').strip('[]').split(',')]\n        pgm_path=os.path.join(os.path.dirname(yaml_path),values.get('image','map.pgm'))\n        with open(pgm_path,'rb') as pgm:\n            if pgm.readline().strip()!=b'P5': raise RuntimeError('Only P5 PGM is supported')\n            dims=pgm.readline().split(); width,height=int(dims[0]),int(dims[1]); pgm.readline(); pixels=pgm.read(width*height)\n        data=[]\n        for row in range(height-1,-1,-1):\n            for value in pixels[row*width:(row+1)*width]: data.append(100 if value<65 else (0 if value>240 else -1))\n        self.map=OccupancyGrid(); self.map.header.frame_id='map'; self.map.info.resolution=resolution; self.map.info.width=width; self.map.info.height=height\n        self.map.info.origin.position.x=origin[0]; self.map.info.origin.position.y=origin[1]; self.map.info.origin.orientation.w=1.0; self.map.data=data\n        qos=QoSProfile(depth=1,reliability=QoSReliabilityPolicy.RELIABLE,durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)\n        self.publisher=self.create_publisher(OccupancyGrid,'/map',qos); self.timer=self.create_timer(1.0,self.publish_map); self.publish_map()\n        self.get_logger().info('Saved SLAM map is ready on /map')\n    def publish_map(self): self.map.header.stamp=self.get_clock().now().to_msg(); self.publisher.publish(self.map)\ndef main(args=None):\n    rclpy.init(args=args); node=PlaygroundMapServer()\n    try: rclpy.spin(node)\n    finally: node.destroy_node(); rclpy.shutdown()\n'''
+            launch_py='''from launch import LaunchDescription\nfrom launch_ros.actions import Node\ndef generate_launch_description():\n    return LaunchDescription([Node(package='sim_robot_nav_map',executable='map_server',name='playground_map_server',output='screen')])\n'''
+            with open(os.path.join(pkg,'package.xml'),'w') as package_file: package_file.write(package_xml)
+            with open(os.path.join(pkg,'setup.py'),'w') as setup_file: setup_file.write(setup_py)
+            with open(os.path.join(pkg,'setup.cfg'),'w') as setup_cfg_file: setup_cfg_file.write(setup_cfg)
+            os.makedirs(os.path.join(pkg,'resource'),exist_ok=True); os.makedirs(os.path.join(pkg,'sim_robot_nav_map'),exist_ok=True)
+            with open(os.path.join(pkg,'resource','sim_robot_nav_map'),'w') as resource_file: resource_file.write('')
+            with open(os.path.join(pkg,'sim_robot_nav_map','__init__.py'),'w') as init_file: init_file.write('')
+            with open(os.path.join(pkg,'sim_robot_nav_map','map_server.py'),'w') as server_file: server_file.write(map_server_py)
+            with open(os.path.join(pkg,'launch','map_server.launch.py'),'w') as launch_file: launch_file.write(launch_py)
+            response.success=True; response.message='~/maps/%s + src/sim_robot_nav_map'%name
+        except Exception as error:
+            response.success=False; response.message=str(error)
+        return response
     def _load_map(self):
         try:
             with open(self.map_file,'r') as f: data=json.load(f)
         except Exception as e:
             self.get_logger().error(f'Failed to load map: {e}')
             data={'bounds':[-4,-4,4,4],'walls':[],'start':[0,0]}
-        b=data.get('bounds',[-4,-4,4,4]); res=0.1
+        b=list(data.get('bounds',[-4,-4,4,4])); res=0.1
+        walls=data.get('walls',[])
+        if walls:
+            xs=[float(v) for wall in walls if len(wall)>=4 for v in (wall[0],wall[2])]
+            ys=[float(v) for wall in walls if len(wall)>=4 for v in (wall[1],wall[3])]
+            if xs and ys: b=[min(float(b[0]),min(xs)-res),min(float(b[1]),min(ys)-res),max(float(b[2]),max(xs)+res),max(float(b[3]),max(ys)+res)]
         w=int(math.ceil(abs(b[2]-b[0])/res)); h=int(math.ceil(abs(b[3]-b[1])/res))
         grid=[0]*(w*h)
         for wall in data.get('walls',[]):
@@ -850,33 +1151,78 @@ class MapSimNode(Node):
         self.map_data=OccupancyGrid()
         self.map_data.header=Header(frame_id='map')
         self.map_data.info.resolution=res; self.map_data.info.width=w; self.map_data.info.height=h
-        self.map_data.info.origin.position.x=b[0]; self.map_data.info.origin.position.y=b[1]
+        self.map_data.info.origin.position.x=float(b[0]); self.map_data.info.origin.position.y=float(b[1])
         self.map_data.info.origin.orientation.w=1.0; self.map_data.data=grid
+    def _load_selected_nav_map(self):
+        try:
+            with open(os.path.expanduser('~/tmp/_nav_map_selection'),'r') as selection_file: name=selection_file.read().strip()
+            if not name or not all(ch.isalnum() or ch in '_-' for ch in name): return
+            with open(os.path.expanduser('~/maps/%s/map.json'%name),'r') as map_file: saved=json.load(map_file)
+            width=int(saved['width']); height=int(saved['height']); resolution=float(saved['resolution']); origin=saved.get('origin',[0,0,0]); data=[int(value) for value in saved['data']]
+            if width<=0 or height<=0 or len(data)!=width*height: raise ValueError('invalid occupancy grid size')
+            self.nav_map_data=OccupancyGrid(); self.nav_map_data.header.frame_id='map'; self.nav_map_data.info.width=width; self.nav_map_data.info.height=height; self.nav_map_data.info.resolution=resolution
+            self.nav_map_data.info.origin.position.x=float(origin[0]); self.nav_map_data.info.origin.position.y=float(origin[1]); self.nav_map_data.info.origin.orientation.w=1.0; self.nav_map_data.data=data; self.nav_map_name=name
+            self.get_logger().info('Navigation map selected: '+name)
+        except FileNotFoundError: pass
+        except Exception as error: self.get_logger().warning('Cannot load selected Navigation map: '+str(error))
     def _publish_static_tfs(self):
-        t=TransformStamped(); t.header.frame_id='map'; t.child_frame_id='odom'
-        t.transform.translation.x=t.transform.translation.y=t.transform.translation.z=0; t.transform.rotation.w=1.0
-        self.static_br.sendTransform(t)
+        # laser_frame is truly static. map -> odom is deliberately broadcast
+        # on /tf in every tick below so a late/restarted web bridge can never
+        # lose the link and place RobotModel at the (0,0) fallback.
         t2=TransformStamped(); t2.header.frame_id='base_link'; t2.child_frame_id='laser_frame'
         t2.transform.translation.x=0.2; t2.transform.translation.z=0.1; t2.transform.rotation.w=1.0
         self.static_br.sendTransform(t2)
-    def _cmd_vel_cb(self,msg): self.last_cmd=msg; self.last_cmd_time=time.time()
+    def _cmd_vel_cb(self,msg):
+        self.last_cmd=msg
+        # The persistent web teleop publisher keeps sending 0,0 after release.
+        # A zero command means "give control back", not a permanent manual
+        # override; otherwise Navigation can never enter _nav_command().
+        moving=abs(float(msg.linear.x))>1e-4 or abs(float(msg.angular.z))>1e-4
+        self.last_cmd_time=time.time() if moving else 0.0
     def _tick(self):
         if self.map_data:
-            dt=0.05
-            v=self.last_cmd.linear.x if time.time()-self.last_cmd_time<CMD_TIMEOUT else 0.0
-            wz=self.last_cmd.angular.z if time.time()-self.last_cmd_time<CMD_TIMEOUT else 0.0
-            self.th+=wz*dt; self.x+=v*math.cos(self.th)*dt; self.y+=v*math.sin(self.th)*dt
-            now=self.get_clock().now().to_msg(); self.map_data.header.stamp=now
-            self.map_pub.publish(self.map_data)
+            self._check_web_nav_config(); self._check_web_goal()
+            tick_now=time.monotonic(); dt=min(0.2,max(0.001,tick_now-self._last_tick)); self._last_tick=tick_now
+            manual=time.time()-self.last_cmd_time<CMD_TIMEOUT
+            if manual: v,wz=self.last_cmd.linear.x,self.last_cmd.angular.z
+            else: v,wz=self._nav_command()
+            self.th+=wz*dt
+            next_x=self.x+v*math.cos(self.th)*dt; next_y=self.y+v*math.sin(self.th)*dt
+            if motion_is_clear(self.x,self.y,next_x,next_y): self.x,self.y=next_x,next_y
+            else:
+                v=0.0
+                if manual: self.last_cmd.linear.x=0.0
+                self._set_nav_status('blocked','ชนสิ่งกีดขวาง หุ่นหยุดแล้ว')
+            now=self.get_clock().now().to_msg()
+            map_tf=TransformStamped(); map_tf.header.stamp=now; map_tf.header.frame_id='map'; map_tf.child_frame_id='odom'
+            map_tf.transform.rotation.w=1.0
             tf=TransformStamped(); tf.header.stamp=now; tf.header.frame_id='odom'; tf.child_frame_id='base_link'
             tf.transform.translation.x=self.x; tf.transform.translation.y=self.y
-            tf.transform.rotation.z=math.sin(self.th/2); tf.transform.rotation.w=math.cos(self.th/2); self.br.sendTransform(tf)
+            tf.transform.rotation.z=math.sin(self.th/2); tf.transform.rotation.w=math.cos(self.th/2)
+            # Publish laser_frame dynamically as well. Some DDS/browser bridge
+            # reconnects can miss the one-shot /tf_static sample; without this
+            # edge RViz used to draw /scan at the fixed-frame origin, looking
+            # like a second LiDAR process far away from the robot.
+            laser_tf=TransformStamped(); laser_tf.header.stamp=now; laser_tf.header.frame_id='base_link'; laser_tf.child_frame_id='laser_frame'
+            laser_tf.transform.translation.x=0.2; laser_tf.transform.translation.z=0.1; laser_tf.transform.rotation.w=1.0
+            self.br.sendTransform([map_tf,tf,laser_tf])
+            odom=Odometry(); odom.header.stamp=now; odom.header.frame_id='odom'; odom.child_frame_id='base_link'
+            odom.pose.pose.position.x=self.x; odom.pose.pose.position.y=self.y
+            odom.pose.pose.orientation.z=math.sin(self.th/2); odom.pose.pose.orientation.w=math.cos(self.th/2)
+            odom.twist.twist.linear.x=v; odom.twist.twist.angular.z=wz; self.odom_pub.publish(odom)
             scan=LaserScan(); scan.header.stamp=now; scan.header.frame_id='laser_frame'
             scan.angle_min=-math.pi/2; scan.angle_max=math.pi/2; scan.angle_increment=math.pi/180
             scan.range_min=0.1; scan.range_max=10.0
             n=int((scan.angle_max-scan.angle_min)/scan.angle_increment)+1
-            scan.ranges=[self._ray(self.x,self.y,self.th+scan.angle_min+i*scan.angle_increment) for i in range(n)]
+            # Cast from the actual laser_frame origin (0.20 m in front of
+            # base_link), matching the TF used by the web RViz renderer.
+            laser_x=self.x+0.2*math.cos(self.th); laser_y=self.y+0.2*math.sin(self.th)
+            scan_angles=[self.th+scan.angle_min+i*scan.angle_increment for i in range(n)]
+            scan.ranges=[self._ray(laser_x,laser_y,angle) for angle in scan_angles]
             self.scan_pub.publish(scan)
+            self._integrate_slam_scan(laser_x,laser_y,scan_angles,scan.ranges,scan.range_max)
+            if tick_now-self._last_slam_publish>=0.5:
+                self._last_slam_publish=tick_now; self._publish_slam_map()
     def _ray(self,ox,oy,ang,step=0.05,rng=10.0):
         for d in range(int((rng-0.1)/step)+1):
             cur=0.1+d*step; tx=ox+cur*math.cos(ang); ty=oy+cur*math.sin(ang)
@@ -884,7 +1230,9 @@ class MapSimNode(Node):
             my=int((ty-self.map_data.info.origin.position.y)/self.map_data.info.resolution)
             if 0<=mx<self.map_data.info.width and 0<=my<self.map_data.info.height:
                 if self.map_data.data[my*self.map_data.info.width+mx]==100: return cur
-        return 10.0
+        # ROS LaserScan convention: no return is +inf. The bridge discards it,
+        # so phantom points are not drawn outside an open section of the map.
+        return float('inf')
 def main(args=None):
     rclpy.init(args=args)
     rclpy.spin(MapSimNode())
@@ -899,13 +1247,18 @@ if __name__=='__main__': main()
   <version>0.0.1</version>
   <description>Map simulation node for ROS2 IDE sim — publishes /map + /scan + TF tree</description>
   <maintainer email="sim@ros2ide.local">sim</maintainer>
+  <license>Apache-2.0</license>
   <buildtool_depend>ament_python</buildtool_depend>
   <exec_depend>rclpy</exec_depend>
   <exec_depend>std_msgs</exec_depend>
+  <exec_depend>std_srvs</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
   <exec_depend>nav_msgs</exec_depend>
   <exec_depend>tf2_ros</exec_depend>
   <exec_depend>geometry_msgs</exec_depend>
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
 </package>`,
     'setup.py': `from setuptools import setup
 from glob import glob
@@ -927,6 +1280,11 @@ setup(
     install_requires=['setuptools'],
     zip_safe=False,
 )`,
+    'setup.cfg': `[develop]
+script_dir=$base/lib/sim_robot_mapsim
+[install]
+install_scripts=$base/lib/sim_robot_mapsim
+`,
     'resource/sim_robot_mapsim': '',
     'sim_robot_mapsim/__init__.py': '',
     'sim_robot_mapsim/mapsim.py': mapsimPy,
@@ -939,4 +1297,4 @@ def generate_launch_description():
   };
 }
 
-module.exports = { createSimAgent, isSim, SIM_NODES, SIM_TOPICS, SIM_STATE_PUB, SimEngine, wsRoot, toAbs, writeTfPackage, writeOdomPackage, writeMapsimPackage, genMapsimFiles };
+module.exports = { createSimAgent, isSim, SIM_NODES, SIM_TOPICS, SIM_STATE_PUB, SimEngine, wsRoot, toAbs, writeTfPackage, writeOdomPackage, writeMapsimPackage, genMapsimFiles, robotCollides, motionIsClear };

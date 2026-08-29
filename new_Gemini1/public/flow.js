@@ -21,6 +21,7 @@ const FLOW = {
   dragType: null,
   canvasMode: 'general', // 'general' | 'tf' | 'odom' | 'navigation'
 };
+window.FLOW=FLOW;
 
 function isFlowFileSelected() {
   const pkg = document.getElementById('flow-pkg-sel')?.value;
@@ -140,6 +141,13 @@ const FLOW_TYPES = {
       `self.${safeName(n.props.name)} = self.get_parameter('${n.props.name}').value`,
     ].join('\n'),
   },
+  python_code: {
+    label:'Python Code', emoji:'🐍', cls:'fn-code', portCls:'code',
+    hint:'เขียน Python เฉพาะงานได้ตรงนี้ — รับค่าในตัวแปร value และส่งออกด้วย result',
+    defaultProps:{icon:'🐍', title:'Custom logic', code:'result = value\n# เขียน Python เพิ่มได้ที่นี่'},
+    ports:{inp:[{id:'value',label:'value in',top:'50%'}],out:[{id:'result',label:'result',top:'50%'}]},
+    genCode:n=>`# ${n.props.title||'Custom Python'}\n${n.props.code||'result = value'}`,
+  },
 
   tf_broadcaster: {
     label:'TF Broadcaster', emoji:'📡', cls:'fn-pub', portCls:'tf',
@@ -185,7 +193,7 @@ const FLOW_TYPES = {
 
 const EDGE_COLORS = {
   pub:'#4f8ef7', sub:'#3ecf8e', timer:'#f5a623',
-  if:'#f06767', math:'#38b2ac', tf:'#9f7aea', generic:'#9da3c0',
+  if:'#f06767', math:'#38b2ac', tf:'#9f7aea', code:'#2bb7da', generic:'#9da3c0',
 };
 
 function safeName(s){ return s.replace(/[^a-zA-Z0-9_]/g,'_').replace(/^_+/,''); }
@@ -203,17 +211,18 @@ function flowFillPalette(){
   scroll.dataset.filled='1';
   
   const BLOCKS = [
-    {type:'publisher', color:'#4f8ef7', cls:'pb-pub', label:'📢 Publisher', hint:'Send data to topic — connect Timer or Subscriber to trigger publishing'},
-    {type:'subscriber',color:'#3ecf8e', cls:'pb-sub', label:'📥 Subscriber',hint:'Receive data from a ROS2 topic e.g., /scan, /odom, /cmd_vel'},
-    {type:'timer',     color:'#f5a623', cls:'pb-timer',label:'⏱ Timer',     hint:'Call function repeatedly — set period in seconds e.g., 0.1 = 10 Hz'},
-    {type:'service',   color:'#9f7aea', cls:'pb-srv', label:'⚙ Service',    hint:'Create a ROS2 service server — receives requests and sends responses'},
+    {type:'publisher', color:'#4f8ef7', cls:'pb-pub', label:'📤 ส่งข้อมูล', hint:'ส่งข้อมูลออกไปยัง ROS 2 topic'},
+    {type:'subscriber',color:'#3ecf8e', cls:'pb-sub', label:'📥 รับข้อมูล',hint:'รับข้อมูลจาก ROS 2 topic เช่น /scan หรือ /odom'},
+    {type:'timer',     color:'#f5a623', cls:'pb-timer',label:'⏰ ทำซ้ำ', hint:'สั่งให้โปรแกรมทำงานซ้ำตามเวลาที่กำหนด'},
+    {type:'service',   color:'#9f7aea', cls:'pb-srv', label:'🔔 รับคำขอ', hint:'รอรับคำขอจาก ROS 2 service'},
   ];
   const LOGIC = [
-    {type:'condition', color:'#f06767', cls:'pb-if',  label:'🔀 Condition', hint:'Check a condition (if/else) e.g., if distance < 0.5 then stop'},
-    {type:'math',      color:'#38b2ac', cls:'pb-math',label:'🔢 Math',      hint:'Calculate values using a formula e.g., speed = distance × 0.5'},
-    {type:'variable',  color:'#9da3c0', cls:'pb-math',label:'#️⃣ Variable', hint:'ค่าคงที่หรือตัวเลข ใช้ลากเส้นส่งค่าให้โหนดอื่นๆ'},
-    {type:'logger',    color:'#6b7090', cls:'pb-log', label:'📋 Logger',    hint:'Print debug messages to terminal — useful for checking values'},
-    {type:'param',     color:'#e67e22', cls:'pb-param',label:'🎛 Parameter',hint:'Declare a ROS2 parameter — adjustable at runtime without rebuilding'},
+    {type:'condition', color:'#f06767', cls:'pb-if',  label:'🔀 ถ้า...แล้ว...', hint:'ตรวจเงื่อนไขแบบ if/else'},
+    {type:'math',      color:'#38b2ac', cls:'pb-math',label:'🧮 คำนวณ', hint:'คำนวณค่าด้วยสูตร'},
+    {type:'variable',  color:'#9da3c0', cls:'pb-math',label:'#️⃣ ตัวเลข', hint:'กำหนดค่าคงที่หรือตัวเลข'},
+    {type:'logger',    color:'#6b7090', cls:'pb-log', label:'💬 แสดงข้อความ', hint:'แสดงค่าใน Terminal เพื่อตรวจผลงาน'},
+    {type:'param',     color:'#e67e22', cls:'pb-param',label:'🎚️ ค่าปรับแต่ง',hint:'ค่าที่เปลี่ยนได้ขณะใช้งาน'},
+    {type:'python_code',color:'#2bb7da',cls:'pb-code', label:'🐍 เขียน Python',hint:'รับค่าด้วย value แล้วส่งคำตอบออกด้วย result'},
   ];
   
   const mkBlock = b => `
@@ -256,23 +265,21 @@ function flowFillPalette(){
       .pal-tab-content { display: none; padding-bottom: 10px; }
       .pal-tab-content.active { display: block; }
     </style>
-    <div style="display:flex;gap:4px;padding:8px 10px;background:var(--bg1);">
-      <button onclick="libImportBlock()" style="flex:1;font-size:10px;padding:5px;border-radius:4px;border:1px solid var(--brd);background:var(--bg2);color:var(--mt);cursor:pointer;font-weight:600;" title="Import block">📥 Import Custom</button>
-      <button onclick="libOpenCreator()" style="flex:1;font-size:10px;padding:5px;border-radius:4px;border:1px solid var(--abrd);background:var(--adim);color:var(--acc);cursor:pointer;font-weight:600;" title="Create block">+ New Node</button>
-    </div>
+    <div style="padding:11px 12px 7px"><strong style="display:block;font-size:12px;color:var(--txt)">🧩 กล่องคำสั่ง</strong><small style="color:var(--dim);font-size:9px">แตะหนึ่งครั้งเพื่อเพิ่มลงพื้นที่ทำงาน</small></div>
     <div class="pal-tabs">
-      <div id="ptab-basic" class="pal-tab active" onclick="flowSwitchPalTab('basic')">เบื้องต้น</div>
-      <div id="ptab-tf" class="pal-tab" onclick="flowSwitchPalTab('tf')">Transform</div>
-      <div id="ptab-odom" class="pal-tab" onclick="flowSwitchPalTab('odom')">Odom</div>
-      <div id="ptab-others" class="pal-tab" onclick="flowSwitchPalTab('others')">อื่นๆ</div>
+      <div id="ptab-basic" class="pal-tab active" onclick="flowSwitchPalTab('basic')">เริ่มง่าย</div>
+      <div id="ptab-tf" class="pal-tab" onclick="flowSwitchPalTab('tf')">ตำแหน่ง</div>
+      <div id="ptab-odom" class="pal-tab" onclick="flowSwitchPalTab('odom')">ล้อ</div>
+      <div id="ptab-others" class="pal-tab" onclick="flowSwitchPalTab('others')">ขั้นสูง</div>
     </div>
   `;
 
   const basicContent = `
     <div id="pcont-basic" class="pal-tab-content active">
-      ${mkSection('🤖 ROS2 Nodes', BLOCKS.map(mkBlock).join(''))}
-      ${mkSection('🧠 Logic', LOGIC.map(mkBlock).join(''))}
-      ${mkSection('🧩 Custom (เบื้องต้น)', '<div id="lib-pal-basic"></div>', true)}
+      ${mkSection('1 · เริ่มจากตรงนี้', BLOCKS.filter(block=>['timer','subscriber'].includes(block.type)).map(mkBlock).join(''))}
+      ${mkSection('2 · ให้หุ่นคิด', LOGIC.filter(block=>block.type==='python_code').map(mkBlock).join(''))}
+      ${mkSection('3 · ดูหรือส่งคำตอบ', [...BLOCKS.filter(block=>block.type==='publisher'),...LOGIC.filter(block=>block.type==='logger')].map(mkBlock).join(''))}
+      <div id="lib-pal-basic" hidden></div>
     </div>
   `;
 
@@ -307,7 +314,8 @@ function flowFillPalette(){
 
   const othersContent = `
     <div id="pcont-others" class="pal-tab-content">
-      ${mkSection('🧩 อื่นๆ (Others)', '<div id="lib-pal-others"></div>', true)}
+      ${mkSection('🧠 Logic เพิ่มเติม', [...BLOCKS.filter(block=>block.type==='service'),...LOGIC.filter(block=>!['python_code','logger'].includes(block.type))].map(mkBlock).join(''), false)}
+      ${mkSection('🛠️ Block ที่สร้างเอง', '<div style="display:flex;gap:5px;padding:5px 8px 9px"><button class="flow-btn" onclick="libOpenCreator()">＋ สร้าง Block</button><button class="flow-btn" onclick="libImportBlock()">นำเข้า</button></div><div id="lib-pal-others"></div>', false)}
     </div>
   `;
 
@@ -359,9 +367,9 @@ function flowSetCanvasState(enabled, msgTitle, msgSub){
     
     if(empty) {
       empty.style.display='flex';
-      empty.innerHTML = `<div class="flow-empty-icon" style="font-size:48px;opacity:.3">📂</div>
-                         <div class="flow-empty-text" style="font-size:14px;color:var(--mt);margin-top:10px;font-weight:600">${msgTitle || ''}</div>
-                         <div class="flow-empty-sub" style="font-size:12px;color:var(--dim);opacity:.8;margin-top:4px">${msgSub || ''}</div>`;
+      empty.innerHTML = `<div class="flow-empty-icon" style="font-size:54px;opacity:.35">🤖</div>
+                         <div class="flow-empty-text" style="font-size:16px;color:var(--txt);margin-top:10px;font-weight:900">${msgTitle || ''}</div>
+                         <div class="flow-empty-sub" style="font-size:11px;color:var(--dim);margin-top:4px">${msgSub || ''}</div>`;
     }
     flowRenderInspector(); 
   } else {
@@ -371,9 +379,9 @@ function flowSetCanvasState(enabled, msgTitle, msgSub){
     
     if(empty && FLOW.nodes.length === 0){
       empty.style.display='flex';
-      empty.innerHTML = `<div class="flow-empty-icon" style="font-size:48px;opacity:.12">🤖</div>
-                         <div class="flow-empty-text" style="font-size:14px;color:var(--dim);margin-top:10px">ลากบล็อกจาก sidebar มาวางที่นี่</div>
-                         <div class="flow-empty-sub" style="font-size:12px;color:var(--dim);opacity:.6;margin-top:4px">หรือคลิกที่บล็อกใน sidebar เพื่อเพิ่มทันที</div>`;
+      empty.innerHTML = `<div class="flow-empty-icon" style="font-size:54px;opacity:.3">🧩</div>
+                         <div class="flow-empty-text" style="font-size:16px;color:var(--txt);margin-top:10px;font-weight:900">แตะกล่องคำสั่งทางซ้ายได้เลย</div>
+                         <div class="flow-empty-sub" style="font-size:11px;color:var(--dim);margin-top:4px">ลองเริ่มด้วย ⏰ ทำซ้ำ → 🐍 เขียน Python → 💬 แสดงข้อความ</div>`;
     } else if(empty) {
       empty.style.display='none';
     }
@@ -461,13 +469,6 @@ function initFlow(){
       wrap.addEventListener('touchmove', canvasTouchMove, {passive: false});
       wrap.addEventListener('touchend', canvasTouchEnd);
       wrap.addEventListener('touchcancel', canvasTouchEnd);
-      
-      // เพิ่มข้อความบอกวิธีใช้งานบนทัชสกรีนมุมล่างซ้าย
-      const th = document.createElement('div');
-      th.id = 'flow-touch-hint';
-      th.style.cssText = 'position:absolute;bottom:10px;left:10px;font-size:10px;color:var(--dim);pointer-events:none;z-index:5;background:var(--bg1);padding:4px 10px;border-radius:12px;border:1px solid var(--brd);opacity:0.8;';
-      th.innerHTML = '📱 1 นิ้ว: เลื่อน (Pan) &nbsp;|&nbsp; 2 นิ้ว: ซูม (Zoom)';
-      wrap.appendChild(th);
     }
   }
   flowRender();
@@ -955,16 +956,28 @@ function flowSelectNode(id){
   flowRenderInspector();
 }
 
+function flowDisplayMsgType(type){return String(type||'').replace('/msg/','/').replace('/srv/','/');}
+function flowSelectTopic(nodeId,topicName){
+  const node=FLOW.nodes.find(item=>item.id===nodeId);if(!node)return;
+  let selected=String(topicName||'');
+  if(selected==='__custom__')selected=String(prompt('ชื่อ Topic ใหม่ เช่น /robot/speed',node.props.topic||'/my_topic')||'').trim();
+  if(!selected){flowRenderInspector();return;}
+  node.props.topic=selected;
+  const topic=(window._cachedTopics||[]).find(item=>item.name===selected);if(topic?.type)node.props.msgType=flowDisplayMsgType(topic.type);
+  const propsEl=document.querySelector(`[data-id="${nodeId}"] .fnode-props-container`);if(propsEl)propsEl.innerHTML=flowNodeBody(node);
+  flowRenderInspector();flowSave();
+}
+
 function flowRenderInspector(){
   const el=document.getElementById('insp-content');
   if(!isFlowFileSelected()) {
-    el.innerHTML='<div style="color:var(--dim);font-size:12px;text-align:center;padding:20px 0">กรุณาเลือก Package และ File ก่อน</div>';
+    el.innerHTML='<div style="color:var(--dim);font-size:12px;text-align:center;padding:28px 10px">📦 เลือก Package และไฟล์ก่อน<br><small>หรือกด “สร้าง Custom Package” ด้านบน</small></div>';
     return;
   }
   
   const node=FLOW.nodes.find(n=>n.id===FLOW.selected);
   if(!node){
-    el.innerHTML='<div style="color:var(--dim);font-size:12px;text-align:center;padding:20px 0">คลิกที่โหนดเพื่อดูหรือแก้ไขข้อมูล</div>';
+    el.innerHTML='<div style="color:var(--dim);font-size:12px;text-align:center;padding:28px 10px">👈 แตะ Block ที่วางไว้<br><small>แล้วตั้งค่าได้ตรงนี้</small></div>';
     return;
   }
   const def=FLOW_TYPES[node.type];
@@ -982,11 +995,11 @@ function flowRenderInspector(){
       </div>`;
     }
 
-    const isMulti = String(v).length>40 || k==='formula'||k==='condition'||k==='message';
+    const isMulti = String(v).length>40 || k==='formula'||k==='condition'||k==='message'||k==='code';
     if(isMulti){
       return `<div class="insp-field">
-        <div class="insp-label">${k}</div>
-        <textarea class="insp-code" onchange="flowUpdateProp('${node.id}','${k}',this.value)">${escH(String(v))}</textarea>
+        <div class="insp-label">${k==='code'?'Python code · input: value · output: result':k}</div>
+        <textarea class="insp-code" style="${k==='code'?'min-height:190px':''}" onkeydown="if(event.key==='Tab'){event.preventDefault();const s=this.selectionStart;this.setRangeText('    ',s,this.selectionEnd,'end')}" onchange="flowUpdateProp('${node.id}','${k}',this.value)">${escH(String(v))}</textarea>
       </div>`;
     }
     if(k==='level'){
@@ -998,17 +1011,16 @@ function flowRenderInspector(){
       </div>`;
     }
     if(k==='topic'){
-      const dlId = 'dl-topics-'+node.id;
-      const topicOptions = (window._cachedTopics||[]).map(t=>
-        `<option value="${escH(t.name)}">${escH(t.name)} [${escH(t.type||'')}]</option>`
-      ).join('');
+      const topics=window._cachedTopics||[],groups=new Map();for(const topic of topics){const type=topic.type||'ไม่ทราบชนิด';if(!groups.has(type))groups.set(type,[]);groups.get(type).push(topic);}
+      const known=topics.some(topic=>topic.name===String(v));
+      const topicOptions=[...groups.entries()].sort(([a],[b])=>a.localeCompare(b)).map(([type,items])=>`<optgroup label="${escH(flowDisplayMsgType(type))}">${items.sort((a,b)=>a.name.localeCompare(b.name)).map(topic=>`<option value="${escH(topic.name)}" ${topic.name===v?'selected':''}>${escH(topic.name)}</option>`).join('')}</optgroup>`).join('');
       return `<div class="insp-field">
-        <div class="insp-label">${k} <span style="font-size:9px;color:var(--dim)">(type or select)</span></div>
-        <input class="insp-input" list="${dlId}" value="${escH(String(v))}"
-          onchange="flowUpdateProp('${node.id}','${k}',this.value)"
-          oninput="flowUpdateProp('${node.id}','${k}',this.value)"
-          placeholder="/my_topic"/>
-        <datalist id="${dlId}">${topicOptions}</datalist>
+        <div class="insp-label">Topic ที่ต้องการใช้</div>
+        <select class="insp-select" onchange="flowSelectTopic('${node.id}',this.value)">
+          ${!known?`<option value="${escH(String(v))}" selected>${escH(String(v))} · กำหนดเอง</option>`:''}
+          <option value="">— เลือก Topic จากหุ่นยนต์ —</option>${topicOptions}<option value="__custom__">＋ พิมพ์ Topic ใหม่…</option>
+        </select>
+        <small class="topic-combo-note">จัดกลุ่มตาม Message Type · เลือกแล้วชนิดข้อมูลจะเปลี่ยนให้อัตโนมัติ</small>
       </div>`;
     }
 
@@ -1057,11 +1069,10 @@ function flowRenderInspector(){
       <div class="insp-title">${icon} ${def.label}</div>
       <div style="font-size:10px;color:var(--dim);margin-bottom:10px;line-height:1.5">${def.hint}</div>
       <div class="insp-sep"></div>
-      ${propFields}
+      <div class="insp-group"><div class="insp-group-title">⚙️ ตั้งค่า BLOCK</div>${propFields}</div>
       ${node.type.startsWith('lib_') ? libInspectorExtras(node, def) : ''}
       <div class="insp-sep"></div>
-      <div class="insp-label" style="margin-bottom:4px">Generated code preview</div>
-      <div class="insp-preview"><span class="pc"># Python snippet</span>\n${escH(codePreview)}</div>
+      <div class="insp-group"><div class="insp-group-title">🐍 ตัวอย่าง PYTHON ที่จะสร้าง</div><div class="insp-preview"><span class="pc"># Python snippet</span>\n${escH(codePreview)}</div></div>
       <div class="insp-sep"></div>
       <button class="insp-del" onclick="flowDeleteNode(decodeURIComponent('${encArg(node.id)}'))">🗑 Delete this node</button>
     </div>`;
@@ -1358,9 +1369,9 @@ function flowHint(msg){
 }
 
 function flowNewFileDialog(){
-  if(!FLOW.pkg){alert('Please select package first');return;}
+  if(!FLOW.pkg){alert('Please select package first');return false;}
   const name=prompt('New file name (without .py):','my_node');
-  if(!name||!name.trim()) return;
+  if(!name||!name.trim()) return false;
   const clean=name.trim().replace(/\.py$/,'').replace(/[^\w]/g,'_');
   
   const sel=document.getElementById('flow-file-sel');
@@ -1369,7 +1380,7 @@ function flowNewFileDialog(){
   const existingOptions = Array.from(sel.options).map(o => o.value);
   if (existingOptions.includes(clean + '.py')) {
     alert('ชื่อไฟล์ "' + clean + '.py" มีอยู่แล้วใน Package นี้ กรุณาใช้ชื่ออื่น');
-    return;
+    return false;
   }
 
   const opt=document.createElement('option');
@@ -1385,6 +1396,7 @@ function flowNewFileDialog(){
   flowClearCanvas();
   flowSetCanvasState(true);
   flowHint('Will create new file: '+clean+'.py — Press Save & Build when ready');
+  return true;
 }
 
 function flowOpenWizard(){
@@ -1392,8 +1404,54 @@ function flowOpenWizard(){
   openWizard();
 }
 
+function flowOpenQuickPackage(){
+  const status=document.getElementById('flow-quick-status');if(status){status.className='flow-quick-status';status.textContent='';}
+  openModal('modal-flow-quick-package');setTimeout(()=>document.getElementById('flow-quick-pkg')?.focus(),50);
+}
+
+function flowQuickTemplate(kind){
+  const python={id:'n2',type:'python_code',x:310,y:145,props:{icon:'🐍',title:'คำสั่งของหุ่น',code:'result = value\n# เขียนคำสั่ง Python เพิ่มตรงนี้'}};
+  if(kind==='blank')return{nodes:[{...python,id:'n1',x:260,y:150}],edges:[],nextId:2,pan:{x:40,y:40},zoom:1};
+  if(kind==='topic')return{nodes:[
+    {id:'n1',type:'subscriber',x:40,y:145,props:{icon:'📥',topic:'/input',msgType:'std_msgs/Float32',qos:'10'}},python,
+    {id:'n3',type:'publisher',x:590,y:145,props:{icon:'📤',topic:'/output',msgType:'std_msgs/Float32',qos:'10'}},
+  ],edges:[{from:'n1',fromPort:'msg',to:'n2',toPort:'value'},{from:'n2',fromPort:'result',to:'n3',toPort:'data'}],nextId:4,pan:{x:40,y:40},zoom:1};
+  return{nodes:[
+    {id:'n1',type:'timer',x:40,y:145,props:{icon:'⏰',period:'1.0',callback:'loop'}},python,
+    {id:'n3',type:'logger',x:590,y:145,props:{icon:'💬',message:"f'คำตอบ: {value}'",level:'info'}},
+  ],edges:[{from:'n1',fromPort:'tick',to:'n2',toPort:'value'},{from:'n2',fromPort:'result',to:'n3',toPort:'in'}],nextId:4,pan:{x:40,y:40},zoom:1};
+}
+
+async function flowCreateQuickPackage(){
+  const pkg=String(document.getElementById('flow-quick-pkg')?.value||'').trim(),nodeName=String(document.getElementById('flow-quick-node')?.value||'').trim(),kind=document.querySelector('input[name="flow-quick-template"]:checked')?.value||'timer',status=document.getElementById('flow-quick-status'),button=document.getElementById('flow-quick-create');
+  const valid=/^[a-z][a-z0-9_]*$/;status.className='flow-quick-status';
+  if(!valid.test(pkg)){status.className+=' error';status.textContent='ชื่อ Package ต้องเป็นตัวพิมพ์เล็ก เช่น my_robot_app';return;}
+  if(!valid.test(nodeName)){status.className+=' error';status.textContent='ชื่อ Node ต้องเป็นตัวพิมพ์เล็ก เช่น robot_node';return;}
+  if(!sessionId){status.className+=' error';status.textContent='กรุณาเชื่อมต่อหุ่นยนต์ก่อนสร้าง Package';return;}
+  button.disabled=true;button.textContent='กำลังสร้าง…';status.textContent='กำลังเตรียมโฟลเดอร์และ Block เริ่มต้น';
+  try{
+    const base=`${String(wsPath).replace(/\/$/,'')}/src/${pkg}`,existing=await API('/api/files/read',{sessionId,path:`${base}/package.xml`});
+    if(existing?.ok)throw new Error(`Package “${pkg}” มีอยู่แล้ว กรุณาใช้ชื่อใหม่`);
+    for(const path of [`${String(wsPath).replace(/\/$/,'')}/src`,base,`${base}/${pkg}`,`${base}/resource`]){const made=await API('/api/files/mkdir',{sessionId,path});if(!made?.ok)throw new Error(made?.error||`สร้าง ${path} ไม่สำเร็จ`);}
+    const flow=flowQuickTemplate(kind),packageXml=`<?xml version="1.0"?>\n<package format="3">\n  <name>${pkg}</name>\n  <version>0.0.1</version>\n  <description>Custom robot program created with ROSIDE Flow Editor</description>\n  <maintainer email="student@example.com">ROSIDE Student</maintainer>\n  <license>Apache-2.0</license>\n  <exec_depend>rclpy</exec_depend>\n  <exec_depend>std_msgs</exec_depend>\n  <export><build_type>ament_python</build_type></export>\n</package>\n`,setupPy=`from setuptools import find_packages, setup\n\npackage_name = '${pkg}'\n\nsetup(\n    name=package_name,\n    version='0.0.1',\n    packages=find_packages(),\n    data_files=[\n        ('share/ament_index/resource_index/packages', ['resource/' + package_name]),\n        ('share/' + package_name, ['package.xml']),\n    ],\n    install_requires=['setuptools'],\n    zip_safe=True,\n    entry_points={'console_scripts': ['${nodeName} = ${pkg}.${nodeName}:main']},\n)\n`,starter=`#!/usr/bin/env python3\nimport rclpy\nfrom rclpy.node import Node\n\nclass ${nodeName.split('_').map(word=>word[0].toUpperCase()+word.slice(1)).join('')}Node(Node):\n    def __init__(self):\n        super().__init__('${nodeName}')\n        self.get_logger().info('เปิด Flow Editor แล้วกดสร้างโปรแกรมเพื่ออัปเดตโค้ด')\n\ndef main(args=None):\n    rclpy.init(args=args)\n    node=${nodeName.split('_').map(word=>word[0].toUpperCase()+word.slice(1)).join('')}Node()\n    rclpy.spin(node)\n    node.destroy_node()\n    rclpy.shutdown()\n`;
+    const files=[[`${base}/package.xml`,packageXml],[`${base}/setup.py`,setupPy],[`${base}/setup.cfg`,`[develop]\nscript_dir=$base/lib/${pkg}\n[install]\ninstall_scripts=$base/lib/${pkg}\n`],[`${base}/resource/${pkg}`,''],[`${base}/${pkg}/__init__.py`,''],[`${base}/${pkg}/${nodeName}.py`,starter],[`${base}/${pkg}/${nodeName}.flow.json`,JSON.stringify(flow,null,2)]];
+    for(const [path,content] of files){const saved=await API('/api/files/write',{sessionId,path,content});if(!saved?.ok)throw new Error(saved?.error||`เขียน ${path} ไม่สำเร็จ`);}
+    await flowLoadPackages();const pkgSelect=document.getElementById('flow-pkg-sel');pkgSelect.value=pkg;FLOW.pkg=pkg;await flowLoadFiles(pkg);const fileSelect=document.getElementById('flow-file-sel');fileSelect.value=`${nodeName}.py`;await flowChangeFile();document.getElementById('flow-exe-name').value=nodeName;
+    status.className='flow-quick-status ok';status.textContent='✓ สร้าง Package แล้ว กำลังเปิดพื้นที่ต่อ Block';if(typeof refreshTree==='function')refreshTree();setTimeout(()=>closeModal('modal-flow-quick-package'),450);
+  }catch(error){status.className='flow-quick-status error';status.textContent=error.message;}
+  finally{button.disabled=false;button.textContent='✨ สร้างและเริ่มเขียน';}
+}
+
+function flowQuickPythonBlock(){
+  if(!FLOW.pkg){flowOpenQuickPackage();return;}
+  if(!isFlowFileSelected()&&!flowNewFileDialog())return;
+  const wrap=document.getElementById('flow-canvas-wrap'),x=(wrap.offsetWidth/2-FLOW.pan.x)/FLOW.zoom-105,y=(wrap.offsetHeight/2-FLOW.pan.y)/FLOW.zoom-70;
+  flowAddNode('python_code',x,y,{title:'Custom robot logic',code:'result = value\n# ตัวอย่าง: result = float(value) * 0.5'});
+  flowHint('เลือก Python Code Block แล้วเขียนโค้ดใน Inspector ด้านขวา · input คือ value และ output คือ result');
+}
+
 function flowShowTutorial(){
-  document.getElementById('flow-tutorial').style.display='block';
+  // Tutorial popup intentionally disabled: the child-friendly UI is self-guided.
 }
 
 function flowGenCode(){
@@ -1505,9 +1563,27 @@ def quaternion_from_euler(roll, pitch, yaw):
     return FLOW.edges.filter(e=>e.to===toId).map(e=>FLOW.nodes.find(n=>n.id===e.from)).filter(Boolean);
   }
 
+  function genPythonCodeBlock(target,inputExpression='None'){
+    const lines=[`        # → Python Code: ${target.props.title||'Custom logic'}`,`        try:`,`            value = ${inputExpression}`,`            result = value`];
+    for(const line of String(target.props.code||'result = value').replace(/\r/g,'').split('\n'))lines.push(`            ${line}`);
+    const downstream=getDownstream(target.id);
+    downstream.filter(node=>node.type==='publisher').forEach(pub=>{
+      const msgType=pub.props.msgType.split('/').pop();lines.push(`            out_msg = ${msgType}()`);
+      if(['Bool','Int8','Int16','Int32','Int64','UInt8','UInt16','UInt32','UInt64','Float32','Float64','String'].includes(msgType))lines.push(`            out_msg.data = result`);
+      else lines.push(`            # TODO: map result to ${msgType} fields`);
+      lines.push(`            self.pub_${safeName(pub.props.topic)}.publish(out_msg)`);
+    });
+    downstream.filter(node=>node.type==='logger').forEach(logger=>{
+      let message=logger.props.message||"f'Value: {value}'";if(!message.startsWith('f')&&!message.startsWith("'")&&!message.startsWith('"'))message=`f'${message}'`;
+      lines.push(`            value = result`,`            self.get_logger().${logger.props.level||'info'}(${message})`);
+    });
+    lines.push(`        except Exception as error:`,`            self.get_logger().error(f'Python block error: {error}')`);
+    return lines;
+  }
+
   const startupLines = [];
   const startupRoots = FLOW.nodes.filter(n => {
-     if (!['math', 'logger', 'publisher', 'condition'].includes(n.type) && !n.type.startsWith('lib_')) return false;
+     if (!['math', 'logger', 'publisher', 'condition','python_code'].includes(n.type) && !n.type.startsWith('lib_')) return false;
      const upstreams = getUpstream(n.id);
      const hasTriggerOrLogicUpstream = upstreams.some(up => 
          ['timer', 'subscriber', 'service', 'math', 'condition'].includes(up.type) || up.type.startsWith('lib_')
@@ -1520,6 +1596,8 @@ def quaternion_from_euler(roll, pitch, yaw):
       startupRoots.forEach(target => {
           if (target.type.startsWith('lib_')) {
               startupLines.push(...genLibBlockCall(target, null, false));
+          } else if (target.type === 'python_code') {
+              startupLines.push(...genPythonCodeBlock(target,'None'));
           } else if (target.type === 'logger') {
               startupLines.push(`        # → Logger`);
               startupLines.push(`        value = getattr(self, '_mem_${target.id}_in', 0)`);
@@ -1741,6 +1819,12 @@ def quaternion_from_euler(roll, pitch, yaw):
           return;
       }
       switch(target.type){
+        case 'python_code':{
+          const subBase=subNode.props.msgType.split('/').pop();
+          const scalar=['Bool','Int8','Int16','Int32','Int64','UInt8','UInt16','UInt32','UInt64','Float32','Float64','String'].includes(subBase);
+          lines.push(...genPythonCodeBlock(target,scalar?'msg.data':'msg'));
+          break;
+        }
         case 'publisher':{
           lines.push(`        # → forward to topic ${target.props.topic}`);
           const transferLines = genMsgTransfer(subNode.props.msgType, target.props.msgType, 'out_msg', 'msg');
@@ -1831,6 +1915,10 @@ def quaternion_from_euler(roll, pitch, yaw):
           return;
       }
       switch(target.type){
+        case 'python_code':{
+          lines.push(...genPythonCodeBlock(target,'None'));
+          break;
+        }
         case 'publisher':{
           const pubMsgType=target.props.msgType.split('/').pop();
           lines.push(`        # → publish to ${target.props.topic}`);
@@ -1965,7 +2053,7 @@ def quaternion_from_euler(roll, pitch, yaw):
   return `#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-${nodeClassName} — Generated by ROS2 IDE Flow Editor
+${nodeClassName} — Generated by Mecha Rayong Learing Workspace
 Package: ${FLOW.pkg||'my_package'}
 Mode: ${FLOW.canvasMode}
 Nodes: ${FLOW.nodes.map(n=>FLOW_TYPES[n.type]?.emoji+' '+FLOW_TYPES[n.type]?.label).join(', ')}

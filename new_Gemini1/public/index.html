@@ -2,8 +2,11 @@
 <html lang="th">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>ROS2 IDE — Cloud Platform</title>
+<title>Mecha Rayong Learing Workspace — ROS2</title>
 <script src="/theme.js"></script>
+<script src="/auth-storage.js"></script>
+<link href="/youtube-help.css?v=20260814-5" rel="stylesheet">
+<link href="/lidar.css?v=20260828-9" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
 <link   href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
@@ -261,6 +264,12 @@ html,body{height:100%;background:var(--bg0);color:var(--txt);font-family:var(--f
 #pages{flex:1;overflow:hidden;position:relative}
 .page{position:absolute;inset:0;overflow:hidden;display:none;flex-direction:column}
 .page.show{display:flex}
+.workspace-wizard-return{position:absolute;z-index:110;top:10px;right:12px;display:flex;align-items:center;gap:7px;min-height:34px;padding:7px 12px;border:1px solid var(--abrd);border-radius:11px;background:color-mix(in srgb,var(--bg1) 91%,transparent);color:var(--acc);box-shadow:0 7px 20px rgba(4,8,24,.14);backdrop-filter:blur(10px);font:800 11px var(--fn);cursor:pointer;transition:transform .15s,border-color .15s,box-shadow .15s}
+.workspace-wizard-return:hover{transform:translateY(-1px);border-color:var(--acc);box-shadow:0 10px 24px rgba(4,8,24,.2)}.workspace-wizard-return[hidden]{display:none!important}.workspace-wizard-return span:first-child{font-size:15px}
+.workspace-wizard-return.docked{position:static;inset:auto;z-index:auto;min-height:34px;flex:0 0 auto;margin-left:4px;padding:6px 9px;box-shadow:none;background:var(--adim);backdrop-filter:none;font-size:9px;white-space:nowrap}.workspace-wizard-return.docked:hover{transform:none;box-shadow:none}.workspace-wizard-return.docked span:first-child{font-size:12px}
+.tf-save-top.wizard-save-dock-host .tf-save-top-label,.map3d-save-top.wizard-save-dock-host .map3d-save-label{display:none}.tf-save-top.wizard-save-dock-host,.map3d-save-top.wizard-save-dock-host{gap:6px}.tf-save-top.wizard-save-dock-host .tf-save-action,.map3d-save-top.wizard-save-dock-host #map3d-save{min-width:0;flex:1;padding-inline:8px}
+.pg-card.wizard-save-dock-host{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:0 6px}.pg-card.wizard-save-dock-host>:not(#pg-save-map):not(.workspace-wizard-return){grid-column:1/-1}.pg-card.wizard-save-dock-host #pg-save-map{grid-column:1;width:100%;margin-top:7px}.pg-card.wizard-save-dock-host .workspace-wizard-return{grid-column:2;align-self:end;margin:7px 0 0}
+@media(max-width:560px){.workspace-wizard-return{top:7px;right:8px;min-width:34px;padding:7px 9px}.workspace-wizard-return .workspace-wizard-return-label{display:none}}
 
 /* ── EDITOR PAGE ── */
 #tabbar{display:flex;align-items:center;background:var(--bg1);
@@ -308,6 +317,8 @@ html,body{height:100%;background:var(--bg0);color:var(--txt);font-family:var(--f
 /* ── TERMINAL PAGE ── */
 #term-hdr{display:flex;align-items:center;gap:8px;padding:5px 12px;
   background:var(--bg1);border-bottom:1px solid var(--brd);flex-shrink:0}
+#term-hdr .term-head-actions{display:flex;align-items:center;gap:6px;margin-left:auto}
+#page-terminal .workspace-wizard-return.terminal-header-action{min-height:25px;margin:0;padding:3px 9px;border-radius:7px;background:var(--adim);font-size:9px}
 #xterm-container{flex:1;overflow:hidden;background:var(--term-bg);padding:4px 2px}
 
 /* ── DASHBOARD PAGE ── */
@@ -508,6 +519,8 @@ html,body{height:100%;background:var(--bg0);color:var(--txt);font-family:var(--f
 .agv-mission-close:hover{border-color:var(--brdh);background:var(--bg3);color:var(--txt)}
 .agv-mission-dialog .agv-detail{display:block!important;margin:0;overflow-y:auto;border:0;border-radius:0;background:linear-gradient(135deg,rgba(79,142,247,.07),rgba(143,100,255,.035));box-shadow:none}
 .agv-mission-dialog .agv-detail::before{width:250px;height:250px}
+.real-teleop-dialog{width:min(520px,96vw);padding-bottom:18px}.real-teleop-body{padding:16px 18px 0}.real-teleop-warning{padding:10px 12px;border:1px solid rgba(245,166,35,.35);border-radius:11px;background:rgba(245,166,35,.1);color:var(--amb);font-size:10px;line-height:1.55}.real-teleop-topic{display:flex;align-items:center;justify-content:space-between;margin:12px 0 10px;padding:9px 11px;border:1px solid var(--brd);border-radius:10px;background:var(--bg2);font-size:10px}.real-teleop-topic code{color:var(--grn);font:700 11px var(--mono)}.real-teleop-pad{width:min(330px,100%);display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 auto}.real-teleop-btn{position:relative;height:62px;border:1px solid var(--brd);border-radius:15px;background:linear-gradient(145deg,var(--bg2),var(--bg3));color:var(--txt);font:800 22px var(--fn);cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none;box-shadow:0 6px 16px rgba(0,0,0,.12)}.real-teleop-btn small{position:absolute;right:7px;top:5px;color:var(--dim);font:700 9px var(--mono)}.real-teleop-btn[data-dir=left]{grid-column:1;grid-row:1}.real-teleop-btn[data-dir=fwd]{grid-column:2;grid-row:1}.real-teleop-btn[data-dir=right]{grid-column:3;grid-row:1}.real-teleop-btn[data-dir="strafe-left"]{grid-column:1;grid-row:2}.real-teleop-btn.stop{grid-column:2;grid-row:2;border-color:rgba(240,103,103,.55);background:linear-gradient(145deg,#ef5c63,#c93648);color:#fff;font-size:12px}.real-teleop-btn[data-dir="strafe-right"]{grid-column:3;grid-row:2}.real-teleop-btn[data-dir=back]{grid-column:2;grid-row:3}.real-teleop-btn.on{border-color:#8eb8ff;background:linear-gradient(145deg,#367fea,#705ce4);color:#fff;transform:scale(.97);box-shadow:0 3px 10px rgba(54,127,234,.36)}.real-teleop-btn.on small{color:#dce8ff}.real-teleop-key-help{margin:9px 0 0;color:var(--dim);font-size:9px;line-height:1.5;text-align:center}.real-teleop-key-help kbd{display:inline-grid;min-width:20px;height:20px;place-items:center;margin:0 2px;padding:0 4px;border:1px solid var(--brdh);border-radius:5px;background:var(--bg2);color:var(--txt);font:700 9px var(--mono);box-shadow:0 2px 0 var(--brd)}.real-teleop-status{margin:10px 0;padding:9px;border-radius:10px;background:var(--bg2);color:var(--mt);font-size:10px;text-align:center}.real-teleop-status.live{background:rgba(62,207,142,.12);color:var(--grn)}.real-teleop-speed{display:grid;grid-template-columns:1fr 1fr;gap:10px}.real-teleop-speed label{display:grid;gap:5px;padding:9px;border:1px solid var(--brd);border-radius:10px;background:var(--bg2);color:var(--mt);font-size:9px}.real-teleop-speed span{display:flex;justify-content:space-between}.real-teleop-speed b{color:var(--txt)}.real-teleop-speed input{width:100%;accent-color:var(--acc)}
+.hardware-dialog{width:min(1100px,97vw);height:min(780px,94dvh)}.hardware-steps{display:flex;gap:6px;padding:10px 16px;border-bottom:1px solid var(--brd);background:var(--bg2)}.hardware-step{display:flex;align-items:center;gap:7px;flex:1;padding:8px 10px;border:1px solid transparent;border-radius:10px;color:var(--dim);font-size:10px}.hardware-step b{width:23px;height:23px;display:grid;place-items:center;border-radius:50%;background:var(--bg3);font:800 10px var(--mono)}.hardware-step.active{border-color:var(--abrd);background:var(--adim);color:var(--acc)}.hardware-step.active b{background:var(--acc);color:#fff}.hardware-body{flex:1;min-height:0;overflow-y:auto;padding:17px}.hardware-page{display:none}.hardware-page.active{display:block}.hardware-intro{margin-bottom:13px}.hardware-intro h3{margin:0 0 4px;font-size:17px}.hardware-intro p{margin:0;color:var(--mt);font-size:11px;line-height:1.55}.hardware-choice-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:11px}.hardware-choice{position:relative;min-height:140px;padding:14px;border:1px solid var(--brd);border-radius:15px;background:var(--bg2);color:var(--txt);text-align:left;cursor:pointer}.hardware-choice:hover{border-color:var(--brdh);transform:translateY(-1px)}.hardware-choice.selected{border-color:var(--acc);box-shadow:0 0 0 3px var(--adim);background:linear-gradient(145deg,var(--bg2),var(--adim))}.hardware-choice .choice-icon{display:block;margin-bottom:7px;font-size:30px}.hardware-choice strong{display:block;font-size:13px}.hardware-choice small{display:block;margin-top:5px;color:var(--mt);font-size:10px;line-height:1.5}.hardware-choice .choice-tag{display:inline-block;margin-top:9px;padding:3px 7px;border-radius:20px;background:var(--bg3);color:var(--acc);font-size:8px;font-weight:800}.hardware-config-row{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-top:12px}.hardware-field{display:grid;gap:5px;padding:11px;border:1px solid var(--brd);border-radius:12px;background:var(--bg2);font-size:10px;color:var(--mt)}.hardware-field input,.hardware-field select{height:34px;padding:0 9px;border:1px solid var(--brd);border-radius:8px;background:var(--bg1);color:var(--txt)}.hardware-connect-layout{display:grid;grid-template-columns:minmax(260px,.85fr) minmax(420px,1.5fr);gap:14px}.hardware-parts{display:grid;gap:9px;align-content:start}.hardware-board-card{padding:13px;border:1px solid var(--acc);border-radius:14px;background:var(--adim)}.hardware-board-card strong{display:block;font-size:13px}.hardware-board-card small{color:var(--mt);font-size:9px}.hardware-accessories{display:grid;gap:7px}.hardware-accessory{display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--brd);border-radius:11px;background:var(--bg2);cursor:pointer}.hardware-accessory:has(input:checked){border-color:var(--acc);background:var(--adim)}.hardware-accessory input{accent-color:var(--acc)}.hardware-accessory span{font-size:18px}.hardware-accessory strong{display:block;font-size:10px}.hardware-accessory small{display:block;color:var(--dim);font-size:8px}.wiring-panel{min-height:430px;padding:14px;border:1px solid var(--brd);border-radius:16px;background:linear-gradient(145deg,var(--bg2),var(--bg1))}.wiring-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:11px}.wiring-title strong{font-size:12px}.wiring-title span{color:var(--grn);font:700 9px var(--mono)}.wiring-canvas{display:grid;grid-template-columns:1fr 160px 1fr;gap:12px;align-items:center}.wiring-devices{display:grid;gap:7px}.wiring-device{padding:8px 9px;border-left:3px solid var(--wire,#4f8ef7);border-radius:8px;background:var(--bg3)}.wiring-device b{display:block;font-size:9px}.wiring-device code{display:block;margin-top:3px;color:var(--wire,#4f8ef7);font:700 8px var(--mono)}.stm32-board{position:relative;min-height:310px;padding:18px 12px;border:8px solid #1d2833;border-radius:9px;background:linear-gradient(90deg,#173e35,#1f6654 50%,#173e35);box-shadow:0 12px 28px rgba(0,0,0,.25);color:#fff;text-align:center}.stm32-board::before{content:'';display:block;width:70px;height:70px;margin:72px auto 8px;border:2px solid #829491;background:#26333a;box-shadow:inset 0 0 0 8px #172026}.stm32-board strong{font:800 10px var(--mono)}.stm32-board small{display:block;margin-top:5px;color:#a9ddc8;font:7px var(--mono)}.board-usb{position:absolute;left:50%;top:-8px;width:48px;height:34px;transform:translateX(-50%);border-radius:0 0 6px 6px;background:#aab4b8}.board-pin{position:absolute;padding:2px 4px;border-radius:4px;background:#111;color:#ffd86a;font:700 7px var(--mono)}.board-pin.left{left:-6px}.board-pin.right{right:-6px}.wiring-table{width:100%;margin-top:12px;border-collapse:collapse;font-size:9px}.wiring-table th,.wiring-table td{padding:6px 7px;border-bottom:1px solid var(--brd);text-align:left}.wiring-table th{color:var(--dim)}.wiring-table code{color:var(--acc)}.hardware-review{display:grid;grid-template-columns:1fr 1fr;gap:13px}.hardware-summary-card{padding:14px;border:1px solid var(--brd);border-radius:14px;background:var(--bg2)}.hardware-summary-card h4{margin:0 0 10px;font-size:12px}.hardware-summary-list{display:grid;gap:7px;font-size:10px}.hardware-summary-list div{display:flex;justify-content:space-between;gap:10px}.hardware-summary-list span{color:var(--mt)}.hardware-output{grid-column:1/-1;padding:12px;border:1px dashed var(--brdh);border-radius:12px;background:var(--bg1);font:9px/1.7 var(--mono);color:var(--mt)}.hardware-save-status{min-height:18px;margin-top:9px;color:var(--mt);font-size:10px}.hardware-save-status.ok{color:var(--grn)}.hardware-save-status.error{color:var(--red)}.hardware-footer{display:flex;align-items:center;justify-content:space-between;padding:11px 16px;border-top:1px solid var(--brd);background:var(--bg2)}.hardware-footer .right{display:flex;gap:8px}.hardware-footer button{min-height:35px}.hardware-primary{border:0!important;background:linear-gradient(135deg,#347bea,#7659df)!important;color:#fff!important}.hardware-note{margin-top:12px;padding:9px 11px;border-radius:10px;background:var(--adm2);color:var(--amb);font-size:9px;line-height:1.55}@media(max-width:780px){.hardware-dialog{height:calc(100dvh - 20px)}.hardware-choice-grid,.hardware-review,.hardware-config-row{grid-template-columns:1fr}.hardware-connect-layout{grid-template-columns:1fr}.wiring-canvas{grid-template-columns:1fr}.stm32-board{width:160px;margin:auto}.hardware-step span{display:none}}
 @media(prefers-reduced-motion:reduce){.agv-mascot,.agv-mascot-glow,.agv-star{animation:none}}
 
 /* ── STATUS PAGE — friendly, glanceable robot health ── */
@@ -930,6 +943,7 @@ canvas#mon-chart{width:100%;height:100%;display:block}
 .pb-math  {border-color:#38b2ac;background:rgba(56,178,172,.1);color:#5cd8d2}
 .pb-log   {border-color:#6b7090;background:rgba(107,112,144,.1);color:#9da3c0}
 .pb-param {border-color:#e67e22;background:rgba(230,126,34,.1);color:#f0a060}
+.pb-code  {border-color:#2bb7da;background:rgba(43,183,218,.11);color:#63d9f5}
 
 /* ── CANVAS ── */
 #flow-canvas-wrap{
@@ -1074,12 +1088,15 @@ canvas#mon-chart{width:100%;height:100%;display:block}
 .fn-math  {border-color:#38b2ac}.fn-math  .fnode-head{background:rgba(56,178,172,.12);color:#5cd8d2}
 .fn-log   {border-color:#6b7090}.fn-log   .fnode-head{background:rgba(107,112,144,.12);color:#9da3c0}
 .fn-param {border-color:#e67e22}.fn-param .fnode-head{background:rgba(230,126,34,.12);color:#f0a060}
+.fn-code  {border-color:#2bb7da;min-width:210px}.fn-code .fnode-head{background:rgba(43,183,218,.13);color:#63d9f5}
 .fport.pub  {border-color:#4f8ef7;background:rgba(79,142,247,.2)}
 .fport.sub  {border-color:#3ecf8e;background:rgba(62,207,142,.2)}
 .fport.timer{border-color:#f5a623;background:rgba(245,166,35,.2)}
 .fport.if   {border-color:#f06767;background:rgba(240,103,103,.2)}
 .fport.math {border-color:#38b2ac;background:rgba(56,178,172,.2)}
 .fport.generic{border-color:var(--dim);background:var(--bg3)}
+.fport.code{border-color:#2bb7da;background:rgba(43,183,218,.2)}
+.flow-start-strip{display:flex;align-items:center;gap:8px;width:100%;padding:8px 10px;border:1px solid var(--abrd);border-radius:11px;background:linear-gradient(90deg,var(--adim),transparent);overflow-x:auto}.flow-start-title{font-size:11px;font-weight:800;color:var(--txt);white-space:nowrap}.flow-start-step{display:flex;align-items:center;gap:5px;color:var(--mt);font-size:10px;white-space:nowrap}.flow-start-step b{display:grid;place-items:center;width:20px;height:20px;border-radius:7px;background:var(--bg2);color:var(--acc);font:800 9px var(--mono)}.flow-start-actions{display:flex;gap:5px;margin-left:auto}.flow-btn.hero{border-color:var(--abrd);background:linear-gradient(135deg,var(--acc),#7659df);color:#fff;font-weight:800}.flow-btn.code{border-color:rgba(43,183,218,.45);background:rgba(43,183,218,.12);color:#63d9f5;font-weight:800}
 
 
 /* ── PALETTE inside sidebar (sb-flow) ── */
@@ -1113,6 +1130,8 @@ canvas#mon-chart{width:100%;height:100%;display:block}
 /* Flow bar 2-row layout */
 #flow-bar{flex-wrap:wrap;gap:4px}
 #flow-exe-name:focus{border-color:var(--abrd)}
+.flow-kid-toolbar{display:flex;align-items:center;gap:8px;width:100%;flex-wrap:wrap}.flow-kid-brand{display:flex;align-items:center;gap:8px;padding:6px 11px;border-radius:12px;background:linear-gradient(135deg,#e8f4ff,#f1ecff);color:#31548b;font-size:12px;font-weight:900}.flow-kid-brand span{font-size:19px}.flow-kid-field{display:grid;gap:2px}.flow-kid-field label{padding-left:3px;color:var(--dim);font-size:8px;font-weight:800}.flow-kid-field .insp-select{height:38px;border-radius:11px;font-size:11px}.flow-kid-actions{display:flex;gap:6px;margin-left:auto}.flow-kid-actions .flow-btn{min-height:38px;padding:0 13px;font-weight:800}.flow-kid-actions .success{color:#fff;background:linear-gradient(135deg,#31bd82,#1aa0ba)}#page-flow #flow-tutorial,#page-flow #flow-touch-hint{display:none!important}#page-flow .fnode{border-radius:16px;box-shadow:0 7px 20px rgba(35,60,100,.16)}#page-flow .fnode-head{padding:11px 13px;font-size:12px}#page-flow #flow-inspector{width:270px}#page-flow #insp-content>div{padding-bottom:45px!important}#page-flow .insp-field{padding:8px;border:1px solid var(--brd);border-radius:10px;background:var(--bg2)}#page-flow .insp-input,#page-flow .insp-select{min-height:36px}#page-flow .insp-code{min-height:110px;border-radius:10px}.flow-empty-start{pointer-events:auto;margin-top:5px;padding:9px 14px;border:0;border-radius:11px;background:var(--acc);color:#fff;font-weight:800;cursor:pointer}
+.flow-quick-dialog{width:min(620px,calc(100vw - 24px))}.flow-quick-head{display:flex;align-items:center;gap:12px;margin-bottom:14px}.flow-quick-icon{display:grid;place-items:center;width:48px;height:48px;border-radius:16px;background:linear-gradient(135deg,#dff5ff,#eee7ff);font-size:26px}.flow-quick-head h2{margin:0;font-size:18px}.flow-quick-head p{margin:3px 0 0;color:var(--mt);font-size:10px}.flow-quick-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.flow-quick-field{display:grid;gap:5px;padding:11px;border:1px solid var(--brd);border-radius:13px;background:var(--bg2)}.flow-quick-field.full{grid-column:1/-1}.flow-quick-field label{color:var(--mt);font-size:10px;font-weight:800}.flow-quick-field input,.flow-quick-field select{height:40px;padding:0 10px;border:1px solid var(--brd);border-radius:9px;background:var(--bg1);color:var(--txt);font:600 11px var(--mono)}.flow-template-options{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.flow-template-option{position:relative;padding:11px 8px;border:1px solid var(--brd);border-radius:11px;background:var(--bg1);text-align:center;cursor:pointer}.flow-template-option input{position:absolute;opacity:0}.flow-template-option:has(input:checked){border-color:var(--acc);background:var(--adim);box-shadow:0 0 0 2px var(--adim)}.flow-template-option span{display:block;font-size:22px}.flow-template-option b{display:block;margin-top:4px;font-size:10px}.flow-template-option small{display:block;margin-top:2px;color:var(--dim);font-size:8px}.flow-quick-status{min-height:18px;margin-top:10px;color:var(--mt);font-size:10px}.flow-quick-status.error{color:var(--red)}.flow-quick-status.ok{color:var(--grn)}.insp-group{margin-bottom:12px;padding:9px;border:1px solid var(--brd);border-radius:13px;background:color-mix(in srgb,var(--bg2) 80%,transparent)}.insp-group-title{margin-bottom:8px;color:var(--acc);font-size:9px;font-weight:900;letter-spacing:.04em}.insp-group .insp-field{margin-bottom:7px}.insp-group .insp-field:last-child{margin-bottom:0}.topic-combo-note{display:block;margin-top:4px;color:var(--dim);font-size:8px;line-height:1.4}@media(max-width:620px){.flow-quick-grid,.flow-template-options{grid-template-columns:1fr}.flow-quick-field.full{grid-column:auto}}
 
 /* ══ RUN PAGE ══ */
 #page-run{display:none;flex-direction:column;overflow:hidden;background:var(--bg0)}
@@ -1347,6 +1366,121 @@ canvas#mon-chart{width:100%;height:100%;display:block}
 .rv-tp-stop:hover { background: rgba(255,80,80,.32); color: #fff; }
 .rviz-teleop-range { width: 100%; accent-color: var(--acc); }
 
+/* RViz Desktop-compatible shell. Rendering and ROS data logic remain in rviz.js. */
+#page-rviz{
+  --rviz-chrome:#353535;--rviz-chrome-2:#454545;--rviz-panel:#2d2d2d;
+  --rviz-edge:#171717;--rviz-line:#555;--rviz-text:#e6e6e6;--rviz-blue:#3daee9;
+  color:var(--rviz-text);font-family:"Noto Sans",Arial,sans-serif;background:#242424;
+}
+.rviz-menubar{height:25px;display:flex;align-items:center;gap:2px;padding:0 6px;background:#333;border-bottom:1px solid #181818;flex-shrink:0;font-size:12px}
+.rviz-menu-wrap{position:relative;height:100%;display:flex;align-items:center}.rviz-menu-item{padding:3px 9px;color:#eee;border:1px solid transparent;cursor:default;background:transparent;font:12px Arial}
+.rviz-menu-item:hover{background:#505050;border-color:#666}
+.rviz-menu-popup{display:none;position:absolute;left:0;top:24px;z-index:60;min-width:205px;padding:3px;background:#343434;border:1px solid #151515;box-shadow:3px 5px 12px #000;color:#eee}.rviz-menu-wrap.open .rviz-menu-popup{display:block}.rviz-menu-row{height:25px;display:flex;align-items:center;gap:9px;padding:0 9px;font-size:11px;white-space:nowrap;cursor:pointer}.rviz-menu-row:hover{background:#3979a8}.rviz-menu-row .shortcut{margin-left:auto;color:#bbb}.rviz-menu-sep{height:1px;background:#171717;border-bottom:1px solid #555;margin:3px}
+.rviz-desktop-toolbar{height:42px;display:flex;align-items:center;gap:2px;padding:3px 6px;background:linear-gradient(#484848,#363636);border-bottom:1px solid #171717;box-shadow:inset 0 1px rgba(255,255,255,.08);flex-shrink:0;overflow-x:auto}
+.rviz-tool{height:34px;min-width:37px;padding:2px 7px;border:1px solid transparent;border-radius:2px;background:transparent;color:#eee;display:flex;align-items:center;gap:5px;font:11px Arial;white-space:nowrap;cursor:pointer}
+.rviz-tool:hover{background:#555;border-color:#686868}.rviz-tool:active,.rviz-tool.active{background:#292929;border-color:#111;box-shadow:inset 0 1px 3px #111}
+.rviz-tool[disabled]{opacity:.42;cursor:not-allowed}
+.rviz-tool-icon{font-size:17px;line-height:1;color:#ddd}.rviz-tool-icon.blue{color:#58b9e9}.rviz-tool-icon.green{color:#7bc96f}.rviz-tool-icon.red{color:#f06a62}
+.rviz-tool-sep{height:29px;width:1px;background:#1e1e1e;border-right:1px solid #5b5b5b;margin:0 4px;flex:none}
+.rviz-tool-spacer{flex:1;min-width:8px}
+.rviz-frame-tool{height:26px;display:flex;align-items:center;gap:5px;padding:0 6px;border-left:1px solid #222;color:#ddd;font-size:10px;white-space:nowrap}.rviz-frame-tool select{width:105px;height:21px;background:#404040;color:#fff;border:1px solid #181818;font-size:10px}
+.rviz-connect-tool{height:28px;padding:0 10px;border:1px solid #1d1d1d;border-radius:2px;background:linear-gradient(#555,#3b3b3b);color:#eee;font-size:11px;cursor:pointer;white-space:nowrap}
+.rviz-connect-tool:hover{border-color:var(--rviz-blue)}.rviz-connect-tool.btn-rviz-live{color:#b8efaa}
+#btn-rviz-connect{height:28px;padding:0 10px;border:1px solid #1d1d1d;border-radius:2px;background:linear-gradient(#555,#3b3b3b);color:#eee;font:11px Arial;white-space:nowrap;cursor:pointer}#btn-rviz-connect.btn-r{color:#ffb6b3;border-color:#884440}#btn-rviz-connect.btn-g{color:#b8efaa}
+.rviz-desktop-body{min-height:0;flex:1;display:flex;overflow:hidden;background:#202020}
+.rviz-dock{display:flex;flex-direction:column;min-width:180px;background:var(--rviz-panel);border-color:#151515;overflow:hidden}
+.rviz-dock[hidden]{display:none}.rviz-dock.rviz-dock-wide{width:40%!important}
+#rviz-panel{width:300px;background:var(--rviz-panel);border-right:1px solid #151515}
+#rviz-views-panel{width:245px;border-left:1px solid #151515;flex-shrink:0}
+.rviz-dock-title{height:25px;display:flex;align-items:center;padding:0 7px;background:linear-gradient(#4a4a4a,#373737);border-bottom:1px solid #181818;color:#f1f1f1;font-size:12px;font-weight:600;flex-shrink:0}
+.rviz-dock-title span{flex:1}.rviz-dock-mini{width:18px;height:18px;border:0;background:transparent;color:#ccc;padding:0;cursor:pointer;font-size:12px}.rviz-dock-mini:hover{background:#606060;color:#fff}
+#rviz-panel .rviz-panel-header{height:25px;padding:0 7px;background:#3b3b3b;border-color:#1c1c1c;text-transform:none;letter-spacing:0;color:#eee;font-size:11px}
+.rviz-disp{border-bottom:1px solid #242424}.rviz-disp-head{gap:5px;min-height:23px;padding:2px 6px;background:#303030;color:#e9e9e9;font-size:11px}
+.rviz-disp-head:hover{background:#414141}.rviz-disp-arrow{width:10px;color:#bcbcbc;font-size:9px;transform:rotate(-90deg);transition:none}.rviz-disp.open .rviz-disp-arrow{transform:rotate(0)}
+.rviz-disp-icon{width:18px;text-align:center;font:600 11px Arial;color:#73b8dc}.rviz-disp-name{font-size:11px}.rviz-disp-status{font-size:8px}.rviz-topic-badge{background:transparent;color:#a9a9a9;font:9px monospace;padding:0;max-width:85px}
+.rviz-del-btn{font-size:11px}.rviz-disp-body{padding:3px 6px 5px 31px;background:#282828;border-top:1px solid #202020}
+.rviz-prop,.rp{min-height:22px;padding:1px 0;font-size:10px;color:#d2d2d2;display:flex;align-items:center;justify-content:space-between;gap:6px}.rviz-val,.rv{height:20px;width:120px;padding:1px 4px;border:1px solid #171717;border-radius:1px;background:#454545;color:#fff;font:10px Arial;outline:none}.rviz-val:focus,.rv:focus{border-color:var(--rviz-blue)}
+.rviz-cb{width:13px;height:13px;accent-color:#3daee9;margin:0}.ds-ok{color:#63c757}.ds-warn{color:#e8b84b}.ds-off{color:#777}
+.rviz-global-tree{border-bottom:1px solid #161616;flex-shrink:0}.rviz-dock-actions{height:31px;display:flex;align-items:center;gap:3px;padding:3px 5px;background:#383838;border-top:1px solid #171717;flex-shrink:0}
+.rviz-dock-btn{height:23px;padding:0 8px;border:1px solid #202020;border-radius:2px;background:linear-gradient(#555,#3b3b3b);color:#eee;font-size:10px;cursor:pointer}.rviz-dock-btn:hover{border-color:#777;background:#5b5b5b}
+#rviz-display-list{flex:1;overflow:auto;background:#2b2b2b}
+#rviz-viewport{min-width:0;background:#1a1a1a;border-left:1px solid #505050;border-right:1px solid #111}
+.rviz-overlay-msg{top:8px;border-radius:2px;background:rgba(38,38,38,.92);border-color:#555;padding:4px 10px;font-size:11px}
+.rviz-status-bar{position:static;height:23px;padding:0 7px;border:0;border-top:1px solid #161616;border-radius:0;background:#343434;backdrop-filter:none;display:flex;gap:13px;flex-shrink:0;font:10px Arial;z-index:auto}
+.rviz-status-cell{display:flex;align-items:center;gap:4px;white-space:nowrap}.rviz-status-label{color:#aaa}.rviz-status-value{color:#eee;font-family:monospace}.rviz-status-grow{flex:1}.rviz-status-dot{width:8px;height:8px;border-radius:50%;background:#a43b38}.rviz-status-dot.live{background:#62bd53}
+.rviz-cam-hint{bottom:8px;left:10px;padding:3px 7px;background:rgba(30,30,30,.75);color:#aaa;font-size:10px}
+.rviz-view-controls{display:none}
+.rviz-view-tree{font-size:11px;overflow:auto;flex:1}.rviz-view-section{border-bottom:1px solid #1e1e1e}.rviz-view-head{height:24px;display:flex;align-items:center;gap:5px;padding:0 7px;background:#343434;color:#eee}.rviz-view-props{padding:4px 7px 6px 24px;background:#292929}.rviz-view-prop{height:23px;display:flex;align-items:center;justify-content:space-between;color:#ccc;font-size:10px}.rviz-view-prop select,.rviz-view-prop input{width:118px;height:20px;background:#454545;color:#fff;border:1px solid #171717;font-size:10px}
+.rviz-tool-properties{border-top:1px solid #111;flex-shrink:0}.rviz-tool-props-body{padding:5px 8px;background:#292929;font-size:10px}.rviz-tool-prop{display:flex;align-items:center;justify-content:space-between;min-height:23px;gap:5px}.rviz-tool-prop input{width:125px;height:20px;background:#454545;color:#fff;border:1px solid #171717;padding:0 4px;font-size:10px}
+.rviz-tool-readout{position:absolute;left:50%;bottom:36px;transform:translateX(-50%);z-index:12;display:none;padding:5px 10px;background:rgba(35,35,35,.92);border:1px solid #666;color:#fff;font:11px monospace;pointer-events:none}
+.rviz-saved-view{height:25px;display:flex;align-items:center;gap:7px;padding:0 9px;color:#ddd;cursor:pointer;border-bottom:1px solid #252525}.rviz-saved-view:hover,.rviz-saved-view.active{background:#414141}.rviz-saved-view-icon{color:#70b8de}
+.rviz-time-panel{height:54px;display:grid;grid-template-columns:95px 1fr;grid-template-rows:1fr 1fr;padding:4px 8px;background:#303030;border-top:1px solid #111;gap:2px 8px;font-size:10px;flex-shrink:0}.rviz-time-label{color:#bbb}.rviz-time-value{color:#eee;font-family:monospace}.rviz-time-bar{height:10px;align-self:center;background:#191919;border:1px solid #4b4b4b;position:relative}.rviz-time-bar:after{content:"";position:absolute;left:0;top:0;bottom:0;width:38%;background:#367ca2}
+.rviz-teleop{right:10px;bottom:10px;border-radius:2px;background:#303030;border-color:#151515;box-shadow:0 4px 14px #000}.rviz-teleop-handle{background:linear-gradient(#4a4a4a,#373737);border-color:#171717}
+
+@media(max-width:1024px){#rviz-panel{width:250px}#rviz-views-panel{width:205px}.rviz-tool-label{display:none}.rviz-tool{min-width:34px;padding-inline:6px}}
+@media(max-width:760px){#rviz-views-panel{display:none}.rviz-menubar{display:none}.rviz-desktop-toolbar{height:38px}.rviz-time-panel{display:none}#rviz-panel{width:220px}.rviz-desktop-body{flex-direction:row!important}}
+@media(max-width:560px){#rviz-panel{position:absolute;left:0;top:0;bottom:0;z-index:15;transform:translateX(-100%);transition:transform .2s}#page-rviz.rviz-panel-open #rviz-panel{transform:none}.rviz-mobile-panel-toggle{display:flex!important}}
+
+/* Kid-friendly ROS simulation playground; it hosts the same RViz viewport. */
+#page-playground{display:none;flex-direction:column;overflow:hidden;background:linear-gradient(135deg,#eaf7ff,#f7f1ff);color:#19324a}
+#page-playground.show{display:flex}.pg-head{height:68px;padding:10px 18px;display:flex;align-items:center;gap:13px;background:rgba(255,255,255,.94);border-bottom:1px solid #cce2f2;box-shadow:0 3px 14px rgba(60,100,140,.1);flex-shrink:0}.pg-mascot{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;background:linear-gradient(145deg,#56c7ff,#766dff);font-size:25px;box-shadow:0 6px 14px rgba(79,142,247,.3)}.pg-title{font-size:19px;font-weight:800;color:#173858}.pg-sub{font-size:11px;color:#61809b;margin-top:2px}.pg-head-actions{margin-left:auto;display:flex;gap:7px}.pg-btn{border:0;border-radius:11px;padding:9px 13px;font:700 11px var(--fn);cursor:pointer;box-shadow:0 4px 10px rgba(35,75,115,.12)}.pg-btn.primary{background:linear-gradient(135deg,#36b96f,#66d887);color:#fff}.pg-btn.secondary{background:#fff;color:#326181;border:1px solid #cce0ed}.pg-body{min-height:0;flex:1;display:grid;grid-template-columns:238px minmax(0,1fr);gap:12px;padding:12px}.pg-side{min-height:0;overflow:auto;background:rgba(255,255,255,.92);border:1px solid #d5e8f4;border-radius:18px;padding:14px;box-shadow:0 9px 24px rgba(57,101,137,.1)}.pg-card{padding:11px;border-radius:13px;background:#f4faff;border:1px solid #dbeef8;margin-bottom:10px}.pg-card h3{font-size:12px;color:#285979;margin:0 0 7px}.pg-map-line{display:flex;align-items:center;gap:7px;font-size:11px;color:#59758c;margin:5px 0}.pg-map-line b{margin-left:auto;color:#224f6d}.pg-status{padding:8px 10px;border-radius:10px;background:#fff6d8;color:#7a5a13;font-size:10px;line-height:1.5}.pg-status.live{background:#e3f9e9;color:#267442}.pg-steps{display:grid;gap:6px}.pg-step{display:flex;align-items:center;gap:8px;font-size:10px;color:#58748b}.pg-step span{width:22px;height:22px;border-radius:8px;background:#e5f2ff;color:#3b76aa;display:grid;place-items:center;font-weight:800}.pg-speed{width:100%;accent-color:#6578f5}.pg-stage{min-width:0;min-height:0;position:relative;border-radius:20px;overflow:hidden;background:#1a1a1a;border:4px solid #fff;box-shadow:0 12px 30px rgba(40,75,110,.2)}#playground-view-host{position:absolute;inset:0}#playground-view-host #rviz-viewport{width:100%;height:100%;display:block;border:0}.playground-mode .rviz-teleop,.playground-mode .rviz-cam-hint{display:none!important}.pg-hud{position:absolute;left:13px;top:13px;z-index:20;display:flex;gap:7px;pointer-events:none}.pg-chip{padding:6px 10px;border-radius:12px;background:rgba(255,255,255,.92);color:#315a76;font-size:10px;font-weight:700;box-shadow:0 3px 9px rgba(0,0,0,.15)}.pg-drive{position:absolute;right:15px;bottom:15px;z-index:21;width:178px;padding:10px;background:rgba(255,255,255,.94);border-radius:18px;box-shadow:0 8px 25px rgba(0,0,0,.25)}.pg-drive-title{text-align:center;font-size:11px;font-weight:800;color:#355b76;margin-bottom:7px}.pg-drive-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}.pg-drive-btn{height:43px;border:0;border-radius:12px;background:linear-gradient(#edf6ff,#dcecff);color:#386a9b;font-size:18px;font-weight:800;cursor:pointer;touch-action:none}.pg-drive-btn:active,.pg-drive-btn.on{background:linear-gradient(#6c7cf7,#505fe4);color:#fff}.pg-drive-btn[data-dir="fwd"]{grid-column:2}.pg-drive-btn[data-dir="left"]{grid-column:1;grid-row:2}.pg-drive-btn[data-dir="back"]{grid-column:2;grid-row:2}.pg-drive-btn[data-dir="right"]{grid-column:3;grid-row:2}.pg-stop{grid-column:1/-1;height:30px;border:0;border-radius:10px;background:#ffe5e5;color:#b44444;font-size:11px;font-weight:800;cursor:pointer}
+.pg-slam-card h3{display:flex;align-items:center}.pg-slam-card h3 b{margin-left:auto;color:#5768e8}.pg-slam-card small{display:block;margin-top:6px;color:#71869a;font-size:9px;line-height:1.4}.pg-progress{height:10px;border-radius:99px;background:#dbe5ed;overflow:hidden;box-shadow:inset 0 1px 2px rgba(0,0,0,.1)}.pg-progress i{display:block;width:0;height:100%;border-radius:inherit;background:linear-gradient(90deg,#55c7ff,#6c78f5,#54d487);transition:width .35s ease}.pg-layers{display:grid;grid-template-columns:1fr 1fr;gap:6px}.pg-layers label{position:relative;cursor:pointer}.pg-layers input{position:absolute;opacity:0;pointer-events:none}.pg-layers span{display:block;padding:7px 5px;border:1px solid #d6e5ef;border-radius:9px;background:#fff;color:#71869a;font-size:9px;text-align:center;transition:.15s}.pg-layers input:checked+span{color:#355b8d;border-color:#8ab7ee;background:#e8f4ff;box-shadow:inset 0 0 0 1px #b8d9fa}.pg-map-name{box-sizing:border-box;width:100%;height:32px;border:1px solid #cbdfea;border-radius:9px;padding:0 9px;background:#fff;color:#28516d;font:600 10px var(--fn);outline:none}.pg-map-name:focus{border-color:#6c83ee;box-shadow:0 0 0 3px rgba(108,131,238,.13)}.pg-save-map{width:100%;min-height:34px;margin-top:7px;border:0;border-radius:10px;background:linear-gradient(135deg,#6576ef,#8a65e8);color:#fff;font:800 10px var(--fn);cursor:pointer}.pg-save-map:disabled{opacity:.48;cursor:not-allowed}.pg-save-result{margin-top:6px;color:#71869a;font-size:9px;line-height:1.5;overflow-wrap:anywhere}.pg-save-result code{font-size:8px;color:#4d5fb6}
+.pg-mode-switch{display:flex;gap:4px;padding:4px;background:#e8f2f9;border-radius:13px;margin-left:10px}.pg-mode-btn{border:0;border-radius:10px;padding:8px 12px;background:transparent;color:#668098;font:800 10px var(--fn);cursor:pointer;white-space:nowrap}.pg-mode-btn.active{background:#fff;color:#335f85;box-shadow:0 3px 9px rgba(50,89,120,.14)}.pg-mode-btn[data-mode="mapping"].active{color:#6556d9}.pg-mode-btn[data-mode="navigation"].active{color:#16835a}.pg-nav-tools{position:absolute;right:15px;bottom:15px;z-index:21;width:205px;padding:11px;background:rgba(255,255,255,.95);border-radius:18px;box-shadow:0 8px 25px rgba(0,0,0,.25)}.pg-nav-tools h3{margin:0 0 7px;text-align:center;color:#315a76;font-size:11px}.pg-nav-tool{width:100%;height:38px;margin-top:5px;border:0;border-radius:11px;color:#fff;font:800 10px var(--fn);cursor:pointer}.pg-nav-tool.pose{background:linear-gradient(135deg,#4aa7eb,#6578ef)}.pg-nav-tool.goal{background:linear-gradient(135deg,#20b879,#56d795)}.pg-nav-tool.cancel{height:30px;background:#ffe5e5;color:#b44444}.pg-nav-tip{font-size:9px;line-height:1.45;color:#70869a;margin-top:6px;text-align:center}.pg-preset-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}.pg-preset{border:1px solid #d2e2ec;border-radius:9px;padding:7px 2px;background:#fff;color:#637c91;font:700 8px var(--fn);cursor:pointer}.pg-preset.active{background:#e5f7ee;border-color:#68c99c;color:#18714c}.pg-tune{margin-top:8px;border-top:1px solid #dbe8f0;padding-top:7px}.pg-tune summary{cursor:pointer;color:#527089;font-size:9px;font-weight:800}.pg-param{margin-top:8px}.pg-param label{display:flex;justify-content:space-between;color:#627d92;font-size:9px}.pg-param input{width:100%;accent-color:#30b77a}.pg-apply{width:100%;height:30px;margin-top:8px;border:0;border-radius:9px;background:#e4f6ed;color:#19744f;font:800 9px var(--fn);cursor:pointer}.pg-nav-distance{font-size:22px;font-weight:900;color:#20a16d;text-align:center}.pg-nav-distance small{font-size:10px;color:#71889a}.pg-mode-hidden{display:none!important}
+.pg-mode-btn[data-mode="control"].active{color:#d36b18}
+.pg-export-nav{width:100%;min-height:36px;border:0;border-radius:10px;background:linear-gradient(135deg,#ff9c42,#f36b6b);color:#fff;font:800 10px var(--fn);cursor:pointer;box-shadow:0 5px 12px rgba(225,103,70,.2)}
+.pg-export-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:12px 0}.pg-export-item{padding:10px;border:1px solid var(--brd);border-radius:10px;background:var(--bg2)}.pg-export-item b{display:block;font-size:11px;color:var(--txt);margin-bottom:3px}.pg-export-item small{font-size:9px;color:var(--mt);line-height:1.45}.pg-export-command{display:flex;align-items:center;gap:7px;margin-top:7px;padding:8px;border:1px solid var(--brd);border-radius:8px;background:var(--bg0)}.pg-export-command code{min-width:0;flex:1;color:var(--grn);font:10px var(--mono);overflow-wrap:anywhere}.pg-export-command button{flex:none;border:0;border-radius:6px;padding:5px 7px;background:var(--adim);color:var(--acc);cursor:pointer}
+.pg-map-picker{display:flex;gap:5px}.pg-map-picker select{min-width:0;flex:1;height:34px;border:1px solid #cbdfea;border-radius:9px;padding:0 7px;background:#fff;color:#28516d;font:700 9px var(--fn)}.pg-map-refresh{width:34px;border:1px solid #cbdfea;border-radius:9px;background:#fff;color:#47708e;cursor:pointer}.pg-ready-head{display:flex;align-items:center;justify-content:space-between;margin-top:8px;color:#627d92;font-size:9px}.pg-ready-badge{padding:3px 7px;border-radius:99px;background:#fff1d0;color:#936817;font-weight:800}.pg-ready-badge.ready{background:#dff7e9;color:#19764f}.pg-checks{display:grid;gap:5px;margin-top:7px}.pg-check{display:grid;grid-template-columns:15px 1fr;gap:1px 5px;padding:6px;border-radius:8px;background:#fff;font-size:8px}.pg-check i{grid-row:1/3;font-style:normal}.pg-check b{color:#41617a}.pg-check small{color:#7a8e9e;line-height:1.35}.pg-check.error{background:#fff0f0}.pg-check.warning{background:#fff8e3}.pg-check.auto{background:#eef5ff}.pg-nav-error{display:none;margin-top:7px;padding:7px;border-radius:8px;background:#ffe9e9;color:#a33d3d;font-size:9px;line-height:1.45}.pg-nav-error.show{display:block}.pg-command-help{margin-top:7px;padding:7px;border-radius:8px;background:#182839;color:#d5e8f7;font:8px var(--mono);line-height:1.5;overflow-wrap:anywhere}
+.playground-mode #rviz-3d-container,.playground-mode #rviz-3d-container canvas{touch-action:none}
+.real-robot-mode [data-simulation-only]{display:none!important}
+@media(max-width:760px){.pg-body{grid-template-columns:1fr;padding:7px}.pg-side{display:none}.pg-head{height:58px;padding:7px 10px}.pg-title{font-size:15px}.pg-sub{display:none}.pg-head-actions .pg-btn.secondary{display:none}.pg-stage{border-radius:14px}.pg-drive{width:158px;right:8px;bottom:8px}.pg-drive-btn{height:38px}}
+
+/* Robot Playground — theme-aware workspace and clearer action hierarchy. */
+#page-playground{
+  background:
+    radial-gradient(circle at 8% 0%,color-mix(in srgb,var(--acc) 12%,transparent),transparent 30%),
+    radial-gradient(circle at 92% 100%,color-mix(in srgb,var(--pur) 10%,transparent),transparent 34%),
+    var(--bg0);color:var(--txt)
+}
+#page-playground .pg-head{height:auto;min-height:68px;padding:10px 16px;background:color-mix(in srgb,var(--bg1) 94%,transparent);border-color:var(--brd);box-shadow:0 6px 22px rgba(4,8,24,.1);backdrop-filter:blur(12px)}
+#page-playground .pg-title,#page-playground .pg-card h3,#page-playground .pg-nav-tools h3{color:var(--txt)}
+#page-playground .pg-sub,#page-playground .pg-map-line,#page-playground .pg-step,#page-playground .pg-slam-card small,#page-playground .pg-save-result,#page-playground .pg-nav-tip,#page-playground .pg-param label,#page-playground .pg-ready-head{color:var(--mt)}
+#page-playground .pg-map-line b,#page-playground .pg-check b{color:var(--txt)}
+#page-playground .pg-head-actions{align-items:center;flex-wrap:wrap;justify-content:flex-end}
+#page-playground .pg-btn{min-height:36px;border:1px solid transparent;box-shadow:none;transition:transform .15s,border-color .15s,background-color .15s}
+#page-playground .pg-btn:hover{transform:translateY(-1px)}
+#page-playground .pg-btn.secondary{background:var(--bg2);color:var(--txt);border-color:var(--brd)}
+#page-playground .pg-btn.secondary:hover{border-color:var(--abrd);background:var(--adim);color:var(--acc)}
+#page-playground .workspace-wizard-return.playground-header-action{order:10;min-height:36px;margin:0;padding:7px 12px;border-color:var(--abrd);border-radius:11px;background:var(--adim);color:var(--acc);font-size:10px}
+#page-playground .workspace-wizard-return.playground-header-action:hover{border-color:var(--acc);background:color-mix(in srgb,var(--acc) 18%,var(--bg1))}
+#page-playground .pg-mode-switch{background:var(--bg2);border:1px solid var(--brd)}
+#page-playground .pg-mode-btn{color:var(--mt)}
+#page-playground .pg-mode-btn.active{background:var(--bg1);color:var(--acc);box-shadow:0 3px 10px rgba(4,8,24,.12)}
+#page-playground .pg-body{grid-template-columns:minmax(238px,260px) minmax(0,1fr);gap:14px;padding:14px}
+#page-playground .pg-side{scrollbar-width:thin;scrollbar-color:var(--dim) transparent;background:color-mix(in srgb,var(--bg1) 96%,transparent);border-color:var(--brd);box-shadow:0 10px 28px rgba(4,8,24,.09)}
+#page-playground .pg-side::-webkit-scrollbar{width:6px}#page-playground .pg-side::-webkit-scrollbar-thumb{background:var(--dim);border-radius:99px}
+#page-playground .pg-card{background:var(--bg2);border-color:var(--brd);box-shadow:inset 0 1px color-mix(in srgb,var(--txt) 4%,transparent)}
+#page-playground .pg-status{background:var(--adm2);color:var(--amb)}#page-playground .pg-status.live{background:var(--gdim);color:var(--grn)}
+#page-playground .pg-step span{background:var(--adim);color:var(--acc)}
+#page-playground .pg-progress{background:var(--bg3)}
+#page-playground .pg-layers span,#page-playground .pg-map-name,#page-playground .pg-map-picker select,#page-playground .pg-map-refresh,#page-playground .pg-preset,#page-playground .pg-check{background:var(--bg1);border-color:var(--brd);color:var(--mt)}
+#page-playground .pg-layers input:checked+span{background:var(--adim);border-color:var(--abrd);color:var(--acc);box-shadow:inset 0 0 0 1px var(--abrd)}
+#page-playground .pg-map-name:focus,#page-playground .pg-map-picker select:focus{border-color:var(--acc);box-shadow:0 0 0 3px var(--adim)}
+#page-playground .pg-stage{background:var(--bg0);border-color:var(--brdh);box-shadow:0 14px 34px rgba(4,8,24,.18)}
+#page-playground .pg-chip,#page-playground .pg-drive,#page-playground .pg-nav-tools{background:color-mix(in srgb,var(--bg1) 92%,transparent);border:1px solid var(--brd);color:var(--txt);backdrop-filter:blur(12px)}
+#page-playground .pg-chip,#page-playground .pg-drive-title{color:var(--txt)}
+#page-playground .pg-drive-btn{background:var(--bg2);border:1px solid var(--brd);color:var(--acc)}
+#page-playground .pg-drive-btn:hover{border-color:var(--abrd);background:var(--adim)}
+#page-playground .pg-drive-btn:active,#page-playground .pg-drive-btn.on{background:var(--acc);color:#fff}
+#page-playground .pg-stop,#page-playground .pg-nav-tool.cancel{background:color-mix(in srgb,var(--red) 14%,var(--bg1));color:var(--red)}
+#page-playground .pg-preset.active,#page-playground .pg-apply{background:var(--gdim);border-color:color-mix(in srgb,var(--grn) 45%,transparent);color:var(--grn)}
+#page-playground .pg-tune{border-color:var(--brd)}#page-playground .pg-tune summary{color:var(--mt)}
+#page-playground .pg-ready-badge{background:var(--adm2);color:var(--amb)}#page-playground .pg-ready-badge.ready{background:var(--gdim);color:var(--grn)}
+#page-playground .pg-check.error,#page-playground .pg-nav-error{background:color-mix(in srgb,var(--red) 13%,var(--bg1));color:var(--red)}
+#page-playground .pg-check.warning{background:var(--adm2)}#page-playground .pg-check.auto{background:var(--adim)}
+@media(max-width:980px){#page-playground .pg-body{grid-template-columns:220px minmax(0,1fr)}#page-playground .pg-head{padding-inline:10px}#page-playground .pg-mode-switch{margin-left:0}}
+@media(max-width:760px){#page-playground .pg-body{grid-template-columns:1fr;padding:7px}#page-playground .pg-head{min-height:58px}#page-playground .pg-head-actions{gap:5px}#page-playground .workspace-wizard-return.playground-header-action{padding-inline:9px}}
+
+.real-teleop-dialog{width:min(1180px,98vw);height:min(820px,94dvh);padding:0}.real-teleop-body{min-height:0;flex:1;display:grid;grid-template-columns:390px minmax(0,1fr);gap:12px;padding:12px;overflow:hidden}.real-teleop-controls{min-height:0;overflow:auto;padding-right:3px}.real-teleop-panel{margin-bottom:9px;padding:10px;border:1px solid var(--brd);border-radius:12px;background:var(--bg2)}.real-teleop-panel h3{margin:0 0 7px;font-size:11px}.real-teleop-connect-grid{display:grid;grid-template-columns:minmax(0,1fr) 92px;gap:6px}.real-teleop-connect-grid select,.real-teleop-connect-grid input{min-width:0;height:34px;padding:0 8px;border:1px solid var(--brd);border-radius:8px;background:var(--bg1);color:var(--txt);font:700 9px var(--mono)}.real-teleop-connect-actions{display:flex;gap:6px;margin-top:7px}.real-teleop-connect-actions button{flex:1;min-height:34px;border:1px solid var(--brd);border-radius:8px;background:var(--bg1);color:var(--txt);font-size:9px;font-weight:800;cursor:pointer}.real-teleop-connect-actions button.primary{border:0;background:linear-gradient(135deg,var(--acc),#7659df);color:#fff}.real-teleop-connect-actions button.danger{color:var(--red)}.real-teleop-connection-state{margin-top:7px;color:var(--dim);font:700 8px var(--mono)}.real-teleop-connection-state.live{color:var(--grn)}.real-teleop-map-panel{position:relative;min-width:0;min-height:430px;overflow:hidden;border:1px solid var(--brd);border-radius:15px;background:#0b1220}.real-teleop-map-head{position:absolute;z-index:2;left:12px;right:12px;top:10px;display:flex;align-items:center;gap:7px;pointer-events:none}.real-teleop-map-head span{padding:5px 8px;border-radius:8px;background:rgba(11,18,32,.82);color:#b9c8dc;font:700 9px var(--mono);backdrop-filter:blur(5px)}#real-teleop-map{display:block;width:100%;height:100%}.real-teleop-odom{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px}.real-teleop-odom div{padding:7px;border-radius:8px;background:var(--bg1);text-align:center}.real-teleop-odom small{display:block;color:var(--dim);font-size:7px}.real-teleop-odom b{display:block;margin-top:2px;font:800 10px var(--mono)}.real-teleop-btn[data-dir=left]{grid-column:1;grid-row:2}.real-teleop-btn[data-dir=fwd]{grid-column:2;grid-row:1}.real-teleop-btn[data-dir=right]{grid-column:3;grid-row:2}.real-teleop-btn[data-dir=back]{grid-column:2;grid-row:3}.real-teleop-btn.stop{grid-column:2;grid-row:2}.real-teleop-key-help{line-height:1.8}.real-teleop-speed{margin-top:8px}@media(max-width:820px){.real-teleop-dialog{height:96dvh}.real-teleop-body{grid-template-columns:1fr;overflow:auto}.real-teleop-controls{overflow:visible}.real-teleop-map-panel{min-height:430px}}
 </style>
 </head>
 <body>
@@ -1355,7 +1489,7 @@ canvas#mon-chart{width:100%;height:100%;display:block}
 <div id="topbar">
   <button id="btn-sidebar-toggle" class="btn" style="display:none; padding:4px 10px; font-size:16px; margin-right:4px;" onclick="document.getElementById('sidebar').classList.add('show'); document.getElementById('sidebar-backdrop').style.display='block';">☰</button>
   
-  <div class="logo">ROS2<span>IDE</span></div>
+  <div class="logo" title="Mecha Rayong Learing Workspace">MECHA<span>RAYONG</span></div>
 
   <div class="top-menus">
     
@@ -1363,7 +1497,7 @@ canvas#mon-chart{width:100%;height:100%;display:block}
       <div class="tmenu">Workspace ▾</div>
       <div class="tmenu-drop">
         <div class="td-item" onclick="switchPage('dashboard');loadDashboard()">
-          <span class="td-ico">🧭</span> AGV Wizard
+          <span class="td-ico">🧭</span> ROS Wizzard
         </div>
         <div class="td-item" onclick="switchPage('editor')">
           <span class="td-ico">📝</span> Code Editor
@@ -1374,8 +1508,11 @@ canvas#mon-chart{width:100%;height:100%;display:block}
         <div class="td-item" onclick="switchPage('transformation');initTransformation()">
           <span class="td-ico" style="color:var(--pur)">🧩</span> Robot Config
         </div>
-        <div class="td-item" onclick="switchPage('map');initMapEditor()">
+        <div class="td-item" data-simulation-only onclick="switchPage('map')">
           <span class="td-ico" style="color:var(--acc)">🗺️</span> Map Editor
+        </div>
+        <div class="td-item" data-real-only onclick="switchPage('lidar')">
+          <span class="td-ico" style="color:var(--grn)">📡</span> LIDAR Setup &amp; Test
         </div>
         <!--
         <div class="td-item" onclick="switchPage('3dcomp');init3DComponent()">
@@ -1397,10 +1534,13 @@ canvas#mon-chart{width:100%;height:100%;display:block}
         <div class="td-item" onclick="switchPage('rviz');initRviz()">
           <span class="td-ico" style="color:var(--pur)">🖥</span> RViz 3D
         </div>
+        <div class="td-item" data-simulation-only onclick="switchPage('playground')">
+          <span class="td-ico" style="color:var(--grn)">🎮</span> Robot Playground
+        </div>
       </div>
     </div>
 
-    <div class="tmenu-wrap">
+    <div class="tmenu-wrap" id="terminal-menu" data-paid-feature="terminal" hidden>
       <div class="tmenu" onclick="switchPage('terminal')">Terminal</div>
     </div>
 
@@ -1410,11 +1550,14 @@ canvas#mon-chart{width:100%;height:100%;display:block}
     <input id="disp-host" type="hidden" value=""/>
     <span class="top-icon-action robot-info" id="robot-info-icon" role="img" aria-label="ยังไม่ได้เชื่อมต่อหุ่นยนต์" title="ยังไม่ได้เชื่อมต่อหุ่นยนต์">🤖</span>
     <span id="badge-conn" class="top-icon-action connection-state" role="status" aria-label="ยังไม่ได้เชื่อมต่อ" title="ยังไม่ได้เชื่อมต่อ"><span class="dot dr"></span></span>
-    <button class="top-icon-action wizard-shortcut active" id="btn-wizard" onclick="switchPage('dashboard');loadDashboard()" title="AGV Learning Wizard" aria-label="เปิด AGV Learning Wizard">
+    <button class="top-icon-action wizard-shortcut active" id="btn-wizard" onclick="switchPage('dashboard');loadDashboard()" title="ROS Wizzard" aria-label="เปิด ROS Wizzard">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 1.4 4.1L17.5 8.5l-4.1 1.4L12 14l-1.4-4.1-4.1-1.4 4.1-1.4L12 3ZM18.5 14l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2ZM5 14l.7 1.8 1.8.7-1.8.7L5 19l-.7-1.8-1.8-.7 1.8-.7L5 14Z"/></svg>
     </button>
     <button class="top-icon-action status-shortcut" id="btn-status" onclick="switchPage('status');loadDashboard()" title="สถานะระบบ" aria-label="เปิดหน้าสถานะระบบ">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V10M10 19V5M16 19v-7M22 19H2"/></svg>
+    </button>
+    <button class="top-icon-action" id="btn-nav-export" data-simulation-only onclick="playgroundOpenNavExport()" title="ดาวน์โหลด ROS Project ทั้งหมด" aria-label="ดาวน์โหลด ROS project พร้อมตัวติดตั้ง" disabled>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 20h14"/></svg>
     </button>
     <button class="top-icon-action build-action" id="btn-build" onclick="quickBuild()" title="Build โปรเจกต์" aria-label="Build โปรเจกต์" disabled>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 0-5-5L12 3.6 8.6 7 6.3 4.7a4 4 0 0 0 5 5L4 17.4 6.6 20l7.7-7.7a4 4 0 0 0 5-5L17 9.6 13.4 6 15.7 3.7a4 4 0 0 0-1 .6Z"/></svg>
@@ -1426,6 +1569,7 @@ canvas#mon-chart{width:100%;height:100%;display:block}
       <svg id="icon-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
       <svg id="icon-sun" viewBox="0 0 24 24" style="display:none"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
     </button>
+    <button id="btn-page-guide" class="top-icon-action page-guide-action" onclick="openPageGuide()" title="คู่มือการใช้งานหน้านี้" aria-label="เปิดคู่มือการใช้งานหน้านี้">?</button>
 
     <div class="prof-wrap">
       <button class="prof-btn top-icon-action profile-action" onclick="document.getElementById('prof-menu').classList.toggle('show'); event.stopPropagation();" title="บัญชีผู้ใช้" aria-label="เปิดเมนูบัญชีผู้ใช้">
@@ -1433,7 +1577,8 @@ canvas#mon-chart{width:100%;height:100%;display:block}
       </button>
       <div class="prof-menu" id="prof-menu">
         <div class="prof-hdr">Logged in as:<br><span id="badge-user" class="hidden" style="color:var(--txt);font-weight:600;font-size:12px;margin-top:2px;"></span></div>
-        <div class="ti" style="padding:8px 16px; margin: 4px 0;" onclick="typeof appLogout === 'function' ? appLogout() : (localStorage.removeItem('token'), location.reload());">🚪 Logout</div>
+        <div class="ti" style="padding:8px 16px; margin: 4px 0;" onclick="typeof appLogout === 'function' ? appLogout() : (clearAuthSession(), location.reload());">🚪 Logout</div>
+        <div style="margin:7px 12px 10px;padding-top:8px;border-top:1px solid var(--brd);color:var(--mt);font-size:8px;line-height:1.55">Mechatronic and Robotics<br>Rayong Technical College<br><span style="color:var(--acc)">Dev by Neocluster</span></div>
       </div>
     </div>
   </div>
@@ -1470,6 +1615,7 @@ canvas#mon-chart{width:100%;height:100%;display:block}
 
   <!-- PAGES -->
   <div id="pages">
+    <button type="button" id="workspace-wizard-return" class="workspace-wizard-return" onclick="returnToRosWizard()" aria-label="กลับไปหน้า ROS Wizzard" title="กลับไปหน้า ROS Wizzard" hidden><span>←</span><span class="workspace-wizard-return-label">ROS Wizzard</span></button>
 
     <!-- ══ EDITOR PAGE ══ -->
     <div class="page" id="page-editor">
@@ -1506,7 +1652,7 @@ canvas#mon-chart{width:100%;height:100%;display:block}
         <span style="font-weight:500">Terminal</span>
         <span id="term-badge" class="badge br"><span class="dot dr"></span>Not connected</span>
         <div id="term-active-label" style="font-family:var(--mono);font-size:11px;color:var(--mt)"></div>
-        <div class="ml" style="display:flex;gap:6px">
+        <div class="term-head-actions">
           <button class="btn btn-g" style="font-size:10px;padding:2px 10px" onclick="termNewTab()">+ New Tab</button>
           <button class="btn" style="font-size:10px;padding:2px 8px" onclick="termClearActive()">Clear</button>
           <button class="btn" style="font-size:10px;padding:2px 8px" onclick="termFitActive()">Fit</button>
@@ -1521,9 +1667,9 @@ canvas#mon-chart{width:100%;height:100%;display:block}
       <div id="dash">
         <div class="agv-hero">
           <div class="agv-hero-copy">
-            <div class="agv-hero-eyebrow"><span>🚀</span> AGV Learning Wizard</div>
+            <div class="agv-hero-eyebrow"><span>🚀</span> ROS Wizzard</div>
             <div class="dash-title">มาสร้างหุ่นยนต์นักสำรวจของเรากัน!</div>
-            <div class="dash-sub" id="dash-ros-sub">ผ่านภารกิจทั้ง 7 ด่าน ตั้งแต่ประกอบตัวหุ่นจนออกเดินทางได้ด้วยตัวเอง</div>
+            <div class="dash-sub" id="dash-ros-sub">ทำภารกิจตามลำดับ ตั้งแต่ประกอบตัวหุ่นจนออกเดินทางได้ด้วยตัวเอง</div>
             <div class="agv-hero-chips">
               <span class="agv-hero-chip">🧩 เรียนรู้ทีละด่าน</span>
               <span class="agv-hero-chip">⭐ เห็นความคืบหน้าทันที</span>
@@ -1540,7 +1686,7 @@ canvas#mon-chart{width:100%;height:100%;display:block}
 
         <div>
           <div class="project-overview">
-            <div class="agv-section-heading"><span class="icon">🗺️</span><div>แผนที่ภารกิจ 7 ด่าน<small>เลือกด่านที่สนใจ เพื่อดูเป้าหมาย คำใบ้ และเครื่องมือช่วย</small></div><span class="agv-mission-count" id="agv-mission-count">0 / 7 สำเร็จ</span></div>
+            <div class="agv-section-heading"><span class="icon">🗺️</span><div>แผนที่ภารกิจ ROS 2<small>จำนวนด่านจะปรับตามหุ่นจำลองหรือหุ่นยนต์จริงที่เชื่อมต่อ</small></div><span class="agv-mission-count" id="agv-mission-count">0 / 0 สำเร็จ</span></div>
             <div class="project-overview-head">
               <div class="agv-progress-panel">
                 <div class="agv-progress-label"><span>พลังความพร้อมของหุ่นยนต์</span><strong id="agv-progress-percent">0%</strong></div>
@@ -1569,6 +1715,86 @@ canvas#mon-chart{width:100%;height:100%;display:block}
           <div class="agv-detail" id="agv-wizard-detail"></div>
         </div>
       </div>
+      <div class="agv-mission-modal hidden" id="real-teleop-modal" role="dialog" aria-modal="true" aria-labelledby="real-teleop-title" onclick="if(event.target===this)closeRealRobotTeleop()">
+        <div class="agv-mission-dialog real-teleop-dialog">
+          <div class="agv-mission-modal-head">
+            <div class="agv-mission-modal-icon">🎮</div>
+            <div class="agv-mission-modal-heading"><strong id="real-teleop-title">ฝึกบังคับหุ่นยนต์จริง</strong><span>Controller · Keyboard · ODOM · LiDAR ในหน้าเดียว</span></div>
+            <button type="button" class="agv-mission-close" onclick="closeRealRobotTeleop()" aria-label="ปิดรีโมตและหยุดหุ่นยนต์">✕</button>
+          </div>
+          <div class="real-teleop-body"><div class="real-teleop-controls">
+            <div class="real-teleop-warning">⚠️ ตรวจพื้นที่รอบหุ่นให้โล่งก่อนเชื่อมต่อ และเตรียมกด Space หรือปุ่มหยุดฉุกเฉินได้ตลอดเวลา</div>
+            <section class="real-teleop-panel"><h3>🔌 Controller Serial</h3><div class="real-teleop-connect-grid"><select id="real-controller-port"><option value="">กำลังค้นหา COM port…</option></select><input id="real-controller-baud" type="number" value="115200" min="9600" aria-label="Controller baud rate"></div><div class="real-teleop-connect-actions"><button type="button" onclick="realTeleopRefreshPorts()">↻ ค้นหา</button><button type="button" onclick="realTeleopResetOdom()">⌖ Reset ODOM</button><button type="button" class="primary" id="real-controller-connect" onclick="realTeleopToggleController()">เชื่อมต่อ Controller</button></div><div class="real-teleop-connection-state" id="real-controller-state">ยังไม่เชื่อมต่อ</div></section>
+            <section class="real-teleop-panel"><h3>📡 LiDAR</h3><div class="real-teleop-connect-grid"><select id="real-lidar-model" onchange="realTeleopLidarModelChanged()"></select><select id="real-lidar-port" aria-label="LiDAR COM port"></select></div><div class="real-teleop-connect-actions"><button type="button" onclick="realTeleopRefreshPorts()">↻ COM port</button><button type="button" class="primary" id="real-lidar-connect" onclick="realTeleopToggleLidar()">เปิด LiDAR</button></div><div class="real-teleop-connection-state" id="real-lidar-state">ยังไม่เปิด /scan</div></section>
+            <section class="real-teleop-panel"><h3>🎮 บังคับหุ่นยนต์</h3><div class="real-teleop-pad" aria-label="ปุ่มทิศทางควบคุมหุ่นยนต์"><button type="button" class="real-teleop-btn" data-dir="fwd" aria-label="เดินหน้า"><small>W</small>▲</button><button type="button" class="real-teleop-btn" data-dir="left" aria-label="เลี้ยวซ้าย"><small>A</small>↶</button><button type="button" class="real-teleop-btn stop" id="real-teleop-stop" onclick="realTeleopStop('กดหยุดทันทีแล้ว — หุ่นยนต์หยุด')">■ หยุด<small>SPACE</small></button><button type="button" class="real-teleop-btn" data-dir="right" aria-label="เลี้ยวขวา"><small>D</small>↷</button><button type="button" class="real-teleop-btn" data-dir="back" aria-label="ถอยหลัง"><small>S</small>▼</button></div><div class="real-teleop-key-help"><kbd>W</kbd>/<kbd>↑</kbd> เดินหน้า · <kbd>S</kbd>/<kbd>↓</kbd> ถอย · <kbd>A</kbd>/<kbd>←</kbd> เลี้ยวซ้าย · <kbd>D</kbd>/<kbd>→</kbd> เลี้ยวขวา · <kbd>Space</kbd> หยุด</div><div class="real-teleop-status" id="real-teleop-status" role="status" aria-live="polite">เชื่อมต่อ Controller ก่อนเริ่มขับ</div><div class="real-teleop-speed"><label><span>ความเร็วเดินตรง <b id="real-teleop-linear-value">0.20 m/s</b></span><input id="real-teleop-linear" type="range" min="0.05" max="0.8" step="0.05" value="0.2" oninput="realTeleopApplySpeed()"></label><label><span>ความเร็วการเลี้ยว <b id="real-teleop-angular-value">0.80 rad/s</b></span><input id="real-teleop-angular" type="range" min="0.2" max="2" step="0.1" value="0.8" oninput="realTeleopApplySpeed()"></label></div></section>
+            <div class="real-teleop-odom"><div><small>ODOM X</small><b id="real-odom-x">NO DATA</b></div><div><small>ODOM Y</small><b id="real-odom-y">NO DATA</b></div><div><small>YAW</small><b id="real-odom-yaw">NO DATA</b></div><div><small>LINEAR</small><b id="real-odom-vx">NO DATA</b></div><div><small>ANGULAR</small><b id="real-odom-wz">NO DATA</b></div><div><small>MOTOR RPM</small><b id="real-rpm-state">NO DATA</b></div></div>
+          </div><div class="real-teleop-map-panel"><div class="real-teleop-map-head"><span id="real-map-scale">ODOM path · Auto scale</span><span id="real-map-lidar">LiDAR: NO DATA</span></div><canvas id="real-teleop-map"></canvas></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ REAL ROBOT LIDAR SETUP PAGE ══ -->
+    <div class="page" id="page-lidar">
+      <main class="lidar-page">
+        <header class="lidar-head">
+          <button type="button" class="lidar-back" onclick="switchPage('dashboard');loadDashboard(true)" aria-label="กลับ ROS Wizzard">←</button>
+          <div class="lidar-title"><div class="lidar-eyebrow">STEP 4 · REAL ROBOT</div><h1>ติดตั้งและทดสอบ LIDAR</h1><p>เลือกอุปกรณ์ให้ตรงรุ่น ติดตั้ง ROS 2 driver และตรวจข้อมูล LaserScan แบบ 2D ก่อนทำฮาร์ดแวร์ขั้นถัดไป</p></div>
+          <div class="lidar-workspace-chip"><span>📁</span><div>PACKAGE DESTINATION<b id="lidar-workspace">~/ros2_ws/src</b></div></div>
+        </header>
+        <div class="lidar-layout">
+          <section class="lidar-panel">
+            <div class="lidar-panel-head"><span class="lidar-panel-step">1</span><div><b>เลือกยี่ห้อและรุ่น</b><small>Driver และค่าเชื่อมต่อจะเปลี่ยนตามรุ่นที่เลือก</small></div></div>
+            <div class="lidar-config-body">
+              <div class="lidar-brand-tabs" id="lidar-brand-tabs"></div>
+              <div class="lidar-model-grid" id="lidar-model-grid"></div>
+              <div class="lidar-selection">
+                <h3 id="lidar-selected-name">SLAMTEC RPLIDAR A1</h3><p id="lidar-selected-detail">360° · USB</p>
+                <div class="lidar-specs">
+                  <div class="lidar-spec" style="grid-column:1/-1"><span>Driver repository</span><code id="lidar-repository">Slamtec/sllidar_ros2</code></div>
+                </div>
+                <div class="lidar-package-summary"><span class="lidar-package-dot checking" id="lidar-package-dot"></span><div><small>PACKAGE STATUS</small><b id="lidar-package-label">กำลังตรวจสอบ package…</b></div></div>
+                <div class="lidar-actions"><button type="button" class="lidar-install-button" id="lidar-install-button" onclick="lidarPrimaryAction()" disabled>กำลังตรวจสอบ…</button><button type="button" class="lidar-repo-button" onclick="lidarOpenRepository()" title="เปิด source repository">↗ GitHub</button></div>
+                <div class="lidar-install-status" id="lidar-install-status" role="status">กำลังอ่านข้อมูลจาก workspace และอุปกรณ์</div>
+                <div class="lidar-build-flow" id="lidar-build-flow">
+                  <div class="lidar-build-step" data-stage="driver"><i>1</i><span><b>Driver package</b><small>ตรวจหรือดาวน์โหลดลง workspace/src</small></span></div>
+                  <div class="lidar-build-step" data-stage="tools"><i>2</i><span><b>Build tools</b><small>git · cmake · compiler · colcon · rosdep</small></span></div>
+                  <div class="lidar-build-step" data-stage="dependencies"><i>3</i><span><b>ROS dependencies</b><small>rosdep update และติดตั้ง dependency</small></span></div>
+                  <div class="lidar-build-step" data-stage="build"><i>4</i><span><b>Colcon build</b><small>build driver และ roside_lidar_setup</small></span></div>
+                </div>
+                <details class="lidar-build-output hidden" id="lidar-build-output-wrap"><summary>ดูรายละเอียด Build</summary><pre id="lidar-build-output"></pre></details>
+              </div>
+            </div>
+          </section>
+          <section class="lidar-panel lidar-test">
+            <div class="lidar-panel-head"><span class="lidar-panel-step">2</span><div><b>พื้นที่ทดสอบ LaserScan 2D</b><small>อ่าน sensor_msgs/msg/LaserScan จาก topic จริงบนหุ่นยนต์</small></div></div>
+            <div class="lidar-test-toolbar">
+              <div class="lidar-live"><span class="lidar-live-dot" id="lidar-live-dot"></span><span id="lidar-live-label">WAITING /scan</span></div>
+              <label class="lidar-runtime-field"><span>COM PORT</span><div class="lidar-runtime-port"><select id="lidar-port-select" onchange="lidarPortChanged()"><option value="">กำลังตรวจสอบพอร์ต…</option></select><button type="button" onclick="lidarRefreshStatus()" title="ตรวจพอร์ตอีกครั้ง">↻</button></div></label>
+              <label class="lidar-runtime-field lidar-runtime-baud"><span>BAUDRATE</span><input id="lidar-baud-input" type="number" min="1200" max="4000000" step="1" value="115200" onchange="lidarBaudChanged()"></label>
+              <span class="lidar-port-state disconnected" id="lidar-port-state"><i></i> Disconnected</span><code class="lidar-topic">/scan</code>
+              <button type="button" class="lidar-scan-button" id="lidar-scan-button" onclick="lidarToggleScan()" hidden>▶ เชื่อมต่อและทดสอบ</button>
+              <small class="lidar-runtime-help" id="lidar-port-help">ติดตั้ง LIDAR package ก่อน จึงจะแสดงปุ่มเชื่อมต่อ</small>
+            </div>
+            <div class="lidar-plot"><canvas id="lidar-canvas" aria-label="กราฟจุด LaserScan แบบสองมิติ ซูมด้วยล้อเมาส์หรือสองนิ้ว"></canvas><div class="lidar-zoom-controls" aria-label="ควบคุมการซูมกราฟ LiDAR"><button type="button" onclick="lidarZoomBy(1/1.35)" title="ซูมออก">−</button><button type="button" class="lidar-zoom-value" id="lidar-zoom-value" onclick="lidarResetZoom()" title="รีเซ็ตการซูม">1.0×</button><button type="button" onclick="lidarZoomBy(1.35)" title="ซูมเข้า">+</button></div><div class="lidar-plot-message" id="lidar-plot-message">เปิด driver ของ LIDAR แล้วกด “เริ่มอ่าน /scan”</div></div>
+            <div class="lidar-stats">
+              <div class="lidar-stat"><span>Valid points</span><b id="lidar-stat-points">0</b></div><div class="lidar-stat"><span>Nearest</span><b id="lidar-stat-nearest">—</b></div><div class="lidar-stat"><span>Scan rate</span><b id="lidar-stat-rate">—</b></div><div class="lidar-stat"><span>Interval</span><b id="lidar-stat-interval">—</b></div><div class="lidar-stat"><span>Max range</span><b id="lidar-stat-range">—</b></div>
+            </div>
+            <section class="lidar-diagnostics" aria-label="LIDAR Driver Console">
+              <div class="lidar-diagnostics-head"><div><b>Driver Console</b><small>ตรวจการเชื่อมต่อและดู command/log จากหุ่นยนต์จริง</small></div><div><button type="button" onclick="lidarRefreshDriverStatus()">↻ ตรวจใหม่</button><button type="button" onclick="lidarCopyDiagnostics()">⧉ คัดลอก Log</button></div></div>
+              <div class="lidar-diagnostic-grid">
+                <div class="lidar-diagnostic-check checking" data-check="port"><i>1</i><span><b>USB / COM port</b><small>กำลังรอตรวจสอบ</small></span></div>
+                <div class="lidar-diagnostic-check checking" data-check="process"><i>2</i><span><b>Driver process</b><small>ยังไม่ได้เริ่ม driver</small></span></div>
+                <div class="lidar-diagnostic-check checking" data-check="topic"><i>3</i><span><b>Topic /scan</b><small>กำลังรอ publisher</small></span></div>
+                <div class="lidar-diagnostic-check checking" data-check="data"><i>4</i><span><b>LaserScan data</b><small>ยังไม่ได้รับข้อมูล</small></span></div>
+              </div>
+              <div class="lidar-command-log"><div><span>LAUNCH</span><code id="lidar-launch-command">ros2 launch sllidar_ros2 sllidar_a1_launch.py serial_port:=/dev/ttyUSB0 serial_baudrate:=115200</code></div><div><span>TEST</span><code id="lidar-test-command">ros2 topic echo --once /scan sensor_msgs/msg/LaserScan --qos-reliability best_effort</code></div></div>
+              <div class="lidar-diagnostic-hint" id="lidar-diagnostic-hint">กด “เชื่อมต่อและทดสอบ” ระบบจะเปิด Driver และตรวจทุกขั้นตอนให้อัตโนมัติ</div>
+              <details class="lidar-runtime-log" open><summary>Command output / Driver log</summary><pre id="lidar-runtime-log">ยังไม่มี log</pre></details>
+            </section>
+            <div class="lidar-help"><div><b>1. ต่ออุปกรณ์</b><br>เลือกพอร์ตและ baudrate ใกล้ปุ่มเชื่อมต่อ</div><div><b>2. เชื่อมต่อได้อิสระ</b><br>เปิด Driver package โดยตรง ไม่บังคับ Build ใหม่</div><div><b>3. ตรวจผล</b><br>จุดสีเขียวคือสิ่งกีดขวางที่ LIDAR วัดได้จริง</div></div>
+          </section>
+        </div>
+      </main>
     </div>
 
     <!-- ══ STATUS PAGE ══ -->
@@ -1733,38 +1959,40 @@ canvas#mon-chart{width:100%;height:100%;display:block}
     <!-- ══ FLOW EDITOR PAGE ══ -->
     <div class="page" id="page-flow" style="flex-direction:column">
       <div id="flow-bar">
-        <div style="display:flex;align-items:center;gap:8px;width:100%;flex-wrap:wrap">
-          <span class="flow-pkg-badge">✦ Flow</span>
+        <div class="flow-kid-toolbar">
+          <span class="flow-kid-brand"><span>🤖</span> โปรแกรมหุ่นของฉัน</span>
 
-          <div style="display:flex;align-items:center;gap:4px">
+          <div class="flow-kid-field"><label>1 · PACKAGE</label>
             <select id="flow-pkg-sel" class="insp-select" style="width:155px" onchange="flowChangePkg()">
-              <option value="">— package —</option>
+              <option value="">— เลือก Package —</option>
             </select>
           </div>
 
-          <div style="display:flex;align-items:center;gap:4px">
+          <div class="flow-kid-field"><label>2 · ไฟล์โปรแกรม</label><div style="display:flex;align-items:center;gap:4px">
             <select id="flow-file-sel" class="insp-select" style="width:160px" onchange="flowChangeFile()" disabled>
               <option value="">— เลือกไฟล์ —</option>
             </select>
-            <button class="flow-btn" style="padding:4px 10px;font-size:11px" id="btn-flow-newfile" onclick="flowNewFileDialog()" disabled title="สร้างไฟล์ใหม่">+ File</button>
-          </div>
+            <button class="flow-btn" style="height:38px" id="btn-flow-newfile" onclick="flowNewFileDialog()" disabled title="สร้างไฟล์ใหม่">＋ ไฟล์</button>
+          </div></div>
 
-          <div style="display:flex;align-items:center;gap:5px">
-            <span style="font-size:11px;color:var(--mt);white-space:nowrap">exe name:</span>
-            <input id="flow-exe-name" class="insp-input" type="text" style="width:130px;padding:4px 8px;font-size:11px"
+          <div hidden>
+            <input id="flow-exe-name" type="text"
               placeholder="my_controller" title="ชื่อที่ใช้ ros2 run <pkg> <exe_name>"
               oninput="flowExeChanged()"/>
           </div>
 
-          <div style="margin-left:auto;display:flex;gap:5px;align-items:center">
-            <button class="flow-btn" onclick="flowClear()" title="ล้าง canvas">🗑</button>
-            <button class="flow-btn" onclick="flowAutoLayout()" title="Auto layout">⚡</button>
-            <button class="flow-btn" onclick="flowExport()" title="Export flow เป็น JSON">📤</button>
-            <button class="flow-btn" onclick="flowImport()" title="Import flow จาก JSON">📥</button>
-            <button class="flow-btn" onclick="flowShowTutorial()">❓</button>
-            <button class="flow-btn primary" onclick="flowGenCode()">⚙ Generate</button>
-            <button class="flow-btn success" id="btn-flow-save" onclick="flowSaveAndBuild()" disabled>💾 Save &amp; Build</button>
+          <div class="flow-kid-actions">
+            <button class="flow-btn" onclick="flowAutoLayout()" title="จัดบล็อกให้อัตโนมัติ">✨ จัดบล็อก</button>
+            <button class="flow-btn primary" onclick="flowGenCode()">🐍 ดูโค้ด</button>
+            <button class="flow-btn success" id="btn-flow-save" onclick="flowSaveAndBuild()" disabled>▶ สร้างโปรแกรม</button>
           </div>
+        </div>
+        <div class="flow-start-strip">
+          <span class="flow-start-title">🐍 Custom ROS 2 Package</span>
+          <span class="flow-start-step"><b>1</b> สร้าง Package</span>
+          <span class="flow-start-step"><b>2</b> เพิ่มและเชื่อม Block</span>
+          <span class="flow-start-step"><b>3</b> ใส่ Python แล้ว Build</span>
+          <span class="flow-start-actions"><button class="flow-btn hero" id="btn-flow-wizard-main" type="button" onclick="flowOpenQuickPackage()">＋ สร้าง Package ใหม่</button><button class="flow-btn code" type="button" onclick="flowQuickPythonBlock()">🐍 เพิ่ม Python Block</button></span>
         </div>
         <div id="flow-status-hint" style="width:100%;font-size:10px;color:var(--dim);padding-top:2px;display:none"></div>
       </div>
@@ -1772,9 +2000,9 @@ canvas#mon-chart{width:100%;height:100%;display:block}
       <div id="flow-body">
         <div id="flow-canvas-wrap" ondragover="event.preventDefault()" ondrop="canvasDrop(event)" onmousedown="canvasPanStart(event)" onwheel="canvasZoom(event)">
           <div id="flow-empty">
-            <div class="flow-empty-icon">🤖</div>
-            <div class="flow-empty-text">ลากบล็อกจาก sidebar มาวางที่นี่</div>
-            <div class="flow-empty-sub">หรือคลิกที่บล็อกใน sidebar เพื่อเพิ่มทันที</div>
+            <div class="flow-empty-icon">🧩</div>
+            <div class="flow-empty-text">แตะกล่องคำสั่งทางซ้ายได้เลย</div>
+            <div class="flow-empty-sub">เริ่มง่ายๆ ด้วย ทำซ้ำ → เขียน Python → แสดงข้อความ</div>
           </div>
           <svg id="flow-svg">
             <defs>
@@ -1784,20 +2012,12 @@ canvas#mon-chart{width:100%;height:100%;display:block}
             </defs>
           </svg>
           <div id="flow-nodes"></div>
-          <div id="flow-tutorial">
-            <h4>🎓 วิธีใช้ Flow Editor</h4>
-            <div class="tut-step"><div class="tut-num">1</div><span>ลากบล็อกจาก sidebar ซ้ายมาวาง</span></div>
-            <div class="tut-step"><div class="tut-num">2</div><span>ลากเส้นจากจุดวงกลม (port) เพื่อเชื่อม</span></div>
-            <div class="tut-step"><div class="tut-num">3</div><span>คลิก node เพื่อแก้ค่าใน Inspector ขวา</span></div>
-            <div class="tut-step"><div class="tut-num">4</div><span>กด Generate Code แล้ว Save &amp; Build</span></div>
-            <span id="close-tut" onclick="document.getElementById('flow-tutorial').style.display='none'">✕ ปิด</span>
-          </div>
         </div>
 
         <div id="flow-inspector">
           <div id="insp-scroll">
             <div id="insp-content">
-              <div style="color:var(--dim);font-size:12px;text-align:center;padding:20px 0">คลิก node เพื่อแก้ไขค่า</div>
+              <div style="color:var(--dim);font-size:12px;text-align:center;padding:24px 10px">👈 แตะ Block ที่วางไว้<br><small>แล้วตั้งค่าได้ตรงนี้</small></div>
             </div>
           </div>
         </div>
@@ -1851,21 +2071,79 @@ canvas#mon-chart{width:100%;height:100%;display:block}
       </div>
     </div>
 
+    <!-- ══ ROBOT PLAYGROUND — kid-friendly RViz simulation ══ -->
+    <div class="page" id="page-playground" data-simulation-only>
+      <header class="pg-head">
+        <div class="pg-mascot">🤖</div><div><div class="pg-title">Robot Playground — Drive, Map & Navigate</div><div class="pg-sub">ฝึกควบคุม สร้างแผนที่ หรือส่งหุ่นยนต์ไปยังจุดหมาย</div></div>
+        <div class="pg-mode-switch" role="tablist" aria-label="เลือกโหมด"><button class="pg-mode-btn" data-mode="control" onclick="playgroundSetMode('control')">🎮 ฝึกขับ</button><button class="pg-mode-btn active" data-mode="mapping" onclick="playgroundSetMode('mapping')">🗺 เก็บแผนที่</button><button class="pg-mode-btn" data-mode="navigation" onclick="playgroundSetMode('navigation')">🚩 Navigation</button></div>
+        <div class="pg-head-actions"><button class="pg-btn secondary" onclick="switchPage('map')">✏️ แก้ไขโลก</button><button class="pg-btn secondary" onclick="switchPage('rviz')">🖥 RViz</button><button id="pg-start-btn" class="pg-btn primary" onclick="playgroundPrimaryAction()">▶ เริ่มเก็บ Map</button></div>
+      </header>
+      <div class="pg-body">
+        <aside class="pg-side">
+          <div class="pg-card"><h3>🗺 แผนที่ของฉัน</h3><div class="pg-map-line"><span>ขนาดห้อง</span><b id="pg-map-size">—</b></div><div class="pg-map-line"><span>จุดเริ่มหุ่น</span><b id="pg-map-start">—</b></div><div class="pg-map-line"><span>สิ่งของ</span><b id="pg-map-objects">—</b></div></div>
+          <div class="pg-card"><h3>🚦 สถานะภารกิจ</h3><div id="pg-status" class="pg-status">กด “เริ่มโลกจำลอง” เพื่อโหลด Map และ Robot</div></div>
+          <div class="pg-card pg-mode-hidden" data-pg-mode="control"><h3>🎮 วิธีฝึกขับหุ่น</h3><div class="pg-steps"><div class="pg-step"><span>1</span>กดเปิดสนามฝึกขับ</div><div class="pg-step"><span>2</span>กดปุ่มทิศทางค้างเพื่อเคลื่อนที่</div><div class="pg-step"><span>3</span>ปล่อยปุ่มแล้วหุ่นจะหยุดทันที</div></div></div>
+          <div class="pg-card pg-slam-card" data-pg-mode="mapping"><h3>🧭 พื้นที่ที่ค้นพบ <b id="pg-slam-percent">0%</b></h3><div class="pg-progress"><i id="pg-slam-progress"></i></div><small>ขับให้ Laser กวาดพื้นที่สีเทาจนเป็นแผนที่</small></div>
+          <div class="pg-card pg-mode-hidden" data-pg-mode="navigation"><h3>🗺 เลือก Saved Map</h3><div class="pg-map-picker"><select id="pg-nav-map-select" onchange="playgroundSelectNavMap(this.value)" aria-label="เลือกแผนที่ Navigation"><option value="">— ยังไม่ได้เลือกแผนที่ —</option></select><button class="pg-map-refresh" onclick="playgroundLoadNavMaps()" title="ค้นหาแผนที่ใหม่">↻</button></div><div class="pg-ready-head"><span>ความพร้อมของระบบ</span><b id="pg-nav-ready-badge" class="pg-ready-badge">ยังไม่พร้อม</b></div><div id="pg-nav-checks" class="pg-checks"></div><div id="pg-nav-error" class="pg-nav-error">⚠️ กรุณาเลือก Saved Map ก่อนเริ่ม Navigation</div><details class="pg-tune"><summary>⌨️ ระบบต้องรันอะไรบ้าง?</summary><div class="pg-command-help">1. ros2 run sim_robot_mapsim mapsim<br>2. /map + /scan + /tf + /odom<br>3. ส่งเป้าหมายไปที่ /goal_pose<br><br>ปุ่ม “เริ่ม Navigation” จะทำข้อ 1–2 ให้อัตโนมัติ</div></details></div>
+          <div class="pg-card pg-nav-card pg-mode-hidden" data-pg-mode="navigation"><h3>🚩 ภารกิจ Navigation</h3><div class="pg-nav-distance"><span id="pg-nav-distance">—</span> <small>เมตร</small></div><div class="pg-save-result" id="pg-nav-help">กด “ตั้งจุดหมาย” แล้วลากลูกศรบนแผนที่</div></div>
+          <div class="pg-card pg-mode-hidden" data-pg-mode="navigation"><h3>📦 Navigation Package</h3><div id="pg-nav-package-status" class="pg-save-result">เมื่อเข้าโหมดนี้ ระบบจะสร้าง ~/src/mecha_rayong_nav อัตโนมัติ</div><button class="pg-export-nav" style="margin-top:8px" onclick="playgroundOpenNavExport()">⬇ ดาวน์โหลด ROS Project ทั้งหมด</button><div class="pg-save-result">รวม src ทุก package, Maps, Robot Config, Installer และคู่มือติดตั้งไว้ใน ZIP</div></div>
+          <div class="pg-card"><h3>🧩 Layers</h3><div class="pg-layers"><label><input type="checkbox" checked onchange="playgroundToggleLayer('Environment',this.checked)"><span>🏠 โลก 3D</span></label><label><input type="checkbox" checked onchange="playgroundToggleLayer('Map',this.checked)"><span id="pg-map-layer-label">🗺 SLAM Map</span></label><label><input type="checkbox" checked onchange="playgroundToggleLayer('RobotModel',this.checked)"><span>🤖 Robot</span></label><label><input type="checkbox" checked onchange="playgroundToggleLayer('LaserScan',this.checked)"><span>✨ Laser</span></label><label><input type="checkbox" checked onchange="playgroundToggleLayer('Odometry',this.checked)"><span>➰ Trail</span></label><label class="pg-mode-hidden" data-pg-mode="navigation"><input type="checkbox" checked onchange="playgroundToggleLayer('Path',this.checked)"><span>🟢 A* Path</span></label><label><input type="checkbox" onchange="playgroundToggleLayer('TF',this.checked)"><span>📐 TF Frames</span></label></div></div>
+          <div class="pg-card" data-pg-mode="mapping"><h3>💾 บันทึกไปใช้กับ Navigation</h3><input id="pg-map-name" class="pg-map-name" value="my_slam_map" maxlength="40" aria-label="ชื่อแผนที่"><button id="pg-save-map-btn" class="pg-save-map" onclick="playgroundSaveSlamMap()" disabled>💾 Save Map สำหรับ Nav2</button><div id="pg-save-result" class="pg-save-result">ได้ไฟล์ PGM, YAML และ ROS 2 package</div></div>
+          <div class="pg-card" data-pg-mode="mapping"><h3>✨ วิธีเก็บ Map</h3><div class="pg-steps"><div class="pg-step"><span>1</span>กดเริ่มเก็บ Map</div><div class="pg-step"><span>2</span>กดค้างเพื่อขับสำรวจทุกมุม</div><div class="pg-step"><span>3</span>ดูพื้นที่ค้นพบและ Layers</div><div class="pg-step"><span>4</span>Save Map เมื่องานเสร็จ</div></div></div>
+          <div class="pg-card" data-pg-mode="mapping control"><h3>⚡ ความเร็วขับเอง</h3><input id="pg-speed" class="pg-speed" type="range" min="0.1" max="2" step="0.1" value="0.6" oninput="playgroundSetSpeed(this.value)"><div class="pg-map-line"><span>ความเร็ว</span><b><span id="pg-speed-value">0.6</span> m/s</b></div></div>
+          <div class="pg-card pg-mode-hidden" data-pg-mode="navigation"><h3>🎛 บุคลิกการขับ</h3><div class="pg-preset-grid"><button class="pg-preset" data-preset="safe" onclick="playgroundNavPreset('safe',this)">🐢 ปลอดภัย</button><button class="pg-preset active" data-preset="balanced" onclick="playgroundNavPreset('balanced',this)">🙂 สมดุล</button><button class="pg-preset" data-preset="sport" onclick="playgroundNavPreset('sport',this)">🚀 คล่องตัว</button></div><details class="pg-tune"><summary>⚙️ ตั้งค่าขั้นสูง</summary><div class="pg-param"><label>ความเร็วสูงสุด <b><span id="pg-nav-speed-value">0.55</span> m/s</b></label><input id="pg-nav-speed" type="range" min="0.15" max="1.2" step="0.05" value="0.55" oninput="playgroundTuneLabel()"></div><div class="pg-param"><label>ระยะหยุดหน้าอุปสรรค <b><span id="pg-nav-obstacle-value">0.48</span> m</b></label><input id="pg-nav-obstacle" type="range" min="0.3" max="1.0" step="0.02" value="0.48" oninput="playgroundTuneLabel()"></div><div class="pg-param"><label>ระยะเผื่อรอบกำแพง <b><span id="pg-nav-inflation-value">0.28</span> m</b></label><input id="pg-nav-inflation" type="range" min="0.10" max="0.60" step="0.02" value="0.28" oninput="playgroundTuneLabel()"></div><div class="pg-param"><label>มองไกลตามเส้นทาง <b><span id="pg-nav-lookahead-value">0.45</span> m</b></label><input id="pg-nav-lookahead" type="range" min="0.20" max="0.90" step="0.05" value="0.45" oninput="playgroundTuneLabel()"></div><div class="pg-param"><label>ความแม่นยำถึงเป้า <b><span id="pg-nav-tolerance-value">0.20</span> m</b></label><input id="pg-nav-tolerance" type="range" min="0.08" max="0.5" step="0.02" value="0.20" oninput="playgroundTuneLabel()"></div><button class="pg-apply" onclick="playgroundApplyNavParams()">✓ ใช้ค่าและวางแผนเส้นทางใหม่</button></details></div>
+        </aside>
+        <main class="pg-stage">
+          <div id="playground-view-host"></div>
+          <div class="pg-hud"><span class="pg-chip">🟢 Fixed Frame: map</span><span class="pg-chip" id="pg-live-chip">กำลังรอเริ่ม</span></div>
+          <div class="pg-drive" data-pg-mode="mapping control"><div class="pg-drive-title">🎮 กดค้างเพื่อขับ • ปล่อยเพื่อหยุด</div><div class="pg-drive-grid"><button class="pg-drive-btn" data-dir="fwd">▲</button><button class="pg-drive-btn" data-dir="left">↺</button><button class="pg-drive-btn" data-dir="back">▼</button><button class="pg-drive-btn" data-dir="right">↻</button><button class="pg-stop" onclick="playgroundStopRobot()">■ หยุด</button></div></div>
+          <div class="pg-nav-tools pg-mode-hidden" data-pg-mode="navigation"><h3>🧭 สั่งหุ่นยนต์ไปไหนดี?</h3><button class="pg-nav-tool pose" onclick="playgroundPickPose('initialpose')">📍 ตั้งตำแหน่งเริ่มต้น</button><button class="pg-nav-tool goal" onclick="playgroundPickPose('goal')">🚩 ตั้งจุดหมาย</button><button class="pg-nav-tool cancel" onclick="playgroundCancelNavigation()">■ ยกเลิกภารกิจ</button><div class="pg-nav-tip">คลิกค้างแล้วลากลูกศร<br>เพื่อเลือกตำแหน่งและทิศทาง</div></div>
+        </main>
+      </div>
+    </div>
+
     <!-- ══ RVIZ 3D PAGE ══ -->
     <div class="page" id="page-rviz">
-
-      <!-- ── Top bar ── -->
-      
-      <div style="flex:1;display:flex;overflow:hidden">
+      <div class="rviz-menubar" role="menubar" aria-label="RViz menu">
+        <div class="rviz-menu-wrap"><button class="rviz-menu-item" onclick="rvizToggleMenu(this,event)">File</button><div class="rviz-menu-popup">
+          <div class="rviz-menu-row" onclick="rvizResetConfiguration()">New Config <span class="shortcut">Ctrl+N</span></div>
+          <div class="rviz-menu-row" onclick="rvizOpenConfiguration()">Open Config <span class="shortcut">Ctrl+O</span></div>
+          <div class="rviz-menu-row" onclick="rvizSaveConfiguration()">Save Config <span class="shortcut">Ctrl+S</span></div>
+          <div class="rviz-menu-row" onclick="rvizSaveImage()">Save Image <span class="shortcut">Ctrl+Shift+S</span></div><div class="rviz-menu-sep"></div>
+          <div class="rviz-menu-row" onclick="switchPage('dashboard')">Quit RViz <span class="shortcut">Ctrl+Q</span></div>
+        </div></div>
+        <div class="rviz-menu-wrap"><button class="rviz-menu-item" onclick="rvizToggleMenu(this,event)">Panels</button><div class="rviz-menu-popup">
+          <div class="rviz-menu-row" onclick="rvizToggleDock('rviz-panel')">✓ Displays</div><div class="rviz-menu-row" onclick="rvizToggleDock('rviz-views-panel')">✓ Views / Tool Properties</div><div class="rviz-menu-row" onclick="rvizToggleTimePanel()">✓ Time</div><div class="rviz-menu-sep"></div><div class="rviz-menu-row" onclick="rvizShowDocks()">Show All Panels</div>
+        </div></div>
+        <div class="rviz-menu-wrap"><button class="rviz-menu-item" onclick="rvizToggleMenu(this,event)">Help</button><div class="rviz-menu-popup"><div class="rviz-menu-row" onclick="sbMsg('RViz Web — Mecha Rayong Learning Workspace')">About RViz Web</div></div></div>
+      </div>
+      <div class="rviz-desktop-toolbar" role="toolbar" aria-label="RViz tools">
+        <button class="rviz-tool rviz-mobile-panel-toggle" style="display:none" onclick="document.getElementById('page-rviz').classList.toggle('rviz-panel-open')" title="Displays panel"><span class="rviz-tool-icon">☰</span></button>
+        <button class="rviz-tool active" data-rviz-tool="interact" onclick="rvizActivateTool('interact',this)" title="Interact (I)"><span class="rviz-tool-icon blue">➤</span><span class="rviz-tool-label">Interact</span></button>
+        <button class="rviz-tool" data-rviz-tool="move" onclick="rvizActivateTool('move',this)" title="Move Camera (M)"><span class="rviz-tool-icon">✥</span><span class="rviz-tool-label">Move Camera</span></button>
+        <button class="rviz-tool" data-rviz-tool="select" onclick="rvizActivateTool('select',this)" title="Select (S)"><span class="rviz-tool-icon">▱</span><span class="rviz-tool-label">Select</span></button>
+        <button class="rviz-tool" data-rviz-tool="focus" onclick="rvizActivateTool('focus',this)" title="Focus Camera (F)"><span class="rviz-tool-icon blue">◎</span><span class="rviz-tool-label">Focus Camera</span></button>
+        <button class="rviz-tool" data-rviz-tool="measure" onclick="rvizActivateTool('measure',this)" title="Measure"><span class="rviz-tool-icon">⌁</span><span class="rviz-tool-label">Measure</span></button>
+        <button class="rviz-tool" onclick="rvizClear()" title="Clear visualization history"><span class="rviz-tool-icon red">⌫</span><span class="rviz-tool-label">Clear</span></button>
+        <span class="rviz-tool-sep"></span>
+        <button class="rviz-tool" data-rviz-tool="initialpose" onclick="rvizActivateTool('initialpose',this)" title="2D Pose Estimate (P)"><span class="rviz-tool-icon green">↗</span><span class="rviz-tool-label">2D Pose Estimate</span></button>
+        <button class="rviz-tool" data-rviz-tool="goal" onclick="rvizActivateTool('goal',this)" title="2D Goal Pose (G)"><span class="rviz-tool-icon red">➜</span><span class="rviz-tool-label">2D Goal Pose</span></button>
+        <button class="rviz-tool" data-rviz-tool="point" onclick="rvizActivateTool('point',this)" title="Publish Point"><span class="rviz-tool-icon blue">●</span><span class="rviz-tool-label">Publish Point</span></button>
+        <button class="rviz-tool" onclick="rvizTeleopToggle()" title="Teleop /cmd_vel"><span class="rviz-tool-icon green">✣</span><span class="rviz-tool-label">Teleop</span></button>
+        <span class="rviz-tool-spacer"></span><label class="rviz-frame-tool">Fixed Frame <select id="rviz-toolbar-frame" onchange="rvizSetFixedFrame(this.value)"><option>odom</option><option>map</option><option>base_link</option></select></label><span id="rviz-fps" class="rviz-status-value">—</span>
+        <button class="rviz-connect-tool" id="btn-rviz-connect" onclick="rvizConnect()" disabled>▶ Connect</button>
+      </div>
+      <div class="rviz-desktop-body">
 
         <!-- ── Left panel ── -->
-        <div id="rviz-panel">
+        <aside id="rviz-panel" class="rviz-dock" aria-label="Displays">
+          <div class="rviz-dock-title"><span>Displays</span><button class="rviz-dock-mini" onclick="rvizToggleDockSize('rviz-panel')" title="Maximize panel">□</button><button class="rviz-dock-mini" onclick="rvizToggleDock('rviz-panel')" title="Close panel">×</button></div>
 
           <!-- Global Options -->
           <div class="rviz-disp open" id="rd-global" style="flex-shrink:0">
             <div class="rviz-disp-head" onclick="this.parentElement.classList.toggle('open')">
               <span class="rviz-disp-arrow">▾</span>
-              <span class="rviz-disp-icon">⚙️</span>
+              <span class="rviz-disp-icon">◆</span>
               <span class="rviz-disp-name">Global Options</span>
             </div>
             <div class="rviz-disp-body">
@@ -1882,68 +2160,38 @@ canvas#mon-chart{width:100%;height:100%;display:block}
                 </div>
               </div>
               <div class="rviz-prop">
-                <span>Frame (current)</span>
-                <span id="rviz-fixed-frame-display" style="color:var(--acc);font-size:11px;font-family:var(--mono)">odom</span>
+                <span>Frame Rate</span><span>30</span>
               </div>
               <div class="rviz-prop">
-                <span>Background</span>
+                <span>Background Color</span>
                 <input type="color" value="#1e1e1e" class="rviz-val"
                   onchange="rviz3d.renderer&amp;&amp;rviz3d.renderer.setClearColor(this.value,1)"/>
               </div>
+              <span id="rviz-fixed-frame-display" style="display:none">odom</span>
             </div>
           </div>
 
-          <!-- Displays header -->
-          <div class="rviz-panel-header" style="display:flex;justify-content:space-between;align-items:center">
-            <span>Displays</span>
-            <div style="display:flex;gap:4px">
-              <button class="btn" style="padding:1px 8px;font-size:10px" onclick="rvizShowAddDialog()">＋ Add</button>
-            </div>
+          <div id="rviz-display-list"></div>
+          <div class="rviz-dock-actions">
+            <button class="rviz-dock-btn" onclick="rvizShowAddDialog()">Add</button>
+            <button class="rviz-dock-btn" onclick="rvizRenderPanel()">Refresh</button>
           </div>
-
-          <!-- Dynamic display list -->
-          <div id="rviz-display-list" style="flex:1;overflow-y:auto"></div>
-
-          <!-- Stats footer -->
-          <div id="rviz-stats" style="padding:8px 12px;border-top:1px solid var(--brd);font-size:10px;
-            font-family:var(--mono);color:var(--dim);line-height:1.7;background:var(--bg1);flex-shrink:0">
-            <div>Pos: <span id="rv-pos" style="color:var(--acc)">—</span></div>
-            <div>Yaw: <span id="rv-yaw" style="color:var(--acc)">—</span></div>
-            <div>Scan pts: <span id="rv-scan-pts" style="color:var(--acc)">—</span></div>
-          </div>
-        </div>
+        </aside>
 
         <!-- ── 3D Viewport ── -->
+        <span id="rviz-viewport-anchor" hidden></span>
         <div id="rviz-viewport">
           <div id="rviz-3d-container" style="position:absolute;inset:0"></div>
-          
-          <div class="rviz-status-bar">
-            <span style="font-size:12px;font-weight:600;color:var(--pur);margin-right:2px;">🖥 RViz</span>
-            <button class="btn btn-g" id="btn-rviz-connect" style="padding:4px 10px;font-size:11px" onclick="rvizConnect()" disabled>▶ Connect</button>
-            <div style="width:1px;height:14px;background:rgba(255,255,255,0.2);margin:0 4px;"></div>
-            <span id="rviz-conn-badge" class="badge br" style="background:transparent;border:none"><span class="dot dr"></span>Disconnected</span>
-            <span id="rviz-fps" class="badge bx" style="background:transparent;border:none;font-family:var(--mono);color:rgba(255,255,255,0.6)">—</span>
-          </div>
-
-          
+          <div id="rviz-tool-readout" class="rviz-tool-readout"></div>
           
           <div class="rviz-cam-hint">
-            <b>Left drag:</b> Orbit &nbsp;|&nbsp; <b>Right/Middle drag:</b> Pan &nbsp;|&nbsp; <b>Scroll:</b> Zoom
-          </div>
-          
-          <div class="rviz-view-controls">
-            <button class="rv-vc-btn" onclick="rvizSetView('top')" title="Top View">⬛ Top</button>
-            <button class="rv-vc-btn" onclick="rvizSetView('front')" title="Front View">◻ Front</button>
-            <button class="rv-vc-btn" onclick="rvizResetView()" title="3D View">⊙ 3D</button>
-            <div style="width:1px;height:14px;background:rgba(255,255,255,0.2);margin:0 4px;"></div>
-            <button class="rv-vc-btn" onclick="rvizTeleopToggle()" title="แผงควบคุม cmd_vel">🕹 Teleop</button>
-            <button class="rv-vc-btn" onclick="rvizClear()" title="Clear history" style="color:var(--red)">🗑 Clear</button>
+            Left drag: Orbit &nbsp; · &nbsp; Middle/Right drag: Pan &nbsp; · &nbsp; Wheel: Zoom
           </div>
 
           <!-- ── Teleop control panel (cmd_vel) ── -->
           <div id="rviz-teleop" class="rviz-teleop">
             <div id="rviz-teleop-handle" class="rviz-teleop-handle">
-              <span style="display:flex;align-items:center;gap:6px">🕹 <b>Teleop</b></span>
+              <span style="display:flex;align-items:center;gap:6px">🕹 <b>Teleop</b> <small style="opacity:.65">กดค้าง • ปล่อยเพื่อหยุด</small></span>
               <span style="display:flex;align-items:center;gap:6px">
                 <span class="rviz-teleop-state" id="rviz-teleop-state">stopped</span>
                 <button class="rviz-teleop-x" onclick="rvizTeleopToggle()" title="ซ่อนแผง">✕</button>
@@ -1969,36 +2217,77 @@ canvas#mon-chart{width:100%;height:100%;display:block}
                 <input id="rviz-teleop-ang" type="range" min="0.1" max="6" step="0.1" value="2" class="rviz-teleop-range" />
               </div>
               <div class="rviz-teleop-row">
-                <label>ความฉับไว <span id="rviz-teleop-accval">8</span> <span style="opacity:.6">(สมูท ↔ ฉับไว)</span></label>
-                <input id="rviz-teleop-acc" type="range" min="2" max="20" step="1" value="8" class="rviz-teleop-range" />
+                <label>ความฉับไว <span id="rviz-teleop-accval">20</span> <span style="opacity:.6">(สมูท ↔ ฉับไว)</span></label>
+                <input id="rviz-teleop-acc" type="range" min="2" max="30" step="1" value="20" class="rviz-teleop-range" />
               </div>
               <button class="rv-tp-stop" onclick="rvizTeleopStop()">⏹ หยุด (Stop)</button>
             </div>
           </div>
         </div>
-
+        <aside id="rviz-views-panel" class="rviz-dock" aria-label="Views">
+          <div class="rviz-dock-title"><span>Views</span><button class="rviz-dock-mini" onclick="rvizToggleDockSize('rviz-views-panel')" title="Maximize panel">□</button><button class="rviz-dock-mini" onclick="rvizToggleDock('rviz-views-panel')" title="Close panel">×</button></div>
+          <div class="rviz-view-tree">
+            <div class="rviz-view-section">
+              <div class="rviz-view-head"><span>▾</span><span style="color:#70b8de">◉</span><span>Current View</span></div>
+              <div class="rviz-view-props">
+                <div class="rviz-view-prop"><span>Class</span><span>Orbit</span></div>
+                <div class="rviz-view-prop"><span>Distance</span><input value="8.0" type="number" step="0.5" onchange="rvizCam.radius=Math.max(.3,+this.value||8)"></div>
+                <div class="rviz-view-prop"><span>Focal Point</span><span>0; 0; 0</span></div>
+                <div class="rviz-view-prop"><span>Near Clip</span><span>0.01</span></div>
+                <div class="rviz-view-prop"><span>Target Frame</span><span>&lt;Fixed Frame&gt;</span></div>
+              </div>
+            </div>
+            <div class="rviz-saved-view active" onclick="rvizSelectSavedView(this,'3d')"><span class="rviz-saved-view-icon">◉</span> Orbit</div>
+            <div class="rviz-saved-view" onclick="rvizSelectSavedView(this,'top')"><span class="rviz-saved-view-icon">▣</span> TopDownOrtho</div>
+            <div class="rviz-saved-view" onclick="rvizSelectSavedView(this,'front')"><span class="rviz-saved-view-icon">▤</span> Front</div>
+          </div>
+          <div class="rviz-tool-properties">
+            <div class="rviz-dock-title"><span>Tool Properties</span></div>
+            <div class="rviz-tool-props-body">
+              <div class="rviz-tool-prop"><span>Current Tool</span><span id="rviz-current-tool">Interact</span></div>
+              <div class="rviz-tool-prop" data-tool-prop="initialpose"><span>Topic</span><input id="rviz-initialpose-topic" value="/initialpose"></div>
+              <div class="rviz-tool-prop" data-tool-prop="goal"><span>Topic</span><input id="rviz-goal-topic" value="/goal_pose"></div>
+              <div class="rviz-tool-prop" data-tool-prop="point"><span>Topic</span><input id="rviz-point-topic" value="/clicked_point"></div>
+            </div>
+          </div>
+          <div class="rviz-dock-actions"><button class="rviz-dock-btn" onclick="rvizResetView()">Zero</button><button class="rviz-dock-btn" onclick="rvizSetView('3d')">Orbit</button></div>
+        </aside>
+      </div>
+      <div class="rviz-time-panel">
+        <span class="rviz-time-label">ROS Time</span><div class="rviz-time-bar"></div>
+        <span class="rviz-time-label">Wall Time</span><span class="rviz-time-value" id="rviz-wall-time">0.00 s</span>
+      </div>
+      <div class="rviz-status-bar">
+        <span class="rviz-status-cell"><span id="rviz-live-dot" class="rviz-status-dot"></span><span id="rviz-conn-badge">Disconnected</span></span>
+        <span class="rviz-status-cell"><span class="rviz-status-label">Pos:</span><span id="rv-pos" class="rviz-status-value">—</span></span>
+        <span class="rviz-status-cell"><span class="rviz-status-label">Yaw:</span><span id="rv-yaw" class="rviz-status-value">—</span></span>
+        <span class="rviz-status-cell"><span class="rviz-status-label">Scan:</span><span id="rv-scan-pts" class="rviz-status-value">—</span></span>
+        <span class="rviz-status-grow"></span><span class="rviz-status-cell">RViz Web · ROS 2</span>
       </div>
     </div><!-- /page-rviz -->
 
     <!-- ══ TRANSFORMATION PAGE ══ -->
     <style>
-      #page-transformation{background:#161a22}
-      #tf-panel{width:232px;flex-shrink:0;background:var(--bg1);border-right:1px solid var(--brd);display:flex;flex-direction:column;overflow:hidden}
-      #tf-viewport{position:relative;flex:1;overflow:hidden;background:#161a22}
-      #tf-props{width:282px;flex-shrink:0;background:var(--bg1);border-left:1px solid var(--brd);overflow-y:auto;font-size:12px}
-      .tf-add-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;padding:8px}
+      #page-transformation{background:linear-gradient(135deg,#10151d,#162132 52%,#102018)}
+      .tf-work{flex:1;display:flex;min-width:0;overflow:hidden}
+      #tf-panel{width:270px;flex-shrink:0;background:rgba(18,22,31,.94);border-right:1px solid var(--brd);display:flex;flex-direction:column;overflow:hidden}
+      #tf-viewport{position:relative;flex:1;overflow:hidden;background:radial-gradient(circle at 50% 38%,#273249,#111720 68%)}
+      #tf-props{width:310px;flex-shrink:0;background:rgba(18,22,31,.95);border-left:1px solid var(--brd);overflow-y:auto;font-size:12px}
+      .tf-add-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:10px}
       .tf-add-grid .btn{padding:5px 4px;font-size:11px}
-      .tf-props-head{font-weight:600;padding:10px 12px;border-bottom:1px solid var(--brd);background:var(--bg2);display:flex;align-items:center}
-      .tf-prop{display:flex;flex-direction:column;gap:3px;padding:6px 12px}
-      .tf-prop label{font-size:10px;color:var(--dim)}
-      .tf-prop input,.tf-prop select{background:var(--bg2);border:1px solid var(--brd);color:var(--txt);border-radius:5px;padding:4px 6px;font-size:12px;font-family:var(--mono)}
-      .tf-sec{font-size:10px;color:var(--acc);padding:9px 12px 2px;text-transform:uppercase;letter-spacing:.5px}
-      .tf-grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;padding:0 12px}
-      .tf-grid3 label{font-size:9px;color:var(--dim)}
-      .tf-grid3 input{width:100%;background:var(--bg2);border:1px solid var(--brd);color:var(--txt);border-radius:5px;padding:3px 4px;font-size:11px;font-family:var(--mono)}
-      .tf-grid2{display:grid;grid-template-columns:1fr 1fr;gap:5px;padding:0 12px}
-      .tf-grid2 label{font-size:9px;color:var(--dim)}
-      .tf-grid2 input{width:100%;background:var(--bg2);border:1px solid var(--brd);color:var(--txt);border-radius:5px;padding:3px 4px;font-size:11px;font-family:var(--mono)}
+      .tf-props-head{font-weight:700;padding:14px 14px;border-bottom:1px solid var(--brd);background:linear-gradient(135deg,rgba(79,142,247,.16),rgba(62,207,142,.07));display:flex;align-items:center;gap:8px}
+      .tf-props-head span{font-size:13px}
+      .tf-prop{display:flex;flex-direction:column;gap:5px;padding:7px 14px}
+      .tf-prop label{font-size:10px;color:var(--dim);font-weight:700}
+      .tf-prop input,.tf-prop select{min-height:34px;background:var(--bg2);border:1px solid var(--brd);color:var(--txt);border-radius:9px;padding:6px 9px;font-size:12px;font-family:var(--mono)}
+      .tf-prop input:focus,.tf-prop select:focus,.tf-grid3 input:focus,.tf-grid2 input:focus{outline:2px solid rgba(79,142,247,.22);border-color:var(--acc)}
+      .tf-sec{margin:11px 14px 7px;padding:8px 10px;border:1px solid var(--brd);border-radius:10px;background:rgba(79,142,247,.08);font-size:10px;color:var(--acc);text-transform:uppercase;letter-spacing:.5px;font-weight:800}
+      .tf-grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;padding:0 14px}
+      .tf-grid3 label{font-size:9px;color:var(--dim);font-weight:700}
+      .tf-grid3 input{width:100%;min-height:34px;background:var(--bg2);border:1px solid var(--brd);color:var(--txt);border-radius:9px;padding:5px 7px;font-size:11px;font-family:var(--mono)}
+      .tf-grid2{display:grid;grid-template-columns:1fr 1fr;gap:7px;padding:0 14px}
+      .tf-grid2 label{font-size:9px;color:var(--dim);font-weight:700}
+      .tf-grid2 input{width:100%;min-height:34px;background:var(--bg2);border:1px solid var(--brd);color:var(--txt);border-radius:9px;padding:5px 7px;font-size:11px;font-family:var(--mono)}
       .tf-modal{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:2000;display:flex;align-items:center;justify-content:center}
       .tf-modal-box{width:min(740px,92vw);max-height:86vh;background:var(--bg1);border:1px solid var(--brd);border-radius:12px;display:flex;flex-direction:column;overflow:hidden}
       .tf-modal-head{padding:12px 16px;border-bottom:1px solid var(--brd);font-weight:600;display:flex;justify-content:space-between;align-items:center}
@@ -2009,14 +2298,17 @@ canvas#mon-chart{width:100%;height:100%;display:block}
       .tf-modal-foot{display:flex;gap:8px;justify-content:flex-end;padding:8px 12px;border-top:1px solid var(--brd)}
 
       /* ── COMPONENTS (3D-first) ── */
-      #tf-panel{background:linear-gradient(180deg,rgba(28,33,44,.6),rgba(22,26,34,.6));backdrop-filter:blur(4px)}
-      .tf-panel-head{display:flex;align-items:center;gap:8px;padding:11px 12px;font-weight:600;font-size:12px;letter-spacing:.6px;color:var(--txt);border-bottom:1px solid var(--brd);background:var(--bg2)}
-      .tf-panel-head .tf-hd-ico{width:16px;height:16px;color:var(--acc);display:inline-flex}
-      .tf-panel-head .tf-hd-ico svg{width:16px;height:16px}
-      .tf-comp-btn{display:flex;align-items:center;gap:7px;padding:6px 8px;font-size:11px;background:var(--bg2);border:1px solid var(--brd);color:var(--txt);border-radius:6px;cursor:pointer;text-align:left;transition:background .12s,border-color .12s}
-      .tf-comp-btn:hover{background:rgba(79,142,247,.14);border-color:rgba(79,142,247,.45)}
-      .tf-comp-ico{width:16px;height:16px;display:inline-flex;flex-shrink:0}
-      .tf-comp-create{border-style:dashed;color:var(--acc);border-color:rgba(79,142,247,.5)}
+      #tf-panel{background:linear-gradient(180deg,rgba(28,33,44,.96),rgba(18,24,31,.96));backdrop-filter:blur(4px)}
+      .tf-panel-head{display:flex;align-items:center;gap:10px;padding:14px 14px 8px;font-weight:800;font-size:14px;color:var(--txt);background:linear-gradient(135deg,rgba(79,142,247,.17),rgba(62,207,142,.08))}
+      .tf-panel-head .tf-hd-ico{width:34px;height:34px;border-radius:12px;background:rgba(79,142,247,.14);color:var(--acc);display:grid;place-items:center;flex:0 0 34px}
+      .tf-panel-head .tf-hd-ico svg{width:18px;height:18px}
+      .tf-panel-sub{padding:0 14px 12px;border-bottom:1px solid var(--brd);background:linear-gradient(135deg,rgba(79,142,247,.17),rgba(62,207,142,.08));color:var(--mt);font-size:11px;line-height:1.45}
+      .tf-section-label{padding:10px 14px 6px;color:var(--acc);font-size:10px;font-weight:800;letter-spacing:.04em;text-transform:uppercase}
+      .tf-comp-btn{display:grid;grid-template-columns:30px 1fr;align-items:center;gap:8px;min-height:46px;padding:8px 9px;font-size:11px;font-weight:700;background:var(--bg2);border:1px solid var(--brd);color:var(--txt);border-radius:12px;cursor:pointer;text-align:left;transition:background .12s,border-color .12s,transform .12s,box-shadow .12s}
+      .tf-comp-btn:hover{background:rgba(79,142,247,.14);border-color:rgba(79,142,247,.45);box-shadow:0 8px 18px rgba(4,8,20,.18)}
+      .tf-comp-btn:active{transform:scale(.98)}
+      .tf-comp-ico{width:30px;height:30px;border-radius:10px;background:rgba(79,142,247,.10);display:grid;place-items:center;flex-shrink:0}
+      .tf-comp-create{border-style:dashed;color:var(--acc);border-color:rgba(79,142,247,.5);background:rgba(79,142,247,.06)}
       .tf-comp-create:hover{background:rgba(79,142,247,.18)}
       .tf-add-sep{grid-column:1/-1;height:1px;background:var(--brd);margin:2px 0}
       .tf-add-hd{grid-column:1/-1;font-size:9px;color:var(--acc);text-transform:uppercase;letter-spacing:.05em;padding:3px 2px 0;display:flex;align-items:center;gap:4px}
@@ -2025,30 +2317,43 @@ canvas#mon-chart{width:100%;height:100%;display:block}
       .tf-custom-preview{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:6px}
       .tf-custom-preview canvas{border-radius:10px;border:1px solid var(--brd);background:#1b2030}
       .tf-c-prev-hint{font-size:10px;color:var(--dim)}
-      .tf-comp-ico{width:18px;height:18px;display:inline-flex;color:var(--acc);flex-shrink:0}
+      .tf-comp-ico{color:var(--acc)}
       .tf-comp-ico svg{width:18px;height:18px}
-      .tf-comp-special{background:rgba(155,89,255,.12);border-color:rgba(155,89,255,.35);color:#dcc9ff}
-      .tf-comp-special .tf-comp-ico{color:#b98cff}
+      .tf-comp-special{background:rgba(245,166,35,.10);border-color:rgba(245,166,35,.32);color:#ffe0a6}
+      .tf-comp-special .tf-comp-ico{color:var(--amb);background:rgba(245,166,35,.13)}
       .tf-comp-special:hover{background:rgba(155,89,255,.2);border-color:rgba(155,89,255,.55)}
+      .tf-save-card{padding:12px;border-top:1px solid var(--brd);background:linear-gradient(180deg,rgba(62,207,142,.10),rgba(62,207,142,.035));display:flex;flex-direction:column;gap:8px}
+      .tf-save-hint{font-size:11px;line-height:1.45;color:var(--mt)}
+      .tf-primary-save{width:100%;min-height:46px;border:0;border-radius:12px;background:linear-gradient(135deg,var(--grn),#31bdf2);color:#061814;font-size:13px;font-weight:800;box-shadow:0 10px 22px rgba(62,207,142,.18)}
+      .tf-primary-save:hover{filter:saturate(1.08);transform:translateY(-1px);color:#061814}
+      .tf-empty-hint{margin:8px 10px;padding:16px 12px;border:1px dashed var(--brdh);border-radius:12px;background:rgba(255,255,255,.035);color:var(--mt);font-size:11px;line-height:1.55;text-align:center}
+      .tf-tree-row{margin:3px 8px;padding:7px 9px;border:1px solid transparent;border-radius:10px;background:rgba(255,255,255,.025)}
+      .tf-tree-row:hover{border-color:rgba(79,142,247,.28);background:rgba(79,142,247,.08)}
+      .tf-tree-row.selected{border-color:rgba(79,142,247,.58);background:rgba(79,142,247,.18);color:#fff}
+      .tf-stage-top{position:absolute;top:12px;left:12px;right:120px;z-index:4;display:flex;align-items:center;gap:10px;pointer-events:none}
+      .tf-stage-badge{display:flex;align-items:center;gap:9px;min-height:42px;padding:8px 12px;border:1px solid var(--brd);border-radius:14px;background:rgba(15,20,29,.76);backdrop-filter:blur(10px);box-shadow:0 12px 28px rgba(0,0,0,.18)}
+      .tf-stage-badge span:first-child{width:28px;height:28px;display:grid;place-items:center;border-radius:10px;background:rgba(62,207,142,.13);font-size:16px}
+      .tf-stage-badge strong{display:block;font-size:12px}
+      .tf-stage-badge small{display:block;margin-top:1px;color:var(--dim);font-size:9px}
 
       /* ── Gizmo toolbar (viewport overlay) ── */
-      .tf-gizmo-bar{position:absolute;top:10px;left:10px;display:flex;gap:4px;align-items:center;background:rgba(18,21,28,.72);backdrop-filter:blur(6px);border:1px solid var(--brd);border-radius:9px;padding:4px;z-index:5}
-      .tf-gizmo-bar button{background:var(--bg2);border:1px solid var(--brd);color:var(--mt);padding:4px 9px;border-radius:6px;font-size:11px;cursor:pointer;white-space:nowrap}
+      .tf-gizmo-bar{position:absolute;top:64px;left:12px;display:flex;gap:5px;align-items:center;background:rgba(18,21,28,.78);backdrop-filter:blur(8px);border:1px solid var(--brd);border-radius:13px;padding:5px;z-index:5}
+      .tf-gizmo-bar button{min-height:32px;background:var(--bg2);border:1px solid var(--brd);color:var(--mt);padding:5px 10px;border-radius:9px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap}
       .tf-gizmo-bar button:hover{color:var(--txt)}
       .tf-gizmo-bar button.active{background:var(--acc);color:#fff;border-color:var(--acc)}
       .tf-gizmo-bar button.on{background:rgba(98,207,115,.22);border-color:rgba(98,207,115,.5);color:#aef0bd}
       .tf-gizmo-sep{width:1px;height:16px;background:var(--brd);margin:0 2px}
 
       /* ── View controls (SolidWorks-style, right side) ── */
-      .tf-view-bar{position:absolute;top:10px;right:10px;display:flex;flex-direction:column;gap:4px;background:rgba(18,21,28,.72);backdrop-filter:blur(6px);border:1px solid var(--brd);border-radius:9px;padding:5px;z-index:5}
-      .tf-view-btn{background:var(--bg2);border:1px solid var(--brd);color:var(--mt);padding:5px 11px;border-radius:6px;font-size:11px;cursor:pointer;white-space:nowrap;text-align:left;transition:background .12s,border-color .12s,color .12s;font-family:var(--mono)}
+      .tf-view-bar{position:absolute;top:12px;right:12px;display:flex;flex-direction:column;gap:5px;background:rgba(18,21,28,.78);backdrop-filter:blur(8px);border:1px solid var(--brd);border-radius:13px;padding:6px;z-index:5}
+      .tf-view-btn{min-height:31px;background:var(--bg2);border:1px solid var(--brd);color:var(--mt);padding:5px 11px;border-radius:9px;font-size:11px;cursor:pointer;white-space:nowrap;text-align:left;transition:background .12s,border-color .12s,color .12s;font-family:var(--fn);font-weight:700}
       .tf-view-btn:hover{background:rgba(79,142,247,.14);border-color:rgba(79,142,247,.45);color:var(--txt)}
       .tf-view-btn.active{background:var(--acc);color:#fff;border-color:var(--acc)}
       .tf-view-btn.off{opacity:.45}
       .tf-view-btn.off:hover{opacity:.7}
       .tf-view-grp{display:flex;flex-direction:column;gap:3px}
       .tf-view-grp-hd{font-size:9px;letter-spacing:.05em;text-transform:uppercase;color:var(--dim);padding:1px 2px 0}
-      .tf-grp{display:flex;align-items:center;gap:7px;padding:4px 7px;border-radius:6px;background:var(--bg2);border:1px solid var(--brd)}
+      .tf-grp{display:flex;align-items:center;gap:7px;padding:7px 9px;border-radius:10px;background:var(--bg2);border:1px solid var(--brd)}
       .tf-grp:hover{background:rgba(79,142,247,.1);border-color:rgba(79,142,247,.4)}
       .tf-grp-eye{cursor:pointer;font-size:13px;user-select:none;line-height:1}
       .tf-grp-name{flex:1;cursor:pointer;font-family:var(--mono);font-size:12px;color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -2066,72 +2371,284 @@ canvas#mon-chart{width:100%;height:100%;display:block}
       .tf-sec .lnk{opacity:.65;font-size:9px;text-transform:none;letter-spacing:0}
 
       /* ── big delete-component button (below parameter settings) ── */
-      .tf-del-wrap{padding:14px 12px 20px;border-top:1px solid var(--brd);margin-top:12px}
-      .tf-del-btn{width:100%;padding:12px;font-size:13px;font-weight:600;letter-spacing:.3px}
+      .tf-del-wrap{padding:16px 14px 22px;border-top:1px solid var(--brd);margin-top:14px}
+      .tf-del-btn{width:100%;min-height:42px;padding:12px;font-size:13px;font-weight:700;border-radius:11px}
+	    </style>
+
+    <style id="tf-workspace-layout">
+      #page-transformation{background:#bcc6d2}
+      #page-transformation .tf-work{flex:1;display:flex;min-width:0;overflow:hidden;padding:12px;gap:12px;box-sizing:border-box}
+      #page-transformation #tf-panel,
+      #page-transformation #tf-right-panel,
+      #page-transformation #tf-viewport{border:1px solid rgba(27,72,148,.12);box-shadow:0 14px 34px rgba(28,47,77,.08)}
+      #page-transformation #tf-panel{width:300px;background:#dfe5ec;border-right:1px solid rgba(27,72,148,.10);border-radius:16px}
+      #page-transformation .tf-panel-head,#page-transformation .tf-panel-sub,#page-transformation .tf-template-launch-wrap{flex:0 0 auto}
+      #page-transformation .tf-panel-scroll{min-height:0;flex:1;overflow-y:auto;overscroll-behavior:contain;padding-bottom:12px;scrollbar-gutter:stable}
+      #page-transformation .tf-panel-scroll::-webkit-scrollbar{width:8px}
+      #page-transformation .tf-panel-scroll::-webkit-scrollbar-thumb{background:var(--brdh);border:2px solid transparent;border-radius:10px;background-clip:padding-box}
+      #page-transformation .tf-template-launch-wrap{padding:10px 10px 0}
+      #page-transformation .tf-template-launch{width:100%;min-height:42px;display:flex;align-items:center;justify-content:center;gap:8px;border:1px solid var(--abrd);border-radius:11px;background:var(--adim);color:var(--acc);font-weight:800;cursor:pointer}
+      #page-transformation .tf-template-launch:hover{background:color-mix(in srgb,var(--acc) 18%,var(--bg2));border-color:var(--acc)}
+      #page-transformation #tf-viewport{background:#cbd3dd;border-radius:18px}
+      #page-transformation #tf-right-panel{width:330px;flex:0 0 330px;min-width:0;display:flex;flex-direction:column;overflow:hidden;background:#dfe5ec;border-radius:16px}
+      #page-transformation #tf-props{width:100%;min-height:0;flex:1;background:#e5e9ee;border:0;border-radius:0;overflow-y:auto}
+      #page-transformation .tf-panel-head{display:flex;align-items:center;gap:10px;padding:14px 14px 10px;font-weight:800;font-size:14px;color:#17305f;background:linear-gradient(135deg,rgba(79,142,247,.14),rgba(62,207,142,.08))}
+      #page-transformation .tf-panel-head .tf-hd-ico{width:36px;height:36px;border-radius:12px;background:rgba(255,255,255,.82);color:var(--acc);display:grid;place-items:center;flex:0 0 36px;border:1px solid rgba(79,142,247,.16)}
+      #page-transformation .tf-panel-head .tf-hd-ico svg{width:18px;height:18px}
+      #page-transformation .tf-panel-sub{padding:0 14px 14px;border-bottom:1px solid rgba(27,72,148,.08);background:linear-gradient(135deg,rgba(79,142,247,.14),rgba(62,207,142,.08));color:#5c6581;font-size:11px;line-height:1.5}
+      #page-transformation .tf-acc{margin:10px 10px 0;border:1px solid rgba(27,72,148,.12);border-radius:12px;overflow:hidden;background:#f1f4f8}
+      #page-transformation .tf-acc summary{list-style:none;display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none;padding:12px 12px;font-size:12px;font-weight:800;color:#17305f;background:linear-gradient(135deg,rgba(79,142,247,.08),rgba(62,207,142,.06))}
+      #page-transformation .tf-acc summary::-webkit-details-marker{display:none}
+      #page-transformation .tf-acc summary::after{content:'▾';margin-left:auto;color:#5e78a8;font-size:12px;transition:transform .15s ease}
+      #page-transformation .tf-acc[open] summary::after{transform:rotate(180deg)}
+      #page-transformation .tf-acc-body{padding:10px}
+      #page-transformation .tf-acc-body .tf-add-grid{padding:0}
+      #page-transformation .tf-add-grid{display:block}
+      #page-transformation .tf-add-grid .btn{padding:6px 7px;font-size:11px}
+      #page-transformation .tf-device-group{margin-bottom:8px;border:1px solid rgba(27,72,148,.12);border-radius:10px;overflow:hidden;background:#e7ecf3}
+      #page-transformation .tf-device-group:last-child{margin-bottom:0}
+      #page-transformation .tf-device-group>summary{list-style:none;display:flex;align-items:center;gap:8px;padding:10px;cursor:pointer;color:#20334f;font-size:11px;font-weight:800;background:#e1e7ef;user-select:none}
+      #page-transformation .tf-device-group>summary::-webkit-details-marker{display:none}
+      #page-transformation .tf-device-group>summary::after{content:'▾';margin-left:auto;color:#65758b;transition:transform .15s ease}
+      #page-transformation .tf-device-group[open]>summary::after{transform:rotate(180deg)}
+      #page-transformation .tf-device-count{padding:1px 7px;border-radius:9px;background:#cfd9e8;color:#425a78;font-size:9px;font-weight:800}
+      #page-transformation .tf-device-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;padding:8px}
+      #page-transformation .tf-props-head{font-weight:800;padding:14px 14px;border-bottom:1px solid rgba(27,72,148,.08);background:linear-gradient(135deg,rgba(79,142,247,.12),rgba(62,207,142,.07));display:flex;align-items:center;gap:8px;color:#17305f}
+      #page-transformation .tf-props-head span{font-size:13px}
+      #page-transformation .tf-prop{display:flex;flex-direction:column;gap:5px;padding:7px 14px}
+      #page-transformation .tf-prop label{font-size:10px;color:#5f6780;font-weight:700}
+      #page-transformation .tf-prop input,#page-transformation .tf-prop select{min-height:36px;background:#f8fbff;border:1px solid rgba(27,72,148,.12);color:#16243d;border-radius:10px;padding:6px 9px;font-size:12px;font-family:var(--mono)}
+      #page-transformation .tf-prop input:focus,#page-transformation .tf-prop select:focus,#page-transformation .tf-grid3 input:focus,#page-transformation .tf-grid2 input:focus{outline:2px solid rgba(79,142,247,.18);border-color:var(--acc)}
+      #page-transformation .tf-sec{margin:11px 14px 7px;padding:8px 10px;border:1px solid rgba(27,72,148,.10);border-radius:10px;background:rgba(79,142,247,.07);font-size:10px;color:#2458bb;text-transform:uppercase;letter-spacing:.5px;font-weight:800}
+      #page-transformation .tf-grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;padding:0 14px}
+      #page-transformation .tf-grid3 label{font-size:9px;color:#6a7186;font-weight:700}
+      #page-transformation .tf-grid3 input{width:100%;min-height:34px;background:#f8fbff;border:1px solid rgba(27,72,148,.12);color:#16243d;border-radius:10px;padding:5px 7px;font-size:11px;font-family:var(--mono)}
+      #page-transformation .tf-grid2{display:grid;grid-template-columns:1fr 1fr;gap:7px;padding:0 14px}
+      #page-transformation .tf-grid2 label{font-size:9px;color:#6a7186;font-weight:700}
+      #page-transformation .tf-grid2 input{width:100%;min-height:34px;background:#f8fbff;border:1px solid rgba(27,72,148,.12);color:#16243d;border-radius:10px;padding:5px 7px;font-size:11px;font-family:var(--mono)}
+      #page-transformation .tf-modal{background:rgba(13,20,36,.42);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+      #page-transformation .tf-modal-box{background:rgba(255,255,255,.98);border:1px solid rgba(27,72,148,.14);border-radius:16px;box-shadow:0 24px 70px rgba(20,43,78,.18)}
+      #page-transformation .tf-modal-head{background:linear-gradient(135deg,rgba(79,142,247,.08),rgba(62,207,142,.05));color:#17305f;border-bottom:1px solid rgba(27,72,148,.08)}
+      #page-transformation .tf-tabs button{background:#f1f6ff;border:1px solid rgba(27,72,148,.12);color:#5c6581;border-radius:8px 8px 0 0}
+      #page-transformation .tf-tabs button.active{background:var(--acc);color:#fff;border-color:var(--acc)}
+      #page-transformation .tf-modal textarea{background:#f8fbff;color:#16243d;border:1px solid rgba(27,72,148,.12)}
+      #page-transformation .tf-modal-foot{background:#fbfdff;border-top:1px solid rgba(27,72,148,.08)}
+      #page-transformation .tf-section-label{padding:10px 14px 6px;color:#2458bb;font-size:10px;font-weight:800;letter-spacing:.04em;text-transform:uppercase}
+      #page-transformation .tf-comp-btn{display:grid;grid-template-columns:30px 1fr;align-items:center;gap:8px;min-height:48px;padding:8px 9px;font-size:11px;font-weight:700;background:#edf1f5;border:1px solid rgba(27,72,148,.14);color:#16243d;border-radius:10px;cursor:pointer;text-align:left;transition:background .12s,border-color .12s,transform .12s,box-shadow .12s}
+      #page-transformation .tf-comp-btn:hover{background:rgba(79,142,247,.09);border-color:rgba(79,142,247,.28);box-shadow:0 8px 18px rgba(18,31,62,.08)}
+      #page-transformation .tf-comp-btn:active{transform:scale(.98)}
+      #page-transformation .tf-comp-ico{width:30px;height:30px;border-radius:10px;background:rgba(79,142,247,.10);display:grid;place-items:center;flex-shrink:0;color:var(--acc)}
+      #page-transformation .tf-comp-ico svg{width:18px;height:18px}
+      #page-transformation .tf-comp-create{border-style:dashed;color:var(--acc);border-color:rgba(79,142,247,.38);background:rgba(79,142,247,.05)}
+      #page-transformation .tf-comp-create:hover{background:rgba(79,142,247,.14)}
+      #page-transformation .tf-add-sep{grid-column:1/-1;height:1px;background:rgba(27,72,148,.10);margin:2px 0}
+      #page-transformation .tf-add-hd{grid-column:1/-1;font-size:9px;color:#2458bb;text-transform:uppercase;letter-spacing:.05em;padding:3px 2px 0;display:flex;align-items:center;gap:4px}
+      #page-transformation .tf-custom-body{display:flex;gap:16px;padding:14px 16px;flex-wrap:wrap}
+      #page-transformation .tf-custom-form{flex:1;min-width:260px;display:flex;flex-direction:column;gap:2px}
+      #page-transformation .tf-custom-preview{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:6px}
+      #page-transformation .tf-custom-preview canvas{border-radius:12px;border:1px solid rgba(27,72,148,.12);background:#f2f7ff}
+      #page-transformation .tf-c-prev-hint{font-size:10px;color:#6a7186}
+      #page-transformation .tf-comp-special{background:linear-gradient(180deg,#fff7eb,#fff0d8);border-color:rgba(245,166,35,.28);color:#8a5a12}
+      #page-transformation .tf-comp-special .tf-comp-ico{color:var(--amb);background:rgba(245,166,35,.13)}
+      #page-transformation .tf-comp-special:hover{background:linear-gradient(180deg,#fff1d6,#ffe8be);border-color:rgba(245,166,35,.45)}
+      #page-transformation .tf-save-card{padding:12px;border-top:1px solid rgba(27,72,148,.08);background:linear-gradient(180deg,rgba(62,207,142,.08),rgba(62,207,142,.03));display:flex;flex-direction:column;gap:8px}
+      #page-transformation .tf-save-hint{font-size:11px;line-height:1.45;color:#5f6780}
+      #page-transformation .tf-primary-save{width:100%;min-height:46px;border:0;border-radius:12px;background:linear-gradient(135deg,var(--grn),#31bdf2);color:#061814;font-size:13px;font-weight:800;box-shadow:0 10px 22px rgba(62,207,142,.14)}
+      #page-transformation .tf-primary-save:hover{filter:saturate(1.08);transform:translateY(-1px);color:#061814}
+      #page-transformation .tf-save-top{display:flex;align-items:center;gap:10px;padding:10px 12px;background:#e1e7ef;border-bottom:1px solid rgba(27,72,148,.12)}
+      #page-transformation .tf-save-top-label{min-width:0;flex:1;color:#20334f}
+      #page-transformation .tf-save-top-label strong{display:block;font-size:12px}
+      #page-transformation .tf-save-top-label small{display:block;margin-top:2px;color:#65758b;font-size:9px}
+      #page-transformation .tf-save-top .tf-primary-save{width:auto;min-height:38px;padding:8px 12px;border-radius:9px;white-space:nowrap;font-size:11px}
+      #page-transformation .tf-empty-hint{margin:8px 10px;padding:16px 12px;border:1px dashed rgba(27,72,148,.16);border-radius:12px;background:rgba(255,255,255,.82);color:#5f6780;font-size:11px;line-height:1.55;text-align:center}
+      #page-transformation .tf-tree-row{margin:3px 8px;padding:7px 9px;border:1px solid transparent;border-radius:10px;background:rgba(79,142,247,.03)}
+      #page-transformation .tf-tree-row:hover{border-color:rgba(79,142,247,.18);background:rgba(79,142,247,.07)}
+      #page-transformation .tf-tree-row.selected{border-color:rgba(79,142,247,.40);background:rgba(79,142,247,.14);color:#17305f}
+      #page-transformation .tf-stage-top{position:absolute;top:12px;left:12px;right:120px;z-index:4;display:flex;align-items:center;gap:10px;pointer-events:none}
+      #page-transformation .tf-stage-badge{display:flex;align-items:center;gap:9px;min-height:42px;padding:8px 12px;border:1px solid rgba(27,72,148,.12);border-radius:14px;background:rgba(255,255,255,.82);backdrop-filter:blur(10px);box-shadow:0 12px 26px rgba(20,43,78,.10)}
+      #page-transformation .tf-stage-badge span:first-child{width:28px;height:28px;display:grid;place-items:center;border-radius:10px;background:rgba(62,207,142,.13);font-size:16px}
+      #page-transformation .tf-stage-badge strong{display:block;font-size:12px}
+      #page-transformation .tf-stage-badge small{display:block;margin-top:1px;color:#6a7186;font-size:9px}
+      #page-transformation .tf-gizmo-bar{position:absolute;top:64px;left:12px;display:flex;gap:5px;align-items:center;background:rgba(255,255,255,.9);backdrop-filter:blur(8px);border:1px solid rgba(27,72,148,.12);border-radius:13px;padding:5px;z-index:5;box-shadow:0 10px 24px rgba(20,43,78,.08)}
+      #page-transformation .tf-gizmo-bar button{min-height:32px;background:#f6f9ff;border:1px solid rgba(27,72,148,.12);color:#5f6780;padding:5px 10px;border-radius:9px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap}
+      #page-transformation .tf-gizmo-bar button:hover{color:#17305f}
+      #page-transformation .tf-gizmo-bar button.active{background:var(--acc);color:#fff;border-color:var(--acc)}
+      #page-transformation .tf-gizmo-bar button.on{background:rgba(62,207,142,.18);border-color:rgba(62,207,142,.38);color:#13764a}
+      #page-transformation .tf-gizmo-sep{width:1px;height:16px;background:rgba(27,72,148,.12);margin:0 2px}
+      #page-transformation .tf-view-bar{position:absolute;top:12px;right:12px;display:flex;flex-direction:column;gap:5px;background:rgba(255,255,255,.9);backdrop-filter:blur(8px);border:1px solid rgba(27,72,148,.12);border-radius:13px;padding:6px;z-index:5;box-shadow:0 10px 24px rgba(20,43,78,.08)}
+      #page-transformation .tf-view-btn{min-height:31px;background:#f6f9ff;border:1px solid rgba(27,72,148,.12);color:#5f6780;padding:5px 11px;border-radius:9px;font-size:11px;cursor:pointer;white-space:nowrap;text-align:left;transition:background .12s,border-color .12s,color .12s;font-family:var(--fn);font-weight:700}
+      #page-transformation .tf-view-btn:hover{background:rgba(79,142,247,.10);border-color:rgba(79,142,247,.28);color:#17305f}
+      #page-transformation .tf-view-btn.active{background:var(--acc);color:#fff;border-color:var(--acc)}
+      #page-transformation .tf-view-btn.off{opacity:.45}
+      #page-transformation .tf-view-btn.off:hover{opacity:.7}
+      #page-transformation .tf-view-grp{display:flex;flex-direction:column;gap:3px}
+      #page-transformation .tf-view-grp-hd{font-size:9px;letter-spacing:.05em;text-transform:uppercase;color:#6a7186;padding:1px 2px 0}
+      #page-transformation .tf-grp-box{margin:0 10px 8px;border:1px solid rgba(27,72,148,.10);border-radius:14px;overflow:hidden;background:linear-gradient(180deg,#fff,#f7fbff)}
+      #page-transformation .tf-grp-box summary{list-style:none;display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;padding:10px 11px;font-family:var(--mono);font-size:12px;color:#17305f;background:rgba(79,142,247,.06)}
+      #page-transformation .tf-grp-box summary::-webkit-details-marker{display:none}
+      #page-transformation .tf-grp-box summary::after{content:'▾';margin-left:auto;color:#5e78a8;font-size:12px;transition:transform .15s ease}
+      #page-transformation .tf-grp-box[open] summary::after{transform:rotate(180deg)}
+      #page-transformation .tf-grp-body{padding:10px}
+      #page-transformation .tf-grp-top{display:flex;align-items:center;gap:6px;margin-bottom:8px}
+      #page-transformation .tf-grp-eye{width:28px;height:28px;display:grid;place-items:center;border:1px solid rgba(27,72,148,.12);border-radius:9px;background:#fff;cursor:pointer;font-size:13px;user-select:none;line-height:1}
+      #page-transformation .tf-grp-name{flex:1;cursor:pointer;font-family:var(--mono);font-size:12px;color:#16243d;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      #page-transformation .tf-grp-cnt{color:#5f6780;font-size:10px;background:#eef4ff;border-radius:8px;padding:0 6px}
+      #page-transformation .tf-grp-list{display:grid;gap:5px}
+      #page-transformation .tf-grp-chip{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 9px;border-radius:10px;background:#f6f9ff;border:1px solid rgba(27,72,148,.08);font-size:11px;color:#16243d}
+      #page-transformation .tf-grp-chip small{color:#6a7186;font-family:var(--mono)}
+      #page-transformation .tf-view-sep{width:100%;height:1px;background:rgba(27,72,148,.10);margin:2px 0}
     </style>
+
+    <style id="tf-theme-linked">
+      html[data-theme] #page-transformation{background:var(--bg0);color:var(--txt)}
+      html[data-theme] #page-transformation #tf-panel,
+      html[data-theme] #page-transformation #tf-right-panel{background:var(--bg1);border-color:var(--brd);box-shadow:0 14px 34px rgba(0,0,0,.10)}
+      html[data-theme] #page-transformation #tf-viewport{background:var(--bg2);border-color:var(--brd);box-shadow:0 14px 34px rgba(0,0,0,.10)}
+      html[data-theme] #page-transformation #tf-props{background:var(--bg1);color:var(--txt)}
+      html[data-theme] #page-transformation .tf-panel-head,
+      html[data-theme] #page-transformation .tf-panel-sub{color:var(--txt);background:linear-gradient(135deg,rgba(79,142,247,.14),rgba(62,207,142,.07));border-color:var(--brd)}
+      html[data-theme] #page-transformation .tf-panel-sub{color:var(--mt)}
+      html[data-theme] #page-transformation .tf-acc{background:var(--bg1);border-color:var(--brd)}
+      html[data-theme] #page-transformation .tf-acc summary{background:var(--bg2);color:var(--txt)}
+      html[data-theme] #page-transformation .tf-device-group{background:var(--bg0);border-color:var(--brd)}
+      html[data-theme] #page-transformation .tf-device-group>summary{background:var(--bg2);color:var(--txt)}
+      html[data-theme] #page-transformation .tf-device-count{background:var(--bg3);color:var(--mt)}
+      html[data-theme] #page-transformation .tf-comp-btn{background:var(--bg2);border-color:var(--brd);color:var(--txt)}
+      html[data-theme] #page-transformation .tf-comp-btn:hover{background:var(--bg3);border-color:var(--brdh)}
+      html[data-theme] #page-transformation .tf-comp-create{background:var(--adim);color:var(--acc);border-color:var(--abrd)}
+      html[data-theme] #page-transformation .tf-comp-ico{background:var(--adim);color:var(--acc)}
+      html[data-theme] #page-transformation .tf-comp-special{background:var(--adm2);border-color:color-mix(in srgb,var(--amb) 38%,transparent);color:var(--amb)}
+      html[data-theme] #page-transformation .tf-comp-special:hover{background:color-mix(in srgb,var(--amb) 18%,var(--bg2));border-color:var(--amb)}
+      html[data-theme] #page-transformation .tf-custom-preview canvas{background:var(--bg2);border-color:var(--brd)}
+      html[data-theme] #page-transformation .tf-c-prev-hint,
+      html[data-theme] #page-transformation .tf-device-group>summary::after,
+      html[data-theme] #page-transformation .tf-acc summary::after{color:var(--mt)}
+      html[data-theme] #page-transformation .tf-props-head{background:var(--bg2);color:var(--txt);border-color:var(--brd)}
+      html[data-theme] #page-transformation .tf-prop label,
+      html[data-theme] #page-transformation .tf-grid2 label,
+      html[data-theme] #page-transformation .tf-grid3 label{color:var(--mt)}
+      html[data-theme] #page-transformation .tf-prop input,html[data-theme] #page-transformation .tf-prop select,
+      html[data-theme] #page-transformation .tf-grid2 input,html[data-theme] #page-transformation .tf-grid3 input{background:var(--bg2);border-color:var(--brd);color:var(--txt)}
+      html[data-theme] #page-transformation .tf-sec{background:var(--adim);border-color:var(--abrd);color:var(--acc)}
+      html[data-theme] #page-transformation .tf-save-top{background:var(--bg2);border-color:var(--brd)}
+      html[data-theme] #page-transformation .tf-save-top-label{color:var(--txt)}
+      html[data-theme] #page-transformation .tf-save-top-label small{color:var(--mt)}
+      html[data-theme] #page-transformation .tf-tree-row{background:var(--bg2);color:var(--txt)}
+      html[data-theme] #page-transformation .tf-tree-row:hover{background:var(--bg3)}
+      html[data-theme] #page-transformation .tf-tree-row.selected{color:var(--txt);background:var(--adim);border-color:var(--abrd)}
+      html[data-theme] #page-transformation .tf-empty-hint{background:var(--bg2);border-color:var(--brd);color:var(--mt)}
+      html[data-theme] #page-transformation .tf-stage-badge,
+      html[data-theme] #page-transformation .tf-gizmo-bar,
+      html[data-theme] #page-transformation .tf-view-bar{background:color-mix(in srgb,var(--bg1) 92%,transparent);border-color:var(--brd);color:var(--txt)}
+      html[data-theme] #page-transformation .tf-gizmo-bar button,
+      html[data-theme] #page-transformation .tf-view-btn{background:var(--bg2);border-color:var(--brd);color:var(--mt)}
+      html[data-theme] #page-transformation .tf-gizmo-bar button:hover,
+      html[data-theme] #page-transformation .tf-view-btn:hover{background:var(--bg3);color:var(--txt)}
+      html[data-theme] #page-transformation .tf-grp-box{background:var(--bg1);border-color:var(--brd)}
+      html[data-theme] #page-transformation .tf-grp-box summary{background:var(--bg2);color:var(--txt)}
+      html[data-theme] #page-transformation .tf-grp-eye{background:var(--bg2);border-color:var(--brd)}
+      html[data-theme] #page-transformation .tf-grp-name,
+      html[data-theme] #page-transformation .tf-grp-chip{color:var(--txt)}
+      html[data-theme] #page-transformation .tf-grp-chip{background:var(--bg2);border-color:var(--brd)}
+      html[data-theme] #page-transformation .tf-grp-cnt{background:var(--bg3);color:var(--mt)}
+      html[data-theme] #page-transformation .tf-modal-box{background:var(--bg1);border-color:var(--brd)}
+      html[data-theme] #page-transformation .tf-modal-head,
+      html[data-theme] #page-transformation .tf-modal-foot{background:var(--bg2);color:var(--txt);border-color:var(--brd)}
+      html[data-theme] #page-transformation .tf-tabs button{background:var(--bg2);border-color:var(--brd);color:var(--mt)}
+      html[data-theme] #page-transformation .tf-modal textarea{background:var(--bg0);border-color:var(--brd);color:var(--txt)}
+      html[data-theme] #page-transformation .tf-primary-save:disabled{opacity:.65;cursor:wait;transform:none}
+      html[data-theme] :is(#tf-export-modal,#tf-odom-modal,#tf-save-modal,#tf-custom-modal,#tf-cad-modal,#tf-template-modal) .tf-modal-box{background:var(--bg1);border-color:var(--brd);color:var(--txt)}
+      html[data-theme] :is(#tf-export-modal,#tf-odom-modal,#tf-save-modal,#tf-custom-modal,#tf-cad-modal,#tf-template-modal) .tf-modal-head,
+      html[data-theme] :is(#tf-export-modal,#tf-odom-modal,#tf-save-modal,#tf-custom-modal,#tf-cad-modal,#tf-template-modal) .tf-modal-foot{background:var(--bg2);border-color:var(--brd);color:var(--txt)}
+      html[data-theme] :is(#tf-export-modal,#tf-odom-modal,#tf-save-modal,#tf-custom-modal,#tf-cad-modal,#tf-template-modal) :is(input,select,textarea){background:var(--bg0);border-color:var(--brd);color:var(--txt)}
+      html[data-theme] #tf-odom-modal :is(.tf-wheel-tbl th,.tf-kpi){background:var(--bg2);border-color:var(--brd)}
+      html[data-theme] #tf-odom-modal .tf-wheel-tbl :is(th,td){border-color:var(--brd)}
+    </style>
+
     <div class="page" id="page-transformation">
-      <div style="flex:1;display:flex;overflow:hidden">
+
+	      <div class="tf-work">
 
         <!-- Left: component library + TF tree -->
         <div id="tf-panel">
           <div class="tf-panel-head">
             <span class="tf-hd-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 21 7v10l-9 5-9-5V7Z"/><path d="M3 7l9 5 9-5M12 12v10"/></svg></span>
-            <span>COMPONENTS</span>
+            <span>ชิ้นส่วนหุ่นยนต์</span>
           </div>
-          <div id="tf-add-grid" class="tf-add-grid"></div>
-          <div class="ss" style="padding:8px 12px">Frames (TF Tree)</div>
-          <div id="tf-tree" style="flex:1;overflow-y:auto"></div>
-          <div class="ss" style="padding:8px 12px">Groups (จัดกลุ่ม / ซ่อน)</div>
-          <div id="tf-groups" style="padding:0 10px 8px;display:flex;flex-direction:column;gap:3px"></div>
-          <div style="padding:8px 12px;border-top:1px solid var(--brd);display:flex;flex-direction:column;gap:8px">
-            <button class="btn" style="width:100%;background:var(--pur);color:#fff" onclick="tfOpenExport()">📤 Export TF</button>
-            <button class="btn" style="width:100%;background:var(--acc);color:#06121f;font-weight:600" onclick="tfOpenOdom()">⚙️ Odometry</button>
-            <button class="btn" style="width:100%;background:var(--grn);color:#08240f;font-weight:600" onclick="tfSaveToWorkspace()" title="สร้างแพ็กเกจ sim_robot_tf (TF) + sim_robot_odom (odom จากล้อ) พร้อมกันในคลิกเดียว">💾 Save All (TF + Odom)</button>
-            <button class="btn" style="width:100%;background:#ff8c1a;color:#1a0e00;font-weight:700" onclick="tfOdomRun()" title="Generate จากดีไซน์ปัจจุบัน → รันหุ่นใน Sim → สลับไป RViz เพื่อเห็นหุ่นเดิน + /odom">▶ ทดสอบหุ่นใน Sim</button>
+          <div class="tf-panel-sub">เลือกหมวดอุปกรณ์ แล้วกดชิ้นส่วนที่ต้องการเพื่อเพิ่มลงในพื้นที่ประกอบ</div>
+          <div class="tf-template-launch-wrap"><button type="button" class="tf-template-launch" onclick="tfOpenTemplateModal()">🤖 เลือก Template หุ่นยนต์</button></div>
+          <div class="tf-panel-scroll">
+          <details class="tf-acc" open>
+            <summary>คลังชิ้นส่วน</summary>
+            <div class="tf-acc-body">
+              <div id="tf-add-grid" class="tf-add-grid"></div>
+            </div>
+          </details>
+          <details class="tf-acc" open>
+            <summary>โครงสร้างที่สร้างไว้</summary>
+            <div class="tf-acc-body">
+              <div id="tf-tree" style="min-height:120px;max-height:33vh;overflow-y:auto"></div>
+            </div>
+          </details>
+          <details class="tf-acc">
+            <summary>กลุ่มชิ้นส่วนที่วางแล้ว</summary>
+            <div class="tf-acc-body">
+              <div id="tf-groups" style="display:flex;flex-direction:column;gap:8px"></div>
+            </div>
+          </details>
           </div>
         </div>
 
-        <!-- Center: 3D viewport -->
-        <div id="tf-viewport">
-          <div id="tf-3d-container" style="position:absolute;inset:0"></div>
-          <div class="tf-gizmo-bar" id="tf-gizmo-bar">
-            <button data-mode="translate" class="active" title="Move Gizmo (W)">✥ Move</button>
-            <button data-mode="rotate" title="Rotate Gizmo (E)">⟳ Rotate</button>
-            <button data-mode="scale" title="Scale Gizmo (R)">⤢ Scale</button>
-            <span class="tf-gizmo-sep"></span>
-            <button id="tf-snap-btn" title="Toggle snap (ขยับทีละ 0.1 / หมุนทีละ 15°)">⊞ Snap</button>
-          </div>
+	        <!-- Center: 3D viewport -->
+	        <div id="tf-viewport">
+	          <div id="tf-3d-container" style="position:absolute;inset:0"></div>
+	          <div class="tf-stage-top">
+	            <div class="tf-stage-badge"><span>🤖</span><div><strong>Robot Config</strong><small>พื้นที่ประกอบหุ่นยนต์ 3D</small></div></div>
+	          </div>
+	          <div class="tf-gizmo-bar" id="tf-gizmo-bar">
+	            <button data-mode="translate" class="active" title="ย้ายชิ้นส่วน (W)">✥ ย้าย</button>
+	            <button data-mode="rotate" title="หมุนชิ้นส่วน (E)">⟳ หมุน</button>
+	            <button data-mode="scale" title="ปรับขนาด (R)">⤢ ขนาด</button>
+	            <span class="tf-gizmo-sep"></span>
+	            <button id="tf-snap-btn" title="ล็อกจังหวะขยับทีละ 0.1 / หมุนทีละ 15°">⊞ Snap</button>
+	          </div>
 
           <!-- View controls (จัดกลุ่ม: Projection + View presets) -->
           <div class="tf-view-bar">
-            <div class="tf-view-grp">
-              <div class="tf-view-grp-hd">Projection</div>
-              <button class="tf-view-btn tf-proj-btn active" data-proj="perspective" onclick="tfSetProjection('perspective')" title="Perspective (มุมมองปกติ)">🔆 Perspective</button>
-              <button class="tf-view-btn tf-proj-btn" data-proj="iso" onclick="tfSetProjection('iso')" title="Isometric / Orthographic (มุมมองเทคนิค)">⬛ Isometric</button>
-            </div>
-            <div class="tf-view-sep"></div>
-            <div class="tf-view-grp">
-              <div class="tf-view-grp-hd">View</div>
-              <button class="tf-view-btn" data-view="top" onclick="tfSetView('top')" title="Top View">⬆ Top</button>
-              <button class="tf-view-btn" data-view="bottom" onclick="tfSetView('bottom')" title="Bottom View">⬇ Bottom</button>
-              <button class="tf-view-btn" data-view="front" onclick="tfSetView('front')" title="Front View">▣ Front</button>
-              <button class="tf-view-btn" data-view="back" onclick="tfSetView('back')" title="Back View">▢ Back</button>
-              <button class="tf-view-btn" data-view="left" onclick="tfSetView('left')" title="Left View">◧ Left</button>
-              <button class="tf-view-btn" data-view="right" onclick="tfSetView('right')" title="Right View">◨ Right</button>
-              <button class="tf-view-btn" data-view="iso" onclick="tfSetView('iso')" title="3D / Isometric View">⬚ Iso</button>
-            </div>
-            <div class="tf-view-sep"></div>
-            <button class="tf-view-btn" onclick="tfResetView()" title="Reset กลับมุม Iso">⟲ Reset</button>
-            <button class="tf-view-btn" id="tf-label-toggle" onclick="tfToggleLabels()" title="แสดง/ซ่อนชื่อเฟรม">🏷 Labels</button>
-          </div>
+	            <div class="tf-view-grp">
+	              <div class="tf-view-grp-hd">มุมมอง</div>
+	              <button class="tf-view-btn tf-proj-btn active" data-proj="perspective" onclick="tfSetProjection('perspective')" title="มุมมองปกติ">🔆 3D</button>
+	              <button class="tf-view-btn tf-proj-btn" data-proj="iso" onclick="tfSetProjection('iso')" title="มุมมองเทคนิค">⬛ แปลน</button>
+	            </div>
+	            <div class="tf-view-sep"></div>
+	            <div class="tf-view-grp">
+	              <div class="tf-view-grp-hd">ด้าน</div>
+	              <button class="tf-view-btn" data-view="top" onclick="tfSetView('top')" title="มองจากด้านบน">⬆ บน</button>
+	              <button class="tf-view-btn" data-view="bottom" onclick="tfSetView('bottom')" title="มองจากด้านล่าง">⬇ ล่าง</button>
+	              <button class="tf-view-btn" data-view="front" onclick="tfSetView('front')" title="มองด้านหน้า">▣ หน้า</button>
+	              <button class="tf-view-btn" data-view="back" onclick="tfSetView('back')" title="มองด้านหลัง">▢ หลัง</button>
+	              <button class="tf-view-btn" data-view="left" onclick="tfSetView('left')" title="มองด้านซ้าย">◧ ซ้าย</button>
+	              <button class="tf-view-btn" data-view="right" onclick="tfSetView('right')" title="มองด้านขวา">◨ ขวา</button>
+	              <button class="tf-view-btn" data-view="iso" onclick="tfSetView('iso')" title="มุม 3D">⬚ รวม</button>
+	            </div>
+	            <div class="tf-view-sep"></div>
+	            <button class="tf-view-btn" onclick="tfResetView()" title="จัดกล้องใหม่">⟲ ตั้งกล้อง</button>
+	            <button class="tf-view-btn" id="tf-label-toggle" onclick="tfToggleLabels()" title="แสดง/ซ่อนชื่อเฟรม">🏷 ชื่อ</button>
+	          </div>
 
-          <div class="rviz-cam-hint">
-            <b>Left drag:</b> Orbit &nbsp;|&nbsp; <b>Right/Middle drag:</b> Pan &nbsp;|&nbsp; <b>Scroll:</b> Zoom &nbsp;|&nbsp; <b>Click:</b> Select &nbsp;|&nbsp; <b>W/E/R:</b> Move/Rotate/Scale
-          </div>
+	          <div class="rviz-cam-hint">
+	            คลิกเลือกชิ้นส่วน · ลากเมาส์เพื่อหมุนกล้อง · Scroll เพื่อซูม
+	          </div>
         </div>
 
-        <!-- Right: properties -->
-        <div id="tf-props"></div>
+        <!-- Right: save action + properties -->
+        <aside id="tf-right-panel" aria-label="บันทึกและตั้งค่าชิ้นส่วน">
+          <div class="tf-save-top">
+            <div class="tf-save-top-label"><strong>Property</strong><small>ตั้งค่าและบันทึกหุ่นยนต์</small></div>
+            <button type="button" class="btn tf-primary-save tf-save-action" onclick="tfSaveToWorkspace()" title="สร้างแพ็กเกจ TF, ODOM และบันทึกโมเดลลง workspace">💾 บันทึกทั้งหมด</button>
+          </div>
+          <div id="tf-props"></div>
+        </aside>
 
       </div>
     </div><!-- /page-transformation -->
@@ -2211,8 +2728,127 @@ canvas#mon-chart{width:100%;height:100%;display:block}
       .map-wall .mx{color:var(--dim)}
       .map-actions{display:flex;flex-direction:column;gap:6px}
     </style>
+    <style>
+      /* ══ 3D MAP EDITOR — student workspace ══ */
+      #page-map #map-page{display:none!important}
+      #map3d-page{display:flex;flex:1;min-width:0;flex-direction:column;overflow:hidden;background:var(--bg0)}
+      .map3d-top{min-height:66px;padding:10px 14px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--brd);background:linear-gradient(90deg,color-mix(in srgb,var(--acc) 11%,var(--bg1)),var(--bg1))}
+      .map3d-title{display:flex;align-items:center;gap:10px;margin-right:8px}.map3d-title-icon{width:40px;height:40px;display:grid;place-items:center;border-radius:13px;background:linear-gradient(135deg,var(--acc),var(--pur));font-size:21px}.map3d-title strong{display:block;font-size:13px}.map3d-title small{display:block;color:var(--dim);font-size:9px;margin-top:2px}
+      .map3d-toolbar{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.map3d-btn{min-height:38px;padding:7px 12px;border:1px solid var(--brd);border-radius:11px;background:var(--bg2);color:var(--mt);font:700 11px var(--fn);cursor:pointer}.map3d-btn:hover,.map3d-btn.active{border-color:var(--acc);color:var(--txt);background:var(--adim)}.map3d-btn.primary{border:0;color:#fff;background:linear-gradient(135deg,var(--acc),var(--pur))}.map3d-btn.lidar{color:var(--tel);border-color:color-mix(in srgb,var(--tel) 38%,var(--brd))}.map3d-spacer{flex:1}.map3d-unit{display:flex;align-items:center;gap:6px;padding:5px 7px 5px 10px;border:1px solid var(--brd);border-radius:11px;color:var(--dim);font-size:10px;background:var(--bg2)}.map3d-unit select{border:0;outline:0;background:transparent;color:var(--txt);font:700 11px var(--fn)}
+      .map3d-work{display:flex;flex:1;min-height:0}.map3d-viewport{position:relative;flex:1;min-width:0;overflow:hidden;background:radial-gradient(circle at 50% 35%,#26304a,#0d1019 70%)}#map3d-container{position:absolute;inset:0}.map3d-viewbar{position:absolute;left:12px;top:12px;z-index:4;display:flex;gap:5px;padding:5px;border:1px solid var(--brd);border-radius:12px;background:rgba(15,18,29,.76);backdrop-filter:blur(10px)}.map3d-viewbar button{width:38px;height:34px;border:0;border-radius:8px;background:transparent;color:#c8cce0;cursor:pointer}.map3d-viewbar button:hover{background:rgba(108,99,255,.28);color:#fff}.map3d-help{position:absolute;left:50%;bottom:13px;z-index:4;transform:translateX(-50%);padding:7px 12px;border:1px solid var(--brd);border-radius:999px;background:rgba(15,18,29,.78);color:#aeb4cc;font-size:9px;white-space:nowrap;pointer-events:none;backdrop-filter:blur(8px)}.map3d-status{position:absolute;right:12px;bottom:13px;z-index:4;max-width:42%;padding:7px 10px;border-radius:9px;background:rgba(15,18,29,.78);color:#75ddb4;font-size:9px;pointer-events:none}
+      .map3d-props{width:285px;flex-shrink:0;overflow-y:auto;border-left:1px solid var(--brd);background:var(--bg1)}.map3d-props-head{padding:15px;border-bottom:1px solid var(--brd);background:linear-gradient(135deg,var(--adim),transparent)}.map3d-props-head strong{display:block;font-size:13px}.map3d-props-head small{color:var(--dim);font-size:9px}.map3d-empty{padding:24px 18px;text-align:center;color:var(--dim);font-size:11px;line-height:1.7}.map3d-empty span{display:block;font-size:36px;margin-bottom:7px}.map3d-form{padding:13px}.map3d-section{margin-bottom:15px}.map3d-section-title{margin-bottom:8px;color:var(--acc);font-size:9px;font-weight:800;letter-spacing:.6px;text-transform:uppercase}.map3d-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:7px}.map3d-field{min-width:0}.map3d-field.wide{grid-column:1/-1}.map3d-field label{display:flex;justify-content:space-between;margin-bottom:4px;color:var(--dim);font-size:9px}.map3d-field input{width:100%;height:34px;padding:5px 8px;border:1px solid var(--brd);border-radius:8px;outline:0;background:var(--bg2);color:var(--txt);font:600 10px var(--mono)}.map3d-field input:focus{border-color:var(--acc)}.map3d-danger{width:100%;margin-top:5px;color:var(--red);border-color:color-mix(in srgb,var(--red) 35%,var(--brd));background:color-mix(in srgb,var(--red) 8%,var(--bg2))}.map3d-room{padding:13px;border-top:1px solid var(--brd)}
+      .map3-modal{position:fixed;inset:0;z-index:10000;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(5,7,22,.76);backdrop-filter:blur(7px)}.map3-modal.open{display:flex}.map3-dialog{width:min(720px,96vw);max-height:88vh;overflow:auto;border:1px solid var(--brd);border-radius:22px;background:var(--bg1);box-shadow:0 28px 80px rgba(0,0,0,.38)}.map3-dialog-head{display:flex;align-items:center;justify-content:space-between;padding:17px 20px;border-bottom:1px solid var(--brd)}.map3-dialog-head h3{font-size:15px}.map3-close{width:34px;height:34px;border:0;border-radius:10px;background:var(--bg2);color:var(--mt);cursor:pointer}.map3-cats{display:flex;gap:6px;padding:13px 18px 0;overflow-x:auto}.map3-cat{flex-shrink:0;padding:7px 10px;border:1px solid var(--brd);border-radius:999px;background:var(--bg2);color:var(--mt);font-size:9px;font-weight:800;cursor:pointer}.map3-cat.active,.map3-cat:hover{border-color:var(--acc);background:var(--adim);color:var(--txt)}.map3-palette{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;padding:14px 18px 18px}.map3-object{padding:13px 8px;border:1px solid var(--brd);border-radius:15px;background:var(--bg2);color:var(--txt);text-align:center;cursor:pointer}.map3-object:hover{border-color:var(--acc);transform:translateY(-2px)}.map3-object span{display:block;font-size:29px;margin-bottom:6px}.map3-object strong{display:block;font-size:10px}.map3-object small{display:block;color:var(--dim);font-size:8px;margin-top:3px}.map3-template-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:11px;padding:18px}.map3-template{display:grid;grid-template-columns:58px 1fr auto;align-items:center;gap:12px;padding:14px;border:1px solid var(--brd);border-radius:16px;background:var(--bg2);color:var(--txt);text-align:left;cursor:pointer}.map3-template:hover{border-color:var(--acc);transform:translateY(-2px)}.map3-template>span{width:54px;height:54px;display:grid;place-items:center;border-radius:15px;background:var(--adim);font-size:28px}.map3-template strong{display:block;font-size:11px}.map3-template small{display:block;margin-top:4px;color:var(--dim);font-size:8px;line-height:1.45}.map3-template b{color:var(--acc);font-size:18px}.map3-lidar-body{padding:18px}.map3-lidar-body .map-lidar-card{max-width:none}
+      @media(max-width:900px){.map3d-title small{display:none}.map3d-props{width:250px}.map3d-btn span{display:none}.map3-palette{grid-template-columns:repeat(3,1fr)}}@media(max-width:680px){.map3d-top{align-items:flex-start;flex-wrap:wrap}.map3d-title{width:100%}.map3d-work{flex-direction:column}.map3d-viewport{min-height:52vh}.map3d-props{width:100%;max-height:38vh;border-left:0;border-top:1px solid var(--brd)}.map3-palette{grid-template-columns:repeat(2,1fr)}.map3-template-grid{grid-template-columns:1fr}.map3d-help{display:none}}
+    </style>
+    <style id="map3d-robot-config-layout">
+      #map3d-page{background:var(--bg0)}
+      #map3d-page .map3d-work{padding:12px;gap:12px;box-sizing:border-box}
+      .map3d-library,.map3d-props,.map3d-viewport{border:1px solid var(--brd);border-radius:16px;box-shadow:0 14px 34px rgba(0,0,0,.10)}
+      .map3d-library{width:300px;flex:0 0 300px;min-width:0;display:flex;flex-direction:column;overflow:hidden;background:var(--bg1)}
+      .map3d-panel-head{display:flex;align-items:center;gap:10px;padding:14px 14px 10px;background:linear-gradient(135deg,var(--adim),var(--gdim));color:var(--txt);font-size:14px;font-weight:800}
+      .map3d-panel-icon{width:36px;height:36px;display:grid;place-items:center;flex:0 0 36px;border:1px solid var(--abrd);border-radius:12px;background:var(--bg2);font-size:19px}
+      .map3d-panel-sub{padding:0 14px 14px;border-bottom:1px solid var(--brd);background:linear-gradient(135deg,var(--adim),var(--gdim));color:var(--mt);font-size:11px;line-height:1.5}
+      .map3d-library-scroll{min-height:0;flex:1;overflow-y:auto;overscroll-behavior:contain;padding:10px;scrollbar-gutter:stable}
+      .map3d-library-scroll::-webkit-scrollbar,.map3d-props-scroll::-webkit-scrollbar{width:8px}
+      .map3d-library-scroll::-webkit-scrollbar-thumb,.map3d-props-scroll::-webkit-scrollbar-thumb{border:2px solid transparent;border-radius:10px;background:var(--brdh);background-clip:padding-box}
+      .map3d-acc{margin-bottom:9px;overflow:hidden;border:1px solid var(--brd);border-radius:12px;background:var(--bg0)}
+      .map3d-acc summary{list-style:none;display:flex;align-items:center;gap:8px;padding:11px;cursor:pointer;background:var(--bg2);color:var(--txt);font-size:11px;font-weight:800;user-select:none}
+      .map3d-acc summary::-webkit-details-marker{display:none}.map3d-acc summary::after{content:'▾';margin-left:auto;color:var(--mt);transition:transform .15s}.map3d-acc[open] summary::after{transform:rotate(180deg)}
+      .map3d-acc-body{display:grid;grid-template-columns:1fr 1fr;gap:7px;padding:8px}
+      .map3d-action{min-height:54px;display:grid;grid-template-columns:30px 1fr;align-items:center;gap:7px;padding:8px;border:1px solid var(--brd);border-radius:10px;background:var(--bg2);color:var(--txt);text-align:left;font:700 10px var(--fn);cursor:pointer}
+      .map3d-action:hover,.map3d-action.active{border-color:var(--abrd);background:var(--adim)}
+      .map3d-action>span:first-child{width:30px;height:30px;display:grid;place-items:center;border-radius:9px;background:var(--adim);font-size:16px}.map3d-action small{display:block;margin-top:2px;color:var(--mt);font-size:8px;font-weight:500}
+      .map3d-action.wide{grid-column:1/-1}.map3d-action.template{color:var(--acc);border-color:var(--abrd)}.map3d-action.lidar{color:var(--tel)}
+      .map3d-unit-card{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;min-height:42px;padding:8px 10px;border:1px solid var(--brd);border-radius:10px;background:var(--bg2);color:var(--mt);font-size:10px}
+      .map3d-unit-card select{min-width:82px;padding:6px 8px;border:1px solid var(--brd);border-radius:8px;background:var(--bg0);color:var(--txt);font:700 10px var(--fn)}
+      #map3d-page .map3d-viewport{background:var(--bg2)}
+      .map3d-stage-badge{position:absolute;top:12px;left:12px;z-index:4;display:flex;align-items:center;gap:9px;padding:8px 12px;border:1px solid var(--brd);border-radius:14px;background:color-mix(in srgb,var(--bg1) 92%,transparent);color:var(--txt);backdrop-filter:blur(10px);box-shadow:0 12px 26px rgba(0,0,0,.1)}
+      .map3d-stage-badge>span{width:28px;height:28px;display:grid;place-items:center;border-radius:10px;background:var(--gdim);font-size:16px}.map3d-stage-badge strong{display:block;font-size:12px}.map3d-stage-badge small{display:block;margin-top:1px;color:var(--mt);font-size:9px}
+      #map3d-page .map3d-viewbar{left:auto;right:12px;background:color-mix(in srgb,var(--bg1) 92%,transparent);box-shadow:0 10px 24px rgba(0,0,0,.08)}
+      #map3d-page .map3d-viewbar button{background:var(--bg2);border:1px solid var(--brd);color:var(--mt)}#map3d-page .map3d-viewbar button:hover{background:var(--adim);color:var(--txt)}
+      #map3d-page .map3d-help,#map3d-page .map3d-status{background:color-mix(in srgb,var(--bg1) 92%,transparent);border-color:var(--brd)}
+      #map3d-page .map3d-props{width:330px;flex:0 0 330px;display:flex;flex-direction:column;overflow:hidden;border-left:1px solid var(--brd)}
+      .map3d-save-top{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--brd);background:var(--bg2)}.map3d-save-label{min-width:0;flex:1}.map3d-save-label strong{display:block;font-size:12px}.map3d-save-label small{display:block;margin-top:2px;color:var(--mt);font-size:9px}
+      #map3d-save{width:auto;min-height:38px;padding:8px 12px;border:0;background:linear-gradient(135deg,var(--grn),#31bdf2);color:#061814;white-space:nowrap;font-weight:800}
+      .map3d-props-scroll{min-height:0;flex:1;overflow-y:auto}.map3d-props-head{padding:14px;background:linear-gradient(135deg,var(--adim),var(--gdim))}
+      .map3d-form,.map3d-room{margin:10px;border:1px solid var(--brd);border-radius:12px;background:var(--bg0)}.map3d-room{padding:13px}.map3d-section-title{padding:7px 9px;border:1px solid var(--abrd);border-radius:9px;background:var(--adim)}
+      .map3d-dialog-footer{display:flex;justify-content:flex-end;padding:10px 18px;border-top:1px solid var(--brd);background:var(--bg2)}
+      @media(max-width:1050px){.map3d-library{width:240px;flex-basis:240px}#map3d-page .map3d-props{width:270px;flex-basis:270px}.map3d-action{grid-template-columns:25px 1fr;padding:6px}.map3d-action>span:first-child{width:25px;height:25px}}
+      @media(max-width:700px){#map3d-page .map3d-work{flex-direction:column;overflow-y:auto}.map3d-library{width:100%;flex:0 0 auto;max-height:42vh}.map3d-viewport{min-height:58vh;flex:0 0 58vh}#map3d-page .map3d-props{width:100%;flex:0 0 auto;max-height:48vh}.map3d-stage-badge small{display:none}}
+    </style>
     <!-- ══ MAP EDITOR PAGE ══ -->
-    <div class="page" id="page-map">
+    <div class="page" id="page-map" data-simulation-only>
+      <div id="map3d-page">
+        <div class="map3d-work">
+          <aside class="map3d-library" aria-label="เครื่องมือสร้างสนาม">
+            <div class="map3d-panel-head"><span class="map3d-panel-icon">🏠</span><span>สร้างสนามและห้อง</span></div>
+            <div class="map3d-panel-sub">เลือก Template หรือเพิ่มกำแพง เฟอร์นิเจอร์ และจุดเริ่มให้หุ่นยนต์</div>
+            <div class="map3d-library-scroll">
+              <details class="map3d-acc" open>
+                <summary>เริ่มสร้างสนาม</summary>
+                <div class="map3d-acc-body">
+                  <button type="button" class="map3d-action template wide" onclick="map3dOpenTemplates()"><span>🏘️</span><span>เลือก Template ห้อง<small>สร้างสนามสำเร็จรูป</small></span></button>
+                  <button type="button" class="map3d-action wide" onclick="map3dOpenObjects()"><span>＋</span><span>เพิ่มของในห้อง<small>กำแพง ประตู โต๊ะ และสิ่งกีดขวาง</small></span></button>
+                </div>
+              </details>
+              <details class="map3d-acc" open>
+                <summary>แก้ไขวัตถุ</summary>
+                <div class="map3d-acc-body">
+                  <button type="button" class="map3d-action active" id="map3d-move" onclick="map3dSetMode('translate')"><span>✥</span><span>ย้าย<small>ปุ่ม W</small></span></button>
+                  <button type="button" class="map3d-action" id="map3d-rotate" onclick="map3dSetMode('rotate')"><span>⟳</span><span>หมุน<small>ปุ่ม E</small></span></button>
+                  <button type="button" class="map3d-action wide" onclick="map3dFocus()"><span>⌂</span><span>จัดกล้องให้พอดี<small>แสดงสนามทั้งหมด</small></span></button>
+                </div>
+              </details>
+              <details class="map3d-acc" open>
+                <summary>ระบบหุ่นยนต์</summary>
+                <div class="map3d-acc-body">
+                  <button type="button" class="map3d-action lidar wide" onclick="map3dOpenLidar()"><span>📡</span><span>เลือก LiDAR<small>บันทึกรุ่นเซนเซอร์กับสนาม</small></span></button>
+                  <label class="map3d-unit-card"><span>📏 หน่วยแก้ไข</span><select id="map3d-unit" onchange="map3dChangeUnit(this.value)"><option value="m">เมตร (m)</option><option value="cm">เซนติเมตร</option><option value="mm">มิลลิเมตร</option></select></label>
+                </div>
+              </details>
+            </div>
+          </aside>
+          <div class="map3d-viewport" id="map3d-viewport">
+            <div id="map3d-container"></div>
+            <div class="map3d-stage-badge"><span>🗺️</span><div><strong>Map Editor</strong><small>พื้นที่ออกแบบสนาม 3D</small></div></div>
+            <div class="map3d-viewbar"><button onclick="map3dView('iso')" title="มุมมอง 3D">◇</button><button onclick="map3dView('top')" title="มองจากด้านบน">⬆</button><button onclick="map3dView('front')" title="มองด้านหน้า">▣</button><button onclick="map3dFocus()" title="จัดมุมมองให้พอดี">⌂</button></div>
+            <div class="map3d-help">เมาส์ซ้าย: เลือก · เมาส์ขวา: หมุนกล้อง · ล้อเมาส์: ซูม</div>
+            <div class="map3d-status" id="map3d-status">กำลังเตรียมห้องสร้างแผนที่...</div>
+          </div>
+          <aside class="map3d-props">
+            <div class="map3d-save-top"><div class="map3d-save-label"><strong>Property</strong><small>ตั้งค่าและบันทึกสนาม</small></div><button type="button" class="map3d-btn" id="map3d-save" onclick="map3dSave()">💾 <span>บันทึกแผนที่ simulation</span></button></div>
+            <div class="map3d-props-scroll">
+              <div class="map3d-props-head"><strong id="map3d-selected-title">คุณสมบัติวัตถุ</strong><small>ค่าที่บันทึกจริงจะเป็นเมตรเสมอ</small></div>
+              <div class="map3d-empty" id="map3d-empty"><span>👆</span>เลือกวัตถุในห้อง<br>เพื่อแก้ไขตำแหน่งและขนาด</div>
+              <div class="map3d-form" id="map3d-form" style="display:none">
+                <div class="map3d-section"><div class="map3d-section-title">ตำแหน่ง</div><div class="map3d-grid">
+                  <div class="map3d-field"><label>X <b class="map3d-unit-label">m</b></label><input id="map3d-x" type="number" step="0.1" onchange="map3dApplyProps()"></div>
+                  <div class="map3d-field"><label>Y <b class="map3d-unit-label">m</b></label><input id="map3d-y" type="number" step="0.1" onchange="map3dApplyProps()"></div>
+                  <div class="map3d-field"><label>Z <b class="map3d-unit-label">m</b></label><input id="map3d-z" type="number" step="0.1" onchange="map3dApplyProps()"></div>
+                  <div class="map3d-field"><label>หมุน <b>°</b></label><input id="map3d-r" type="number" step="5" onchange="map3dApplyProps()"></div>
+                </div></div>
+                <div class="map3d-section"><div class="map3d-section-title">ขนาด</div><div class="map3d-grid">
+                  <div class="map3d-field"><label>กว้าง <b class="map3d-unit-label">m</b></label><input id="map3d-w" type="number" min="0.001" step="0.1" onchange="map3dApplyProps()"></div>
+                  <div class="map3d-field"><label>ยาว <b class="map3d-unit-label">m</b></label><input id="map3d-d" type="number" min="0.001" step="0.1" onchange="map3dApplyProps()"></div>
+                  <div class="map3d-field wide"><label>สูง <b class="map3d-unit-label">m</b></label><input id="map3d-h" type="number" min="0.001" step="0.1" onchange="map3dApplyProps()"></div>
+                </div></div>
+                <button type="button" class="map3d-btn map3d-danger" onclick="map3dDeleteSelected()">🗑 ลบวัตถุนี้</button>
+              </div>
+              <div class="map3d-room"><div class="map3d-section-title">ขนาดพื้นที่</div><div class="map3d-grid">
+                <div class="map3d-field"><label>กว้าง <b class="map3d-unit-label">m</b></label><input id="map3d-room-w" type="number" value="8" onchange="map3dApplyRoom()"></div>
+                <div class="map3d-field"><label>ยาว <b class="map3d-unit-label">m</b></label><input id="map3d-room-d" type="number" value="8" onchange="map3dApplyRoom()"></div>
+              </div></div>
+            </div>
+          </aside>
+        </div>
+      </div>
+
+      <div class="map3-modal" id="map3d-object-modal" onclick="if(event.target===this)map3dCloseModal('map3d-object-modal')"><div class="map3-dialog"><div class="map3-dialog-head"><div><h3>🧸 เลือกของมาวางในห้อง</h3><small style="color:var(--dim)">เลือกหมวด แล้วคลิกวัตถุที่ชอบได้เลย</small></div><button class="map3-close" onclick="map3dCloseModal('map3d-object-modal')">✕</button></div><div class="map3-cats" id="map3d-categories"></div><div class="map3-palette" id="map3d-palette"></div></div></div>
+
+      <div class="map3-modal" id="map3d-template-modal" onclick="if(event.target===this)map3dCloseModal('map3d-template-modal')"><div class="map3-dialog" style="width:min(790px,96vw)"><div class="map3-dialog-head"><div><h3>🏘️ เลือก Template ห้องสำเร็จรูป</h3><small style="color:var(--dim)">ระบบจะสร้างห้องและเฟอร์นิเจอร์ให้ทันที แล้วคุณแก้ไขต่อได้ทุกชิ้น</small></div><button class="map3-close" onclick="map3dCloseModal('map3d-template-modal')">✕</button></div><div class="map3-template-grid" id="map3d-template-grid"></div></div></div>
+
+      <div class="map3-modal" id="map3d-lidar-modal" onclick="if(event.target===this)map3dCloseModal('map3d-lidar-modal')"><div class="map3-dialog" style="width:min(480px,96vw)"><div class="map3-dialog-head"><div><h3>📡 เลือก LiDAR ของโปรเจกต์</h3></div><button class="map3-close" onclick="map3dCloseModal('map3d-lidar-modal')">✕</button></div><div class="map3-lidar-body" id="map3d-lidar-body"></div></div></div>
+
       <div id="map-page">
         <!-- Left: tools -->
         <div id="map-tools">
@@ -2249,9 +2885,9 @@ canvas#mon-chart{width:100%;height:100%;display:block}
                 <select id="map-lidar-model" onchange="mapLidarModelChanged()" aria-label="เลือกรุ่น LiDAR" disabled></select>
               </div>
               <div id="map-lidar-summary" class="map-lidar-summary empty" aria-live="polite"></div>
-              <button class="btn map-lidar-next" type="button" disabled title="ระบบดาวน์โหลดไดรเวอร์จะเพิ่มในขั้นตอนถัดไป">⬇ ดาวน์โหลดไดรเวอร์ <small>เร็ว ๆ นี้</small></button>
+              <button class="btn map-lidar-next" id="map-lidar-driver" type="button" onclick="mapOpenLidarDriver()" disabled>↗ เปิดหน้าไดรเวอร์</button>
             </div>
-            <div class="map-lidar-future">ระบบจะบันทึกรุ่นที่เลือกไว้ใน map.json เพื่อเตรียมดาวน์โหลดไดรเวอร์ลง workspace ในขั้นตอนถัดไป</div>
+            <div class="map-lidar-future">ระบบจะบันทึกรุ่นและ repository ไว้ใน map.json และสร้างสคริปต์ติดตั้งไดรเวอร์ให้เมื่อ Export Project</div>
           </div>
           <div class="map-side-sec">
             <div class="ss">ขอบเขตห้อง (m)</div>
@@ -2292,7 +2928,7 @@ canvas#mon-chart{width:100%;height:100%;display:block}
           <div id="dc-parts"></div>
           <div style="padding:8px 12px;border-top:1px solid var(--brd);display:flex;gap:6px">
             <button class="btn" style="flex:1" onclick="dcNewComponent()">✚ ใหม่</button>
-            <button class="btn" style="flex:1;background:var(--grn);color:#08240f" onclick="dcSaveComponent()">💾 บันทึก</button>
+            <button class="btn" id="dc-save-component" style="flex:1;background:var(--grn);color:#08240f" onclick="dcSaveComponent()">💾 บันทึก</button>
           </div>
           <div style="padding:8px 12px;border-top:1px solid var(--brd);display:flex;gap:6px">
             <button class="btn" style="flex:1;background:var(--pur);color:#fff" onclick="dcOpenHoleModal()">✂ เจาะรู (Hole)</button>
@@ -2371,6 +3007,30 @@ canvas#mon-chart{width:100%;height:100%;display:block}
     </div>
 
     <!-- Export Modal -->
+    <!-- Robot Template chooser -->
+    <style>
+      .tf-template-body{min-height:0;overflow-y:auto;padding:16px}
+      .tf-template-intro{margin-bottom:13px;color:var(--mt);font-size:11px;line-height:1.55}
+      .tf-template-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+      .tf-template-card{min-width:0;display:grid;grid-template-columns:48px minmax(0,1fr);gap:11px;align-items:center;padding:13px;text-align:left;border:1px solid var(--brd);border-radius:13px;background:var(--bg2);color:var(--txt);cursor:pointer;font-family:var(--fn);transition:transform .12s,border-color .12s,background .12s}
+      .tf-template-card:hover{transform:translateY(-1px);border-color:var(--abrd);background:var(--adim)}
+      .tf-template-icon{width:48px;height:48px;display:grid;place-items:center;border-radius:14px;background:var(--adim);font-size:24px}
+      .tf-template-card b{display:block;font-size:13px}
+      .tf-template-card small{display:block;margin-top:3px;color:var(--mt);font-size:10px;line-height:1.4}
+      .tf-template-card em{display:inline-block;margin-top:7px;padding:2px 7px;border-radius:8px;background:var(--bg3);color:var(--acc);font:normal 9px var(--mono)}
+      @media(max-width:560px){.tf-template-grid{grid-template-columns:1fr}.tf-template-body{padding:11px}}
+    </style>
+    <div id="tf-template-modal" class="tf-modal" style="display:none" role="dialog" aria-modal="true" aria-labelledby="tf-template-title">
+      <div class="tf-modal-box" style="width:min(720px,94vw)">
+        <div class="tf-modal-head"><span id="tf-template-title">🤖 เลือก Template หุ่นยนต์</span><button type="button" class="btn" onclick="tfCloseTemplateModal()">✕</button></div>
+        <div class="tf-template-body">
+          <div class="tf-template-intro">เลือกชนิดระบบขับเคลื่อน ระบบจะสร้างตัวถัง ชุดล้อ LiDAR และ IMU พร้อมตั้งค่า ODOM pattern ให้อัตโนมัติ</div>
+          <div id="tf-template-grid" class="tf-template-grid"></div>
+        </div>
+        <div class="tf-modal-foot"><span style="margin-right:auto;color:var(--mt);font-size:10px">การเลือก Template จะแทนที่โมเดลปัจจุบันหลังยืนยัน</span><button type="button" class="btn" onclick="tfCloseTemplateModal()">ยกเลิก</button></div>
+      </div>
+    </div>
+
     <div id="tf-export-modal" class="tf-modal" style="display:none">
       <div class="tf-modal-box">
         <div class="tf-modal-head">
@@ -2387,7 +3047,7 @@ canvas#mon-chart{width:100%;height:100%;display:block}
         <div class="tf-modal-foot">
           <button class="btn" onclick="tfCopyExport()">📋 Copy</button>
           <button class="btn" onclick="tfDownloadExport()">⬇ Download</button>
-          <button class="btn btn-g" id="tf-save-ws-btn" onclick="tfSaveToWorkspace()" title="สร้างแพ็กเกจ sim_robot_tf (TF) + sim_robot_odom (odom จากล้อ) พร้อมกัน">💾 Save → packages (TF + Odom)</button>
+          <button class="btn btn-g tf-save-action" id="tf-save-ws-btn" onclick="tfSaveToWorkspace()" title="สร้างแพ็กเกจ sim_robot_tf (TF + model) และ sim_robot_odom พร้อมกัน">💾 Save → packages (TF + Odom + Model)</button>
         </div>
       </div>
     </div>
@@ -2402,6 +3062,7 @@ canvas#mon-chart{width:100%;height:100%;display:block}
       .tf-wheel-tbl th,.tf-wheel-tbl td{border:1px solid var(--brd);padding:5px 6px;text-align:left}
       .tf-wheel-tbl th{background:var(--bg2);color:var(--dim);font-weight:600}
       .tf-wheel-tbl input,.tf-wheel-tbl select{width:100%;background:#0f131a;color:#cfe3ff;border:1px solid var(--brd);border-radius:4px;padding:3px 5px;font-family:var(--mono);font-size:11px}
+      .tf-wheel-tbl .tf-assign-toggle{display:flex;align-items:center;gap:5px;margin-bottom:4px;color:var(--mt);font-size:10px}.tf-wheel-tbl .tf-assign-toggle input{width:auto}.tf-wheel-tbl td:nth-child(2),.tf-wheel-tbl td:nth-child(3){min-width:170px}
       .tf-odom-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:8px}
       .tf-kpi{background:var(--bg2);border:1px solid var(--brd);border-radius:8px;padding:8px 10px}
       .tf-kpi .k{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.04em}
@@ -2428,7 +3089,7 @@ canvas#mon-chart{width:100%;height:100%;display:block}
     <!-- Save Confirmation Modal -->
     <div id="tf-save-modal" class="tf-modal" style="display:none">
       <div class="tf-modal-box" style="width:min(420px,92vw)">
-        <div class="tf-modal-head"><span>💾 บันทึกเรียบร้อย</span></div>
+        <div class="tf-modal-head"><span id="tf-save-modal-title">💾 บันทึกเรียบร้อย</span></div>
         <div id="tf-save-modal-body" style="padding:18px 20px;font-size:13px;color:var(--txt);line-height:1.6"></div>
         <div class="tf-modal-foot">
           <button class="btn btn-g" onclick="tfCloseSaveAlert()">ตกลง</button>
@@ -2723,6 +3384,24 @@ canvas#mon-chart{width:100%;height:100%;display:block}
 </div>
 </div>
 
+<!-- One-page package creator for the child-friendly Flow Editor -->
+<div class="overlay hidden" id="modal-flow-quick-package">
+<div class="modal flow-quick-dialog">
+  <div class="flow-quick-head"><span class="flow-quick-icon">📦</span><div><h2>สร้างโปรแกรมหุ่นใหม่</h2><p>กรอกเพียงสองชื่อ แล้วระบบเตรียม ROS 2 Python Package และ Block ให้ทันที</p></div></div>
+  <div class="flow-quick-grid">
+    <div class="flow-quick-field"><label for="flow-quick-pkg">ชื่อ Package</label><input id="flow-quick-pkg" value="my_robot_app" autocomplete="off" spellcheck="false"></div>
+    <div class="flow-quick-field"><label for="flow-quick-node">ชื่อโปรแกรม / Node</label><input id="flow-quick-node" value="robot_node" autocomplete="off" spellcheck="false"></div>
+    <div class="flow-quick-field full"><label>เลือกแบบเริ่มต้น</label><div class="flow-template-options">
+      <label class="flow-template-option"><input type="radio" name="flow-quick-template" value="timer" checked><span>⏰</span><b>ทำงานตามเวลา</b><small>Timer → Python → ข้อความ</small></label>
+      <label class="flow-template-option"><input type="radio" name="flow-quick-template" value="topic"><span>📡</span><b>รับและส่ง Topic</b><small>รับข้อมูล → Python → ส่งข้อมูล</small></label>
+      <label class="flow-template-option"><input type="radio" name="flow-quick-template" value="blank"><span>🐍</span><b>เริ่มจาก Python</b><small>Python Block เปล่าหนึ่งอัน</small></label>
+    </div></div>
+  </div>
+  <div class="flow-quick-status" id="flow-quick-status"></div>
+  <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:5px"><button class="btn" type="button" onclick="closeModal('modal-flow-quick-package')">ยกเลิก</button><button class="btn btn-p" id="flow-quick-create" type="button" onclick="flowCreateQuickPackage()">✨ สร้างและเริ่มเขียน</button></div>
+</div>
+</div>
+
 <!-- Code gen modal -->
 <div class="overlay hidden" id="modal-flow-code">
 <div class="modal" style="min-width:600px;max-width:700px">
@@ -2829,6 +3508,29 @@ canvas#mon-chart{width:100%;height:100%;display:block}
 </div>
 </div>
 
+<!-- ══ NAV2 EXPORT & INSTALL GUIDE ══ -->
+<div class="overlay hidden" id="pg-nav-export-modal" role="dialog" aria-modal="true" aria-labelledby="pg-export-title">
+  <div class="modal" style="width:min(720px,96vw);max-height:90vh;overflow:auto">
+    <div style="display:flex;align-items:flex-start;gap:12px"><div style="font-size:30px">📦</div><div style="flex:1"><h2 id="pg-export-title">ดาวน์โหลด ROS Project ทั้งหมด</h2><p style="color:var(--mt);font-size:11px;line-height:1.6;margin-top:4px">ZIP จะรวม source packages ทั้ง workspace, Robot Config, Maps, <code>mecha_rayong_nav</code>, ตัวติดตั้ง และคู่มือใช้งานจริง</p></div><button class="btn" onclick="closeModal('pg-nav-export-modal')" aria-label="ปิด">✕</button></div>
+    <div class="fld" style="margin-top:14px"><label>เลือก Saved Map ที่จะใส่ใน Project</label><select id="pg-export-map" onchange="playgroundExportMapChanged()"><option value="">กำลังโหลดแผนที่…</option></select></div>
+    <div class="pg-export-grid">
+      <div class="pg-export-item"><b>🧩 src/ ทั้งหมด</b><small>Robot Model, TF, Odom, MapSim และทุก package ในโปรเจกต์</small></div>
+      <div class="pg-export-item"><b>🗺 maps/ + map.json</b><small>Saved Maps และสนามจาก Map Editor</small></div>
+      <div class="pg-export-item"><b>🚀 mecha_rayong_nav</b><small>Parameters และ launch สำหรับ Navigation บนหุ่นจริง</small></div>
+      <div class="pg-export-item"><b>🛠 Installer + Guide</b><small>install_project.sh, install_lidar_driver.sh และ INSTALL_PROJECT.md</small></div>
+    </div>
+    <h3 style="font-size:12px;margin-top:10px">1. ติดตั้ง Packages ที่จำเป็น</h3>
+    <div class="pg-export-command"><code id="pg-install-command">bash install_project.sh</code><button onclick="playgroundCopyExportCommand('pg-install-command')">คัดลอก</button></div>
+    <h3 style="font-size:12px;margin-top:12px">2. แตก ZIP ลงใน ros2_ws/src แล้ว Build</h3>
+    <div class="pg-export-command"><code id="pg-build-command">cd ~/ros2_ws &amp;&amp; colcon build --symlink-install --packages-select mecha_rayong_nav &amp;&amp; source install/setup.bash</code><button onclick="playgroundCopyExportCommand('pg-build-command')">คัดลอก</button></div>
+    <h3 style="font-size:12px;margin-top:12px">3. เปิด Driver หุ่นก่อน แล้วเริ่ม Navigation</h3>
+    <div class="pg-export-command"><code id="pg-run-command">ros2 launch mecha_rayong_nav navigation.launch.py use_sim_time:=false</code><button onclick="playgroundCopyExportCommand('pg-run-command')">คัดลอก</button></div>
+    <div style="margin-top:12px;padding:10px;border-radius:10px;background:var(--adm2);color:var(--amb);font-size:10px;line-height:1.6">⚠️ หุ่นยนต์จริงต้องมี <b>/scan, /odom, /tf</b> และรับคำสั่ง <b>/cmd_vel</b> พร้อม TF: map → odom → base_link → laser_frame</div>
+    <div id="pg-export-status" style="min-height:20px;margin-top:10px;color:var(--mt);font-size:10px"></div>
+    <div class="mfooter"><button class="btn" onclick="closeModal('pg-nav-export-modal')">ปิด</button><button class="btn btn-g" id="pg-export-download" onclick="playgroundExportNavigation()">⬇ Build และ Download ทั้ง Project</button></div>
+  </div>
+</div>
+
 <!-- Final responsive layer: kept after page-specific styles so every workspace view can shrink safely. -->
 <style id="app-responsive-css">
   img,svg,canvas{max-width:100%}
@@ -2844,7 +3546,7 @@ canvas#mon-chart{width:100%;height:100%;display:block}
     #page-dashboard .project-overview-head{grid-template-columns:minmax(0,1fr) 260px}
     #rviz-panel{width:230px}
     #tf-panel{width:190px}
-    #tf-props{width:240px}
+    #tf-right-panel{width:240px!important;flex-basis:240px!important}
     #dc-left{width:190px}
     #dc-props{width:230px}
     #map-tools{width:170px}
@@ -2953,19 +3655,18 @@ canvas#mon-chart{width:100%;height:100%;display:block}
     #run-quick-input{min-width:100%;order:-1}
     .exe-card{padding:12px}
 
-    #page-rviz>div:first-of-type{flex-direction:column!important}
-    #rviz-panel{width:100%;height:32%;border-right:0;border-bottom:1px solid var(--brd);overflow-y:auto}
-    #rviz-viewport{min-height:0;height:68%}
-    .rviz-status-bar{left:8px;top:8px;max-width:calc(100% - 16px);flex-wrap:wrap}
-    .rviz-view-controls{top:auto;right:8px;bottom:8px;max-width:calc(100% - 16px)}
+    #rviz-panel{width:210px;height:auto;border-right:1px solid #151515;border-bottom:0;overflow:hidden}
+    #rviz-viewport{min-height:0;height:auto}
+    .rviz-status-bar{max-width:none;flex-wrap:nowrap;overflow-x:auto}
     .rviz-teleop{right:8px;bottom:48px;width:min(212px,calc(100% - 16px))}
     .rviz-cam-hint{display:none}
 
     #page-transformation>div:first-child,#page-3dcomp>div:first-child{flex-direction:column!important;overflow-y:auto!important}
     #tf-panel,#dc-left{width:100%;height:auto;max-height:30dvh;border-right:0;border-bottom:1px solid var(--brd);overflow-y:auto;flex:0 0 auto}
     #tf-viewport,#dc-viewport{width:100%;height:52dvh;min-height:320px;flex:0 0 auto}
+    #tf-right-panel{width:100%!important;height:auto;max-height:46dvh;flex:0 0 auto!important;border-left:0;border-top:1px solid var(--brd)}
     #tf-props,#dc-props{width:100%;height:auto;min-height:220px;max-height:42dvh;border-left:0;border-top:1px solid var(--brd);flex:0 0 auto}
-    .tf-add-grid,.dc-palette{grid-template-columns:repeat(3,minmax(0,1fr))}
+    .tf-device-grid,.dc-palette{grid-template-columns:repeat(3,minmax(0,1fr))}
     .tf-view-bar{right:5px;top:5px;max-height:210px;transform:scale(.76);transform-origin:top right}
     .tf-gizmo-bar,.dc-gizmo-bar{left:5px;top:5px;max-width:55%;overflow-x:auto}
     .tf-gizmo-bar button,.dc-gizmo-bar button{white-space:nowrap}
@@ -3025,21 +3726,40 @@ canvas#mon-chart{width:100%;height:100%;display:block}
   @media (max-width:350px){
     #topbar .robot-info{display:none}
   }
+
+  .page-guide-action{font:900 16px/1 var(--fn)!important;color:var(--acc)!important;background:var(--adim)!important;border-color:var(--abrd)!important}
+  .page-guide-overlay{position:fixed;z-index:12000;inset:0;display:flex;justify-content:flex-end;background:rgba(5,10,20,.42);backdrop-filter:blur(3px);opacity:1;transition:opacity .18s ease}
+  .page-guide-overlay.hidden{display:none}.page-guide-panel{display:flex;flex-direction:column;width:min(430px,calc(100vw - 20px));height:100%;border-left:1px solid var(--brd);background:var(--bg1);color:var(--txt);box-shadow:-18px 0 50px rgba(0,0,0,.2);transform:translateX(0);overflow:hidden}
+  .page-guide-head{display:flex;align-items:flex-start;gap:12px;padding:20px;border-bottom:1px solid var(--brd);background:linear-gradient(135deg,var(--adim),transparent 72%)}.page-guide-icon{display:grid;place-items:center;width:44px;height:44px;flex:0 0 44px;border:1px solid var(--abrd);border-radius:14px;background:var(--bg2);font-size:23px}.page-guide-title{min-width:0;flex:1}.page-guide-title small{display:block;color:var(--acc);font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}.page-guide-title h2{margin:4px 0 0;font-size:18px;line-height:1.25}.page-guide-close{width:34px;height:34px;border:1px solid var(--brd);border-radius:10px;background:var(--bg2);color:var(--txt);font-size:18px;cursor:pointer}
+  .page-guide-body{padding:18px 20px 24px;overflow:auto}.page-guide-goal{margin:0 0 16px;padding:12px 14px;border:1px solid var(--abrd);border-radius:12px;background:var(--adim);font-size:12px;line-height:1.6}.page-guide-section-title{margin:17px 0 9px;font-size:12px}.page-guide-steps{display:grid;gap:9px}.page-guide-step{display:grid;grid-template-columns:28px minmax(0,1fr);gap:10px;padding:11px;border:1px solid var(--brd);border-radius:12px;background:var(--bg2)}.page-guide-step-number{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:var(--acc);color:#fff;font-size:11px;font-weight:900}.page-guide-step strong{display:block;font-size:12px}.page-guide-step p{margin:3px 0 0;color:var(--mt);font-size:11px;line-height:1.55}.page-guide-tips{display:grid;gap:7px;margin:0;padding:0;list-style:none}.page-guide-tips li{position:relative;padding:9px 10px 9px 31px;border-radius:10px;background:var(--bg2);color:var(--mt);font-size:11px;line-height:1.5}.page-guide-tips li::before{content:'💡';position:absolute;left:9px;top:8px}.page-guide-foot{display:flex;align-items:center;gap:9px;margin-top:auto;padding:12px 16px;border-top:1px solid var(--brd);background:var(--bg2)}.page-guide-foot label{display:flex;align-items:center;gap:7px;min-width:0;flex:1;color:var(--mt);font-size:10px}.page-guide-foot button{padding:8px 13px;border:0;border-radius:9px;background:var(--acc);color:#fff;font-weight:800;cursor:pointer}
+  @media(max-width:600px){.page-guide-panel{width:100vw}.page-guide-head{padding:15px}.page-guide-body{padding:14px 15px 20px}}
 </style>
 
+<div id="page-guide-overlay" class="page-guide-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="page-guide-heading" onclick="if(event.target===this)closePageGuide()">
+  <aside class="page-guide-panel">
+    <header class="page-guide-head"><span id="page-guide-icon" class="page-guide-icon">💡</span><div class="page-guide-title"><small>คู่มือประจำหน้า</small><h2 id="page-guide-heading">เริ่มต้นใช้งาน</h2></div><button type="button" class="page-guide-close" onclick="closePageGuide()" aria-label="ปิดคู่มือ">×</button></header>
+    <div id="page-guide-body" class="page-guide-body"></div>
+    <footer class="page-guide-foot"><label><input id="page-guide-auto" type="checkbox" checked onchange="pageGuideSetAuto(this.checked)"> แนะนำอัตโนมัติเมื่อเปิดหน้าใหม่</label><button type="button" onclick="closePageGuide()">เข้าใจแล้ว</button></footer>
+  </aside>
+</div>
+
 <script src="common.js"></script>
-<script src="app.js"></script>
-<script src="dashboard.js"></script>
+<script src="app.js?v=20260812-wizard-return4"></script>
+<script src="guide.js?v=20260812-guide1"></script>
+<script src="dashboard.js?v=20260828-real-slam1"></script>
+<script src="lidar.js?v=20260828-10"></script>
 <script src="editor.js"></script>
-<script src="terminal.js"></script>
+<script src="terminal.js?v=20260812-terminal-fix2"></script>
 <script src="monitor.js"></script>
-<script src="flow.js"></script>
+<script src="flow.js?v=20260813-quick-package4"></script>
 <script src="run.js"></script>
-<script src="rviz.js"></script>
+  <script src="rviz.js?v=20260812-theme1"></script>
+  <script src="playground.js?v=20260812-wizard-actions4"></script>
 <script src="csg.js"></script>
-<script src="transformation.js"></script>
+<script src="transformation.js?v=20260813-all-encoders3"></script>
 <script src="3dcomponent.js"></script>
 <script src="map.js"></script>
+<script src="map3d.js"></script>
 <script src="error-handler.js"></script>
 <script>
 if (typeof initTerm === 'function') initTerm();
@@ -3057,8 +3777,8 @@ if (typeof switchPage === 'function') {
     const sidebar = document.getElementById('sidebar');
     if (sidebar) {
       // เอาชื่อหน้าที่ต้องการ "ซ่อน Sidebar" มาใส่ไว้ในปีกกานี้ได้เลย
-      const hideOnPages = ['dashboard', 'status', 'rviz', 'run', 'terminal', 'monitor', 'transformation', '3dcomp'];
-      
+      const hideOnPages = ['dashboard', 'status', 'rviz', 'playground', 'run', 'terminal', 'monitor', 'transformation', '3dcomp', 'map', 'lidar'];
+      document.documentElement.classList.toggle('sidebarless-page', hideOnPages.includes(page));
       // ถ้าหน้าปัจจุบันอยู่ในรายชื่อด้านบน ให้ซ่อน (none) ถ้าไม่อยู่ให้แสดง (flex)
       sidebar.style.display = hideOnPages.includes(page) ? 'none' : 'flex';
     }
@@ -3075,5 +3795,6 @@ document.addEventListener('click', (e) => {
 });
 
 </script>
+<script src="/youtube-help.js?v=20260814-5"></script>
 </body>
 </html>

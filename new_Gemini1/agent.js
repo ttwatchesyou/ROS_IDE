@@ -9,7 +9,7 @@ const{exec}=require('child_process');
 const CONFIG_FILE=path.join(os.homedir(),'.ros2ide','config.json');
 async function loadConfig(){
   try{const raw=await fs.readFile(CONFIG_FILE,'utf8');return JSON.parse(raw);}
-  catch{return{robot_key:process.env.ROBOT_KEY||'UNREGISTERED',cloud_url:process.env.CLOUD_URL||'ws://localhost:3000/ws/agent'};}
+  catch{return{robot_key:process.env.ROBOT_KEY||'UNREGISTERED',cloud_url:process.env.CLOUD_URL||'ws://localhost:3001/ws/agent'};}
 }
 
 let ws=null,reconnMs=3000,reconnecting=false;
@@ -45,7 +45,7 @@ async function handleMsg(msg){
 }
 
 async function handleAction(action,payload={}){
-  if(action==='exec'){return new Promise((resolve,reject)=>{const child=exec(payload.command,{shell:'/bin/bash',timeout:Math.min(payload.timeout||30000,120000),maxBuffer:4*1024*1024});let stdout='',stderr='';child.stdout?.on('data',d=>stdout+=d);child.stderr?.on('data',d=>stderr+=d);child.on('close',code=>resolve({stdout:stdout.trim(),stderr:stderr.trim(),code}));child.on('error',reject);});}
+  if(action==='exec'){return new Promise((resolve,reject)=>{const child=exec(payload.command,{shell:'/bin/bash',timeout:Math.min(payload.timeout||30000,300000),maxBuffer:4*1024*1024});let stdout='',stderr='';child.stdout?.on('data',d=>stdout+=d);child.stderr?.on('data',d=>stderr+=d);child.on('close',code=>resolve({stdout:stdout.trim(),stderr:stderr.trim(),code}));child.on('error',reject);});}
   const rp=resolvePath(payload.path||'');
   switch(action){
     case 'fs_list':{const e=await fs.readdir(rp,{withFileTypes:true});const items=[];for(const f of e){try{const s=await fs.stat(path.join(rp,f.name));items.push({name:f.name,isDir:f.isDirectory(),size:s.size,mtime:s.mtimeMs/1000});}catch{}}return{items};}

@@ -85,6 +85,35 @@ echo "Installing npm dependencies..."
 npm install --silent 2>/dev/null || npm install
 echo -e "  ${GREEN}✓${NC} Dependencies installed"
 
+# USB/ACM serial ports are normally root:dialout (0660). Keep the Agent as the
+# logged-in user and grant that user the standard serial-device group.
+if getent group dialout >/dev/null 2>&1; then
+    if id -nG "$USER" | tr ' ' '\n' | grep -qx dialout; then
+        echo -e "  ${GREEN}✓${NC} Serial access (dialout) already enabled"
+    elif sudo usermod -aG dialout "$USER"; then
+        echo -e "  ${GREEN}✓${NC} Added $USER to dialout (effective after logout/login or reboot)"
+    else
+        echo -e "  ${YELLOW}!${NC} Run: sudo usermod -aG dialout $USER"
+    fi
+fi
+
+# Keep USB serial ownership consistent after every unplug/replug. Existing
+# ports also receive a per-user ACL so the Agent can use them immediately,
+# without waiting for the next login session.
+sudo tee /etc/udev/rules.d/70-roside-serial.rules >/dev/null << 'UDEV'
+KERNEL=="ttyUSB[0-9]*", MODE="0660", GROUP="dialout", TAG+="uaccess"
+KERNEL=="ttyACM[0-9]*", MODE="0660", GROUP="dialout", TAG+="uaccess"
+KERNEL=="ttyAMA[0-9]*", MODE="0660", GROUP="dialout", TAG+="uaccess"
+KERNEL=="ttyTHS[0-9]*", MODE="0660", GROUP="dialout", TAG+="uaccess"
+KERNEL=="rfcomm[0-9]*", MODE="0660", GROUP="dialout", TAG+="uaccess"
+UDEV
+sudo udevadm control --reload-rules 2>/dev/null || true
+if command -v setfacl >/dev/null 2>&1; then
+    for SERIAL_PORT in /dev/ttyUSB* /dev/ttyACM* /dev/ttyAMA* /dev/ttyTHS* /dev/rfcomm*; do
+        [ -c "$SERIAL_PORT" ] && sudo setfacl -m "u:$USER:rw" "$SERIAL_PORT"
+    done
+fi
+
 # ── 6. Create systemd service (user) ──────────────────────────
 echo -e "${YELLOW}[5/6]${NC} Setting up auto-start service..."
 mkdir -p "$(dirname $SERVICE_FILE)"
@@ -132,6 +161,7 @@ echo -e "    Restart agent: ${CYAN}ros2ide-agent restart${NC}"
 echo -e "    View logs:     ${CYAN}ros2ide-agent logs${NC}"
 echo -e "    Get key:       ${CYAN}ros2ide-agent key${NC}"
 echo -e "    Change URL:    ${CYAN}ros2ide-agent url <new_url>${NC}"
+echo -e "    Serial access: ${CYAN}ros2ide-agent serial-fix${NC}"
 echo -e "    Uninstall:     ${CYAN}ros2ide-agent uninstall${NC}"
 echo ""
 
@@ -169,6 +199,29 @@ case "$1" in
           ;;
   logs)   journalctl --user -u ros2ide-agent -f ;;
   key)    node -e "console.log(JSON.parse(require('fs').readFileSync('$CONFIG','utf8')).robot_key)" 2>/dev/null || echo "Key not found" ;;
+  serial-fix)
+          echo -e "${YELLOW}Enabling USB/ACM serial access for $USER...${NC}"
+          sudo usermod -aG dialout "$USER"
+          sudo tee /etc/udev/rules.d/70-roside-serial.rules >/dev/null << 'SERIAL_UDEV'
+KERNEL=="ttyUSB[0-9]*", MODE="0660", GROUP="dialout", TAG+="uaccess"
+KERNEL=="ttyACM[0-9]*", MODE="0660", GROUP="dialout", TAG+="uaccess"
+KERNEL=="ttyAMA[0-9]*", MODE="0660", GROUP="dialout", TAG+="uaccess"
+KERNEL=="ttyTHS[0-9]*", MODE="0660", GROUP="dialout", TAG+="uaccess"
+KERNEL=="rfcomm[0-9]*", MODE="0660", GROUP="dialout", TAG+="uaccess"
+SERIAL_UDEV
+          sudo udevadm control --reload-rules 2>/dev/null || true
+          if command -v setfacl >/dev/null 2>&1; then
+              for PORT in /dev/ttyUSB* /dev/ttyACM* /dev/ttyAMA* /dev/ttyTHS* /dev/rfcomm*; do
+                  [ -e "$PORT" ] && sudo setfacl -m "u:$USER:rw" "$PORT"
+              done
+          else
+              for PORT in /dev/ttyUSB* /dev/ttyACM* /dev/ttyAMA* /dev/ttyTHS* /dev/rfcomm*; do
+                  [ -e "$PORT" ] && sudo chmod 666 "$PORT"
+              done
+          fi
+          systemctl --user restart ros2ide-agent
+          echo -e "${GREEN}✓ Current ports updated. Logout/login or reboot once to make dialout permanent.${NC}"
+          ;;
   url)
           NEW_URL="$2"
           if [ -z "$NEW_URL" ]; then
@@ -220,7 +273,7 @@ case "$1" in
           
           echo -e "${GREEN}ROS2 IDE Agent uninstalled successfully. 👋${NC}"
           ;;
-  *)      echo "Usage: ros2ide-agent {status|start|stop|restart|logs|key|url|uninstall}" ;;
+  *)      echo "Usage: ros2ide-agent {status|start|stop|restart|logs|key|url|serial-fix|uninstall}" ;;
 esac
 CLI
 

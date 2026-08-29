@@ -5,6 +5,27 @@
 let term = null;
 let fitAddon = null;
 let termWs = null;
+let _termWindowResizeBound = false;
+let _termSequence = 0;
+
+function termSetBadge(text, state='connecting') {
+  const badge = document.getElementById('term-badge');
+  if (!badge) return;
+  const dotClass = state === 'ready' ? 'dg' : state === 'error' ? 'dr' : 'da';
+  badge.innerHTML = `<span class="dot ${dotClass}"></span>${escH(text)}`;
+  badge.className = `badge ${state === 'ready' ? 'bg' : state === 'error' ? 'br' : 'ba'}`;
+}
+
+function termResetTabs() {
+  for (const t of TERMS.splice(0)) {
+    t.intentionalClose = true;
+    try { t.ws?.close(); } catch {}
+    try { t.term?.dispose(); } catch {}
+    document.getElementById('xterm-' + t.id)?.remove();
+  }
+  activeTermId = null;
+  termWs = null;
+}
 
 // Multi-tab system
 const TERMS = [];    // [{id, ws, term, fitAddon, label, ready}]
@@ -33,7 +54,7 @@ function initTerm() {
     term.open(c);
     fitAddon.fit();
     term.writeln('\x1b[38;5;240m╔═══════════════════════════════╗\x1b[0m');
-    term.writeln('\x1b[38;5;240m║  \x1b[38;5;75mROS2 IDE Terminal\x1b[38;5;240m            ║\x1b[0m');
+    term.writeln('\x1b[38;5;240m║  \x1b[38;5;75mMecha Rayong Terminal\x1b[38;5;240m       ║\x1b[0m');
     term.writeln('\x1b[38;5;240m╚═══════════════════════════════╝\x1b[0m');
     term.writeln('\x1b[38;5;245mกด SSH Connect เพื่อเริ่มใช้งาน\x1b[0m\r\n');
   }
@@ -44,30 +65,28 @@ function termClear() { if (term) term.clear(); }
 
 // ══ Open legacy terminal WebSocket (called on connect) ══
 function openTermWs(user, host) {
-  // Close old connections
-  TERMS.forEach(t => { try { t.ws?.close(); } catch(e) {} });
-  TERMS.length = 0;
+  termResetTabs();
+  termSetBadge('กำลังเปิด Terminal…');
 
   // Create first tab using new multi-tab system
   const t0 = termNewTab('Terminal 1');
   if (t0) termWs = t0.ws;
 
   termRenderTabs();
-  window.addEventListener('resize', () => {
-    termFitActive();
-    if (termWs && termWs.readyState === WebSocket.OPEN && term)
-      termWs.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
-  });
+  if (!_termWindowResizeBound) {
+    _termWindowResizeBound = true;
+    window.addEventListener('resize', termFitActive);
+  }
 }
 
 // ══ Multi-tab functions ══
 function termNewTab(label, autoRun) {
   if (!sessionId) { sbMsg('เชื่อมต่อ SSH ก่อน', 2000); return null; }
-  const id = 'term_' + Date.now();
+  const id = `term_${Date.now()}_${++_termSequence}`;
   const t = {
     id,
     label: label || ('Terminal ' + (TERMS.length + 1)),
-    term: null, fitAddon: null, ws: null, ready: false,
+    term: null, fitAddon: null, ws: null, ready: false, inputBound: false, intentionalClose: false,
   };
   TERMS.push(t);
   _termInitTab(t);
@@ -111,26 +130,33 @@ function _termInitTab(t) {
   t.fitAddon = new FitAddon.FitAddon();
   t.term.loadAddon(t.fitAddon);
   t.term.open(div);
-  setTimeout(() => t.fitAddon?.fit(), 50);
+  setTimeout(() => termFitTab(t), 50);
 
   // Connect SSH WS
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const token = localStorage.getItem('ros2ide_token') || '';
+  const token = getAuthToken();
   t.ws = new WebSocket(`${proto}//${location.host}/ws/terminal`, ['ros2ide', token]);
   t.ws.onopen = () => {
     t.ws.send(JSON.stringify({ type: 'init', sessionId, cols: t.term.cols, rows: t.term.rows }));
   };
   t.ws.onmessage = e => {
-    const msg = JSON.parse(e.data);
+    let msg;
+    try { msg = JSON.parse(e.data); }
+    catch { t.term.writeln('\r\n\x1b[31m[Terminal protocol error]\x1b[0m'); return; }
     if (msg.type === 'ready') {
       t.ready = true;
-      t.term.writeln(`\x1b[32m[${t.label}]\x1b[0m\r\n`);
+      termSetBadge('Terminal พร้อมใช้งาน', 'ready');
+      t.term.writeln(`\x1b[32m[${t.label}]\x1b[0m ${msg.workspace ? `\x1b[38;5;245m${msg.workspace}\x1b[0m` : ''}\r\n`);
       if (msg.rosInfo?.distro && msg.rosInfo.distro !== 'unknown')
         t.term.writeln(`\x1b[38;5;245mROS ${msg.rosInfo.distro} auto-sourced\x1b[0m\r\n`);
-      t.term.onData(data => {
-        if (t.ws && t.ws.readyState === WebSocket.OPEN)
-          t.ws.send(JSON.stringify({ type: 'data', data }));
-      });
+      if (!t.inputBound) {
+        t.inputBound = true;
+        t.term.onData(data => {
+          if (t.ws && t.ws.readyState === WebSocket.OPEN)
+            t.ws.send(JSON.stringify({ type: 'data', data }));
+        });
+      }
+      termFitTab(t);
     } else if (msg.type === 'data') {
       // Server sends base64 encoded terminal output
       try { t.term.write(atob(msg.data)); } catch(e) { t.term.write(msg.data||''); }
@@ -140,10 +166,21 @@ function _termInitTab(t) {
     } else if (msg.type === 'exit' || msg.type === 'pty_closed') {
       t.term.writeln('\r\n\x1b[33m[Session closed]\x1b[0m');
     } else if (msg.type === 'error') {
+      t.ready = false;
+      termSetBadge('Terminal เชื่อมต่อไม่ได้', 'error');
       t.term.writeln(`\r\n\x1b[31m[Error: ${msg.message}]\x1b[0m`);
     }
   };
-  t.ws.onclose = () => { if (t === TERMS.find(x => x.id === activeTermId)) { } };
+  t.ws.onerror = () => {
+    if (!t.intentionalClose) termSetBadge('Terminal เชื่อมต่อไม่ได้', 'error');
+  };
+  t.ws.onclose = event => {
+    t.ready = false;
+    if (!t.intentionalClose) {
+      termSetBadge('Terminal หลุดการเชื่อมต่อ', 'error');
+      t.term.writeln(`\r\n\x1b[31m[Terminal disconnected${event.code ? `: ${event.code}` : ''}]\x1b[0m`);
+    }
+  };
 }
 
 function termRenderTabs() {
@@ -198,7 +235,7 @@ function termSwitchTab(id) {
   const active = document.getElementById('xterm-' + id);
   if (active) active.style.display = 'block';
   const t = TERMS.find(t => t.id === id);
-  if (t) setTimeout(() => t.fitAddon?.fit(), 30);
+  if (t) setTimeout(() => termFitTab(t), 30);
   termRenderTabs();
   // Point global termWs to active tab
   termWs = t?.ws || termWs;
@@ -224,6 +261,7 @@ function termCloseTab(id) {
   const idx = TERMS.findIndex(t => t.id === id);
   if (idx < 0) return;
   const t = TERMS[idx];
+  t.intentionalClose = true;
   try { t.ws?.close(); } catch(e) {}
   document.getElementById('xterm-' + t.id)?.remove();
   TERMS.splice(idx, 1);
@@ -243,6 +281,14 @@ function termClearActive() {
 
 function termFitActive() {
   const t = TERMS.find(t => t.id === activeTermId);
-  if (t) t.fitAddon?.fit();
+  if (t) termFitTab(t);
   else if (fitAddon) fitAddon.fit();
+}
+
+function termFitTab(t) {
+  if (!t?.term || !t.fitAddon) return;
+  t.fitAddon.fit();
+  if (t.ws?.readyState === WebSocket.OPEN) {
+    t.ws.send(JSON.stringify({ type: 'resize', cols: t.term.cols, rows: t.term.rows }));
+  }
 }
