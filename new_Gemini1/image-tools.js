@@ -1,7 +1,7 @@
 'use strict';
 const fs=require('node:fs/promises'),path=require('node:path'),crypto=require('node:crypto'),{execFile}=require('node:child_process'),{promisify}=require('node:util');
 const exec=promisify(execFile);
-const FILES=['helper.py','adapters.py','fat_marker.py','fat_seed.py','passwords.py','environment.py','env_install.py','Start-ImageHelper.ps1','Start-ImageHelper.sh','Start-ImageHelper.command','README.md'];
+const FILES=['helper.py','adapters.py','fat_marker.py','fat_seed.py','passwords.py','environment.py','env_install.py','ICONS-LICENSE.txt','Start-ImageHelper.ps1','Start-ImageHelper.sh','Start-ImageHelper.command','README.md'];
 function mountImageTools(app,{root=__dirname,auth}){
   let cached=null,building=null;
   async function bundle(){

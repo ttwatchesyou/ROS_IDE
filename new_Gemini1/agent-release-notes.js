@@ -1,5 +1,6 @@
 'use strict';
 module.exports=[
+  'ปรับหน้าเตรียม SD ให้แสดงทีละขั้น ลดกรอบและข้อความซ้ำ พับค่าขั้นสูง ใช้ไอคอน Lucide SVG พร้อม Skeleton และสถานะโหลดบนคอม ป้องกันกดเริ่มงานซ้ำระหว่างรอ Helper',
   'ย้ายปุ่มโหลด Image / Flash SD ไปข้างเพิ่มหุ่นจริง: เตรียม Ubuntu 24.04 ARM64 ใหม่ พร้อมติดตั้ง ROS 2 Jazzy, Python, RViz2, Nav2 และ ifconfig ตอนบูต Pi ครั้งแรก ดาวน์โหลดและ Flash บนคอม รองรับ Windows/macOS/Linux พร้อม Robot Key แยกแต่ละ SD',
   'หน้าเลือกหุ่นยนต์: เพิ่มปุ่ม Image / สำเนาหุ่นยนต์บนการ์ดหุ่นจริง เปิดขั้นตอนพร้อมเลือกต้นแบบตามการ์ดโดยไม่ใช้ Session ของหุ่นตัวก่อน และไม่เพิ่มการเชื่อมต่ออัตโนมัติ',
   'Image / สำเนาหุ่นยนต์: หน้าแนะนำทีละขั้นพร้อม Tooltip และ Helper สำหรับ Ubuntu/Linux, Windows, macOS; อ่าน/บีบอัด/Flash/Verify SD บนคอมผ่าน localhost ไม่ส่ง Image ผ่าน Cloud พร้อมแยก Robot Key และตัวตนก่อนเปิด Network ของหุ่นใหม่',

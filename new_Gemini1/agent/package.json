@@ -1,6 +1,6 @@
 {
   "name": "ros2-ide-agent",
-  "version": "2.4.24",
+  "version": "2.4.25",
   "description": "ROS2 IDE — Robot Agent (runs on Ubuntu robot)",
   "main": "agent.js",
   "scripts": {

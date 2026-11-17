@@ -12,7 +12,7 @@ test('image tools cloud only prepares small metadata and serves a cached helper,
     const bundle=await fetch(origin+'/tools/roside-image-helper.zip'),data=Buffer.from(await bundle.arrayBuffer());assert.ok(data.length>5000&&data.length<500000);assert.equal(bundle.headers.get('content-type'),'application/zip');
     assert.equal((await fetch(origin+'/tools/roside-image-helper.zip',{headers:{'If-None-Match':bundle.headers.get('etag')}})).status,304);
     const inspected=spawnSync('python3',['-c',"import zipfile,sys,io,json;z=zipfile.ZipFile(io.BytesIO(sys.stdin.buffer.read()));print(json.dumps(z.namelist()))"],{input:data,encoding:'utf8'});assert.equal(inspected.status,0,inspected.stderr);const names=JSON.parse(inspected.stdout);
-    for(const file of ['helper.py','adapters.py','fat_marker.py','environment.py','fat_seed.py','passwords.py','env_install.py','Start-ImageHelper.ps1','Start-ImageHelper.command','Start-ImageHelper.sh','public/image-tools.html'])assert.ok(names.includes('ROSIDE-Image-Helper/'+file),file);
+    for(const file of ['helper.py','adapters.py','fat_marker.py','environment.py','fat_seed.py','passwords.py','env_install.py','ICONS-LICENSE.txt','Start-ImageHelper.ps1','Start-ImageHelper.command','Start-ImageHelper.sh','public/image-tools.html'])assert.ok(names.includes('ROSIDE-Image-Helper/'+file),file);
   }finally{await new Promise(r=>server.close(r));}
 });
 test('all image actions have tooltips, each PC OS has a launcher, and the dashboard tool is outside missions',()=>{

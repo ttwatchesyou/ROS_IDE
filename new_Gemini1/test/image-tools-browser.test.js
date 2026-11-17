@@ -34,9 +34,23 @@ test('Image UI explains next steps, all PC platforms, hover tooltips and local-o
     assert.match(await evaluate('document.getElementById("tooltip").textContent'),/เครื่องมือขนาดเล็ก/);
     await capture('image-tools-cloud-desktop');
     await cdp('Page.setDocumentContent',{frameId:frameTree.frame.id,html:markup.replace('data-mode="cloud"','data-mode="helper"')});
-    await evaluate(`globalThis.imageRequests=[];globalThis.fetch=async(path,options)=>{imageRequests.push(path);const values={'/api/info':{os:'Linux',privileged:true,folder:'/home/user/ROSIDEImages'},'/api/environment':{cached:{file:'ubuntu.img.xz',rawBytes:12000000000,fileBytes:1400000000}},'/api/disks':{devices:[{id:'sd2',path:'/dev/sdb',label:'USB SD Card',serial:'unique',size:64000000000,blocked:false},{id:'root',path:'/dev/sda',label:'System disk',serial:'root',size:128000000000,blocked:true,reason:'ดิสก์ระบบ'}]},'/api/status':{job:{state:'idle',phase:'idle',done:0,total:0}},'/api/flash':{job:{id:'job1',state:'running',operation:'flash',phase:'checking',done:0,total:10,startedAt:Date.now()/1000}}};return{ok:true,json:async()=>({ok:true,...values[path]})}};void 0;`);
+    await evaluate(`globalThis.imageRequests=[];globalThis.fetch=async(path,options)=>{imageRequests.push(path);const values={'/api/info':{os:'Linux',privileged:true,folder:'/home/user/ROSIDEImages'},'/api/environment':{cached:{file:'ubuntu.img.xz',rawBytes:12000000000,fileBytes:1400000000}},'/api/disks':{devices:[{id:'sd2',path:'/dev/sdb',label:'USB SD Card',serial:'unique',size:64000000000,blocked:false},{id:'root',path:'/dev/sda',label:'System disk',serial:'root',size:128000000000,blocked:true,reason:'ดิสก์ระบบ'}]},'/api/status':{job:{state:'idle',phase:'idle',done:0,total:0}},'/api/flash':{job:{id:'job1',state:'running',operation:'flash',phase:'checking',done:0,total:10,startedAt:Date.now()/1000}}};if(path==='/api/environment')await new Promise(resolve=>globalThis.releaseEnvironment=resolve);return{ok:true,json:async()=>({ok:true,...values[path]})}};void 0;`);
     await evaluate(read('public/image-tools.js'));
-    await evaluate('new Promise(r=>setTimeout(r,70))');
+    assert.equal(await evaluate('document.getElementById("helper-loading").hidden'),false);
+    assert.equal(await evaluate('document.getElementById("helper-panel").hidden'),true);
+    assert.equal(await evaluate('document.getElementById("helper-loading").getAttribute("aria-busy")'),'true');
+    await cdp('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
+    assert.equal(await evaluate('getComputedStyle(document.querySelector(".skeleton")).animationName'),'none');
+    await cdp('Emulation.setEmulatedMedia',{features:[]});
+    await evaluate('releaseEnvironment();new Promise(r=>setTimeout(r,70))');
+    assert.equal(await evaluate('document.getElementById("helper-loading").hidden'),true);
+    assert.equal(await evaluate('document.querySelector("[data-stage=\\"3\\"]").hidden'),false);
+    assert.equal(await evaluate('document.querySelector("[data-stage=\\"4\\"]").hidden'),true);
+    // Cached Image goes straight to configuration; returning to Image preserves inputs.
+    await evaluate(`document.getElementById('hostname').value='agv-draft';document.getElementById('change-image').click();void 0;`);
+    assert.equal(await evaluate('document.querySelector("[data-stage=\\"2\\"]").hidden'),false);
+    await evaluate(`document.getElementById('use-image').click();void 0;`);
+    assert.equal(await evaluate('document.getElementById("hostname").value'),'agv-draft');
     await evaluate(`document.getElementById('scan-target').click();new Promise(r=>setTimeout(r,50))`);
     assert.equal(await evaluate('document.querySelector("#target option[value=root]").disabled'),true);
     assert.equal(await evaluate('document.getElementById("flash").disabled'),true);
@@ -49,8 +63,14 @@ test('Image UI explains next steps, all PC platforms, hover tooltips and local-o
     assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true);
     await evaluate(`document.getElementById('target').scrollIntoView();void 0;`);
     await capture('image-tools-helper-mobile');
-    // No Flash is clicked in this test. It only verifies UI authorization gates.
-    assert.equal(await evaluate('imageRequests.includes("/api/flash")'),false);
+    // All fetches are mocked. No physical disk is touched.
+    assert.equal(await evaluate('imageRequests.includes("/api/environment/flash")'),false);
+    await evaluate(`globalThis.previousFetch=fetch;globalThis.mockFlashCalls=0;globalThis.fetch=async(p,o)=>{if(p==='/api/environment/flash'){mockFlashCalls++;return new Promise(resolve=>globalThis.releaseFlash=()=>resolve({ok:true,json:async()=>({ok:true,job:{id:'pending-flash',state:'running',operation:'environment-flash',phase:'writing',done:1,total:10}}) }));}return previousFetch(p,o);};document.getElementById('flash').click();document.getElementById('flash').click();void 0;`);
+    assert.equal(await evaluate('mockFlashCalls'),1);
+    assert.equal(await evaluate('document.getElementById("flash").disabled'),true);
+    assert.equal(await evaluate('document.getElementById("flash").getAttribute("aria-busy")'),'true');
+    await evaluate('releaseFlash();new Promise(r=>setTimeout(r,40))');
+    assert.equal(await evaluate('document.getElementById("job-panel").hidden'),false);
     for(const [jobId,key] of [['first','a'.repeat(64)],['second','b'.repeat(64)]]){
       await evaluate(`globalThis.fetch=async p=>{imageRequests.push(p);return{ok:true,json:async()=>({ok:true,job:{id:'${jobId}',state:'complete',phase:'complete',operation:'flash',done:10,total:10,result:{kind:'flash',username:'roside',hostname:'agv-test',robotKey:'${key}',next:'Register'}}})}};document.dispatchEvent(new Event('visibilitychange'));new Promise(r=>setTimeout(r,50))`);
       assert.equal(await evaluate('document.getElementById("new-robot-key").value'),key);
@@ -58,5 +78,16 @@ test('Image UI explains next steps, all PC platforms, hover tooltips and local-o
     await evaluate(`globalThis.fetch=async p=>({ok:true,json:async()=>({ok:true,job:{id:'third',state:'running',phase:'writing',operation:'flash',done:1,total:10}})});document.dispatchEvent(new Event('visibilitychange'));new Promise(r=>setTimeout(r,50))`);
     assert.equal(await evaluate('document.getElementById("new-key-panel").hidden'),true);
 
-  }finally{socket?.close();chrome.kill('SIGTERM');}
+    await cdp('Page.setDocumentContent',{frameId:frameTree.frame.id,html:markup.replace('data-mode="cloud"','data-mode="helper"')});
+    await evaluate(`globalThis.fetch=async()=>{throw Error('Helper unavailable')};void 0;`);
+    await evaluate(read('public/image-tools.js'));
+    await evaluate('new Promise(r=>setTimeout(r,40))');
+    assert.equal(await evaluate('document.getElementById("helper-loading").hidden'),true);
+    assert.equal(await evaluate('document.getElementById("connection-error").hidden'),false);
+    assert.equal(await evaluate('document.getElementById("flash").disabled'),true);
+    await evaluate(`globalThis.fetch=async p=>({ok:true,json:async()=>({ok:true,...(p==='/api/info'?{os:'Linux',privileged:true,folder:'/tmp/images'}:p==='/api/environment'?{cached:null}:{job:{state:'idle',phase:'idle'}})})});document.getElementById('retry-connection').click();new Promise(r=>setTimeout(r,40))`);
+    assert.equal(await evaluate('document.getElementById("connection-error").hidden'),true);
+    assert.equal(await evaluate('document.getElementById("helper-panel").hidden'),false);
+
+  }finally{ socket?.close();chrome.kill('SIGTERM');}
 });

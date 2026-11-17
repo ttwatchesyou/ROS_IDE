@@ -9,7 +9,7 @@ const http=require('node:http');
 const {exec,execFile,spawn}=require('node:child_process');
 const net=require('node:net');
 const {PtyOutputBatcher}=require('./pty-output-batcher');
-const VERSION='2.4.24';
+const VERSION='2.4.25';
 const CAPABILITIES=['local-ide','control-mode-v1','command-freshness-v1','file-revision-v1','library-v1','lan-route-v1','local-handoff-v1','auto-update-v1'];
 const revision=content=>crypto.createHash('sha256').update(content).digest('hex');
 const resolvePath=value=>value==='~'?os.homedir():value.startsWith('~/')?path.join(os.homedir(),value.slice(2)):value;
