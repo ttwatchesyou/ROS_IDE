@@ -3,15 +3,26 @@
 //  TRANSFORMATION — 3D TF Model Builder
 //  ประกอบโมเดลหุ่นยนต์ (ตัวถัง/ล้อ/เซนเซอร์) + ระบุเฟรม/TF ให้ง่าย
 //  ใช้ Three.js (โหลด lazy เหมือน rviz.js) + custom orbit camera
-//  Convention พิกัดเดียวกับ rviz: r2t(rx,ry,rz)=(-ry,rz,-rx)
+//  TF canvas: ROS (x,y,z) → Three (y,z,x). RViz uses (-y,z,-x),
+//  a different camera basis, not a different physical TF or object size.
 // ═══════════════════════════════════════════════════════════════
 
 // ── coord conversion (ROS → Three) ──
 function tf_r2t(x, y, z) { return new THREE.Vector3(y, z, x); }
+function tfRealGeometry() { return typeof isSimWorkspace !== 'undefined' && isSimWorkspace === false; }
+function tfCustomDefinition(c) {
+  return (tfRealGeometry() && c.customDef) || (tf.userComps || []).find(d => d.id === c.customId);
+}
+function tfCustomSnapshot(c) {
+  return tfRealGeometry() && c.type === 'custom' ? tfCustomDefinition(c) : undefined;
+}
+function tfAccessoryParts(c) {
+  return typeof RobotAccessories !== 'undefined' ? RobotAccessories.parts(c) : [];
+}
 
 function tfRosToQuat(rDeg, pDeg, yDeg) {
   const r = THREE.MathUtils.degToRad(rDeg), p = THREE.MathUtils.degToRad(pDeg), y = THREE.MathUtils.degToRad(yDeg);
-  const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(r, p, y, 'XYZ'));
+  const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(r, p, y, 'ZYX'));
   return new THREE.Quaternion(q.y, q.z, q.x, q.w).normalize();
 }
 
@@ -30,6 +41,164 @@ const tf = {
   container: null, ray: null, selBox: null,
   odom: { wheels: [], pattern: 'differential', ppr: 1024, channels: 4 },
 };
+
+let tfHistory = null;
+let tfClipboard = null;
+function tfSyncClipboardButtons() {
+  const selected = tf.comps.some(c => c.id === tf.selected);
+  for (const id of ['tf-copy', 'tf-duplicate']) { const button = document.getElementById(id); if (button) button.disabled = !selected; }
+  const paste = document.getElementById('tf-paste'); if (paste) paste.disabled = !tfClipboard;
+}
+function tfCopy() {
+  const selected = tf.comps.find(c => c.id === tf.selected);
+  if (!selected || tf.gizmoDragging) return false;
+  const ids = new Set(tfCompBranch(selected).map(c => c.id));
+  tfClipboard = {parts: JSON.parse(tfBuildModelJSON()).filter(c => ids.has(c.id)), rootId: selected.id, count: 0};
+  tfSyncClipboardButtons(); sbMsg('📋 คัดลอกแล้ว — กดวางซ้ำได้หลายครั้ง'); return true;
+}
+function tfPaste() {
+  if (!tfClipboard || tf.gizmoDragging) return;
+  tfHistory?.breakMerge();
+  const parts = JSON.parse(JSON.stringify(tfClipboard.parts)), names = new Set(tf.comps.map(c => c.name)), ids = new Set(tf.comps.map(c => c.id)), rename = new Map();
+  const root = parts.find(c => c.id === tfClipboard.rootId);
+  for (const c of parts) {
+    const original = c.name; let n = 1;
+    while (names.has(`${original}_copy_${n}`)) n++;
+    c.name = `${original}_copy_${n}`; names.add(c.name); rename.set(original, c.name);
+    do { c.id = 'c' + tf._nid++; } while (ids.has(c.id)); ids.add(c.id);
+    c.locked = false;
+  }
+  const fallback = tf.comps.find(c => c.type === 'base')?.name || '';
+  for (const c of parts) c.parent = rename.get(c.parent) || (!c.parent ? '' : tf.comps.some(p => p.name === c.parent) ? c.parent : fallback);
+  const offset = .2 * ++tfClipboard.count;
+  root.pos.x += offset; root.pos.y += offset;
+  tf.comps.push(...parts); tfAfterChange(); tfSelect(root.id);
+  sbMsg(`📋 วาง ${root.name} แล้ว — กดวางเพื่อเพิ่มอีกได้`);
+}
+function tfDuplicate() { if (tfCopy()) tfPaste(); }
+function tfCut() {
+  const c=tf.comps.find(c=>c.id===tf.selected);
+  if(!c||tf.gizmoDragging||tfEditBlocker(c))return;
+  if(tfCopy()){tfHistory?.breakMerge();tfDeleteComp(c.id);sbMsg('✂ ตัดแล้ว — กดวางเพื่อย้ายชิ้นส่วน');}
+}
+let tfContextMenu=null;
+function tfCloseContextMenu(){tfContextMenu?.remove();tfContextMenu=null;}
+function tfOpenContextMenu(x,y){
+  tfCloseContextMenu();
+  if(tf.gizmoDragging)return;
+  tf.cam.drag=false;
+  const selected=tf.comps.find(c=>c.id===tf.selected),editable=selected&&!tfEditBlocker(selected);
+  const menu=document.createElement('div');menu.className='tf-context-menu';menu.setAttribute('role','menu');menu.setAttribute('aria-label','เครื่องมือชิ้นส่วน');
+  const heading=document.createElement('div');heading.className='tf-context-title';heading.textContent=selected?.name||'พื้นที่ทำงาน';menu.append(heading);
+  const actions=[['✂','ตัด',tfCut,!editable],['⧉','คัดลอก',tfCopy,!selected],['▣','วาง',tfPaste,!tfClipboard],['＋','ทำสำเนา',tfDuplicate,!selected],['⌫','ลบ',()=>tfDeleteCompConfirm(selected.id),!editable],['↶','ย้อนกลับ',tfUndo,document.getElementById('tf-undo')?.disabled!==false],['↷','ทำซ้ำ',tfRedo,document.getElementById('tf-redo')?.disabled!==false],['◈','จัดมุมกล้อง',tfResetView,false]];
+  for(const [icon,label,action,disabled] of actions){const b=document.createElement('button');b.type='button';b.setAttribute('role','menuitem');b.disabled=!!disabled;const i=document.createElement('span');i.textContent=icon;i.setAttribute('aria-hidden','true');b.append(i,document.createTextNode(label));b.onclick=()=>{tfCloseContextMenu();action();};menu.append(b);}
+  document.getElementById('tf-viewport').append(menu);tfContextMenu=menu;
+  menu.style.left=Math.max(8,Math.min(x,window.innerWidth-menu.offsetWidth-8))+'px';menu.style.top=Math.max(8,Math.min(y,window.innerHeight-menu.offsetHeight-8))+'px';
+  menu.querySelector('button:not(:disabled)')?.focus();
+  menu.addEventListener('keydown',e=>{const buttons=[...menu.querySelectorAll('button:not(:disabled)')];if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();e.stopPropagation();const step=e.key==='ArrowDown'?1:-1;buttons[(buttons.indexOf(document.activeElement)+step+buttons.length)%buttons.length]?.focus();}});
+}
+function tfValidColor(color) { return Number.isInteger(color) && color >= 0 && color <= 0xffffff; }
+function tfObjectColor(c) {
+  if (tfValidColor(c.color)) return c.color;
+  if (c.type === 'custom') return tfCustomDefinition(c)?.color ?? 0x8aa0b5;
+  return ['base','wheel','omni','lidar','camera','imu','encoder'].includes(c.type) ? RobotVisuals.mainColor(c) : tfTypeMeta[c.type]?.color ?? 0x8aa0b5;
+}
+function tfChangeColor(value) {
+  const c = tf.comps.find(c => c.id === tf.selected);
+  if (!c || tf.gizmoDragging || tfEditBlocker(c) || !/^#[0-9a-f]{6}$/i.test(value)) return;
+  c.color = parseInt(value.slice(1), 16); tfSyncGroup(c); tfSave();
+}
+function tfInitHistory() {
+  if (tfHistory) return;
+  tfHistory = EditorHistory.create({
+    capture: () => ({
+      comps: JSON.parse(tfBuildModelJSON()), groupVis: tf.groupVis,
+      odom: tfOdomLoad(), colors: Object.fromEntries(tf.userComps.map(c => [c.id, c.color])),
+    }),
+    selection: () => tf.selected,
+    restore: (data, selected) => {
+      tfApplyComps(data.comps);
+      tf.groupVis = data.groupVis;
+      tf.selected = tf.comps.some(c => c.id === selected) ? selected : null;
+      tf.userComps.forEach(c => { if (Object.hasOwn(data.colors, c.id)) c.color = data.colors[c.id]; });
+      tfSaveCustomComps();
+      try {
+        if (data.odom) localStorage.setItem(tfOdomKey(), JSON.stringify(data.odom));
+        else localStorage.removeItem(tfOdomKey());
+      } catch (e) {}
+      tfOdomDetect();
+      tfAfterChange(); tfRenderProps();
+      if (document.getElementById('tf-odom-modal')?.style.display === 'flex') tfRenderOdom();
+    },
+    onChange: history => EditorHistory.updateButtons(history, 'tf-undo', 'tf-redo'),
+  });
+  EditorHistory.bindInputs(document.getElementById('page-transformation'), tfHistory);
+  EditorHistory.bindInputs(document.getElementById('tf-odom-modal'), tfHistory);
+  tfHistory.reset();
+}
+function tfRecordHistory() { tfHistory?.record(EditorHistory.inputKey()); }
+function tfUndo() { if (tfHistory?.undo()) sbMsg('↶ ย้อนกลับการแก้ไขหุ่นยนต์แล้ว'); }
+function tfRedo() { if (tfHistory?.redo()) sbMsg('↷ ทำซ้ำการแก้ไขหุ่นยนต์แล้ว'); }
+function tfCompBranch(c) {
+  const branch = new Set([c]);
+  for (const parent of branch) tf.comps.forEach(child => { if (child.parent === parent.name) branch.add(child); });
+  return [...branch];
+}
+function tfEditBlocker(c) { return c ? tfCompBranch(c).find(part => part.locked === true) : null; }
+function tfLockMessage(c) {
+  const locked = tfEditBlocker(c);
+  return locked === c ? 'ล็อกอยู่ — ปลดล็อกก่อนย้าย หมุน ปรับขนาด หรือลบ' : locked ? `ขยับไม่ได้ เพราะชิ้นส่วนลูก “${locked.name}” ล็อกอยู่` : 'ปลดล็อกอยู่ — แก้ไขชิ้นส่วนได้';
+}
+function tfToggleLock(id = tf.selected) {
+  const c = tf.comps.find(part => part.id === id);
+  if (!c || tf.gizmoDragging) return;
+  tfHistory?.breakMerge();
+  c.locked = c.locked !== true;
+  tfAfterChange(); tfRenderProps();
+  sbMsg(`${c.locked ? '🔒 ล็อก' : '🔓 ปลดล็อก'} ${c.name} แล้ว`);
+}
+window.addEventListener('keydown', e => {
+  if (!document.getElementById('page-transformation')?.classList.contains('show')) return;
+  if (typeof EditorHistory !== 'undefined' && EditorHistory.clipboardShortcut(e, tfCopy, tfPaste, tfDuplicate)) return;
+  if (tfHistory) EditorHistory.shortcut(e, tfUndo, tfRedo);
+});
+
+// base_link convention used by both Simulation and real-robot workspaces:
+// the frame stays at the bottom-centre of the chassis (Z=0), while the
+// chassis geometry extends upward by its configured height.
+const TF_BASE_ORIGIN = 'bottom_center';
+
+function tfBaseHeight(base) {
+  const height = Number(base && base.params && base.params.sz);
+  return Number.isFinite(height) ? Math.max(0, height) : 0;
+}
+
+function tfPinBaseLink(components = tf.comps) {
+  const base = (Array.isArray(components) ? components : []).find(component => component && component.type === 'base');
+  if (!base) return null;
+  if (!base.pos) base.pos = { x: 0, y: 0, z: 0 };
+  base.pos.z = 0;
+  base.baseOrigin = TF_BASE_ORIGIN;
+  return base;
+}
+
+// Models saved by older versions used the centre of the chassis as base_link.
+// Move direct children up by half the chassis height once, so reopening an
+// existing design keeps every part in the same place relative to the chassis.
+function tfMigrateBaseLink(components) {
+  const list = Array.isArray(components) ? components : [];
+  const base = list.find(component => component && component.type === 'base');
+  if (!base) return null;
+  if (base.baseOrigin !== TF_BASE_ORIGIN) {
+    const offset = tfBaseHeight(base) / 2;
+    list.forEach(component => {
+      if (!component || component === base || component.parent !== base.name) return;
+      if (!component.pos) component.pos = { x: 0, y: 0, z: 0 };
+      component.pos.z = (Number(component.pos.z) || 0) + offset;
+    });
+  }
+  return tfPinBaseLink(list);
+}
 
 function tfWorkspaceBgColor() {
   const value = getComputedStyle(document.documentElement).getPropertyValue('--bg2').trim();
@@ -71,7 +240,7 @@ const tfIcons = {
 // (derived from each type's BoxGeometry/CylinderGeometry orientation)
 const tfGeoAxisMap = {
   base:     { x: 'z', y: 'x', z: 'y' },
-  box:      { x: 'x', y: 'z', z: 'y' },
+  box:      { x: 'z', y: 'x', z: 'y' },
   wheel:    { x: 'x', y: 'y', z: 'z' },
   lidar:    { x: 'x', y: 'z', z: 'x' },
   camera:   { x: 'x', y: 'z', z: 'y' },
@@ -85,20 +254,34 @@ const tfGeoAxisMap = {
 function tfStoreKey() { return 'tf_model_' + (sessionId || 'default'); }
 function tfSave() {
   try {
+    tfPinBaseLink();
     const data = tf.comps.map(c => ({
       id: c.id, type: c.type, name: c.name, parent: c.parent,
       pos: c.pos, rpy: c.rpy, params: c.params, viewGroup: c.viewGroup || '',
-      customId: c.customId || '',
+      customId: c.customId || '', locked: c.locked === true, color: tfValidColor(c.color) ? c.color : undefined,
+      customDef: tfCustomSnapshot(c),
+      joint: c.joint ? {...c.joint} : undefined,
+      baseOrigin: c.type === 'base' ? TF_BASE_ORIGIN : undefined,
     }));
     localStorage.setItem(tfStoreKey(), JSON.stringify(data));
     try { localStorage.setItem(tfStoreKey() + '_grp', JSON.stringify(tf.groupVis || {})); } catch (e) {}
   } catch (e) {}
+  tfRecordHistory();
 }
 // turn a plain comp array (from localStorage or the server) into live tf.comps
 function tfApplyComps(arr) {
-  if (!Array.isArray(arr) || !arr.length) return false;
+  if (!Array.isArray(arr)) return false;
   tfClearRenderedComponents(tf.comps);
-  tf.comps = arr.map(d => Object.assign({ group: null, _mat: null, viewGroup: '', customId: '' }, d));
+  tf.comps = arr.map(d => Object.assign({ group: null, _mat: null, viewGroup: '', customId: '' }, d, {locked: d.locked === true}));
+  tfMigrateBaseLink(tf.comps);
+  tf.comps.forEach(c => {
+    if (typeof RobotAccessories !== 'undefined') RobotAccessories.upgrade(c);
+    // Upgrade the old template once: it tilted whole wheels to fake rollers.
+    if (c.type !== 'omni' || c.params?.wheelStyle || !/^mecanum_(fl|fr|rl|rr)$/.test(c.name || '')) return;
+    c.params = {...c.params, wheelStyle:'mecanum', handedness:RobotVisuals.handedness(c), rollerCount:10};
+    const oldYaw = /_(fl|rr)$/.test(c.name) ? 45 : -45;
+    if (c.rpy?.y === oldYaw) c.rpy = {...c.rpy, y:0};
+  });
   // keep the id counter ahead of any loaded ids so new comps never collide
   let max = 0;
   tf.comps.forEach(c => {
@@ -125,7 +308,7 @@ async function tfLoadWorkspace() {
   if (!sessionId) return false;
   try {
     const r = await API('/api/files/read', {
-      sessionId, path: '~/ros2_ws/src/sim_robot_tf/tf_model.json',
+      sessionId, path: (tfRealGeometry() && typeof wsPath === 'string' ? wsPath.replace(/\/$/, '') : '~/ros2_ws') + '/src/sim_robot_tf/tf_model.json',
     });
     if (r && r.ok && r.content) {
       const data = JSON.parse(r.content);
@@ -159,6 +342,8 @@ function tfUniqueName(type) {
   return nm;
 }
 function tfCreateComp(type) {
+  const mecanum = type === 'mecanum';
+  if (mecanum) type = 'omni';
   const base = tf.comps.find(c => c.type === 'base');
   const c = {
     id: 'c' + (tf._nid++), type,
@@ -166,13 +351,20 @@ function tfCreateComp(type) {
     parent: (type !== 'base' && base) ? base.name : '',
     pos: { x: 0, y: 0, z: 0 }, rpy: { r: 0, p: 0, y: 0 },
     params: tfDefaultParams(type), group: null, _mat: null,
+    baseOrigin: type === 'base' ? TF_BASE_ORIGIN : undefined,
   };
+  if (mecanum) {
+    c.name = tfUniqueName('omni').replace('omni_wheel', 'mecanum_wheel');
+    let suffix = 1;
+    while (tf.comps.some(part => part.name === c.name)) c.name = 'mecanum_wheel_' + suffix++;
+    c.params = { radius:.09, width:.055, rollerR:.018, wheelStyle:'mecanum', handedness:1, rollerCount:10 };
+  }
   if (type === 'base') {
-    // chassis ลอยขึ้นจากพื้นเล็กน้อย
+    // base_link อยู่กึ่งกลางด้านล่างของ chassis และยึดไว้ที่ Z=0
     c.pos = { x: 0, y: 0, z: 0 };
   } else if (base) {
-    // วางบนฐานโดยอัตโนมัติ (z = ครึ่งความสูงฐาน + เล็กน้อย)
-    c.pos = { x: 0, y: 0, z: (base.params.sz / 2) };
+    // ตัวถังเริ่มที่ Z=0 จึงวาง origin ของชิ้นใหม่ไว้บนผิวด้านบน
+    c.pos = { x: 0, y: 0, z: tfBaseHeight(base) };
   }
   return c;
 }
@@ -182,12 +374,43 @@ function tfAddComp(type) {
   tfAfterChange();
   tfSelect(c.id);
 }
+const TF_COMPONENT_PRESETS = [
+  {id:'servo_joint',label:'ข้อต่อ Servo',icon:'⚙',type:'cylinder',params:{radius:.035,height:.06},color:0xf2b134,joint:{type:'revolute',axis:'0 0 1',lower:-1.57,upper:1.57,effort:10,velocity:1}},
+  {id:'arm_link',label:'ท่อนแขน',icon:'🦾',type:'box',params:{sx:.065,sy:.065,sz:.24},color:0xcbd5e1},
+  {id:'gripper_palm',label:'ฐานกริปเปอร์',icon:'⊓',type:'box',params:{sx:.08,sy:.12,sz:.035},color:0x475569},
+  {id:'gripper_finger',label:'นิ้วกริปเปอร์',icon:'⌑',type:'box',params:{sx:.025,sy:.025,sz:.09},color:0xf2b134},
+  {id:'robot_torso',label:'ลำตัว Humanoid',icon:'🤖',type:'box',params:{sx:.16,sy:.3,sz:.32},color:0x4f8ef7},
+  {id:'robot_head',label:'ศีรษะ',icon:'▣',type:'box',params:{sx:.14,sy:.16,sz:.14},color:0xcbd5e1},
+  {id:'leg_link',label:'ท่อนขา',icon:'🦿',type:'box',params:{sx:.07,sy:.07,sz:.28},color:0xcbd5e1},
+  {id:'robot_foot',label:'เท้าหุ่นยนต์',icon:'▱',type:'box',params:{sx:.18,sy:.1,sz:.04},color:0x475569},
+  {id:'battery', label:'แบตเตอรี่', icon:'🔋', type:'box', params:{sx:.2,sy:.12,sz:.09}, color:0x536b46},
+  {id:'controller', label:'กล่องควบคุม', icon:'🧠', type:'box', params:{sx:.16,sy:.12,sz:.05}, color:0x327eab},
+  {id:'mounting_plate', label:'แผ่นยึดอุปกรณ์', icon:'▱', type:'box', params:{sx:.3,sy:.2,sz:.012}, color:0xb2bac4},
+  {id:'sensor_mast', label:'เสาติดเซนเซอร์', icon:'📡', type:'cylinder', params:{radius:.018,height:.4}, color:0x8c99a8},
+  {id:'motor_housing', label:'ตัวมอเตอร์', icon:'⚙️', type:'cylinder', params:{radius:.035,height:.1}, rpy:{r:90,p:0,y:0}, color:0x909ca7},
+  {id:'bumper', label:'กันชนหน้า', icon:'🛡️', type:'box', params:{sx:.04,sy:.42,sz:.07}, color:0xef9b35},
+  {id:'payload_tray', label:'ถาดบรรทุก', icon:'📦', type:'box', params:{sx:.45,sy:.35,sz:.025}, color:0x479d90},
+  {id:'antenna', label:'เสาอากาศ', icon:'📶', type:'cylinder', params:{radius:.006,height:.18}, color:0x303b48},
+];
+const TF_ARTICULATED_OBJECT_IDS=new Set(['servo_joint','arm_link','gripper_palm','gripper_finger','robot_torso','robot_head','leg_link','robot_foot']);
+function tfAddPreset(id) {
+  if(TF_ARTICULATED_OBJECT_IDS.has(id)&&(typeof isSimWorkspace==='undefined'||isSimWorkspace))return;
+  const preset = TF_COMPONENT_PRESETS.find(p => p.id === id); if (!preset) return;
+  const c = tfCreateComp(preset.type); let n = 1;
+  while (tf.comps.some(p => p.name === `${id}_${n}`)) n++;
+  c.name = `${id}_${n}`; c.params = {...preset.params}; c.color = preset.color;
+  if (typeof RobotAccessories !== 'undefined') RobotAccessories.upgrade(c);
+  if(preset.joint&&typeof isSimWorkspace!=='undefined'&&!isSimWorkspace)c.joint={...preset.joint};
+  if (preset.rpy) c.rpy = {...preset.rpy};
+  c.pos.z += (preset.params.sz || (preset.rpy ? preset.params.radius * 2 : preset.params.height) || 0) / 2;
+  tf.comps.push(c); tfAfterChange(); tfSelect(c.id);
+}
 function tfAddWheelSet(n) {
   n = Math.max(1, Math.min(12, n | 0 || 4));
   const base = tf.comps.find(c => c.type === 'base');
-  const sx = base ? base.params.sx : 0.6, sy = base ? base.params.sy : 0.4, sz = base ? base.params.sz : 0.25;
+  const sx = base ? base.params.sx : 0.6, sy = base ? base.params.sy : 0.4;
   const r = 0.1, w = 0.05;
-  const ix = Math.max(0.05, sx / 2 - r * 0.4), iy = Math.max(0.05, sy / 2 - r * 0.4), z = -sz / 2 + r;
+  const ix = Math.max(0.05, sx / 2 - r * 0.4), iy = Math.max(0.05, sy / 2 - r * 0.4), z = r;
   const slots = [[ix, iy, z], [ix, -iy, z], [-ix, iy, z], [-ix, -iy, z], [0, iy, z], [0, -iy, z], [ix, 0, z], [-ix, 0, z], [0, 0, z]];
   for (let i = 0; i < n; i++) {
     const s = slots[i % slots.length];
@@ -202,11 +425,15 @@ function tfAddWheelSet(n) {
 }
 
 const TF_ROBOT_TEMPLATES = {
+  arm6: {icon:'🦾',name:'แขนกล 6 แกน + Gripper',hint:'โซ่ข้อต่อ 6 แกน พร้อมกริปเปอร์สองนิ้ว',articulated:true,joints:6},
+  humanoid: {icon:'🤖',name:'Humanoid',hint:'ลำตัว ศีรษะ แขนสองข้าง และขาสองข้าง',articulated:true,joints:14},
+  quadruped: {icon:'🐕',name:'Quadruped สี่ขา',hint:'ขา 4 ชุด ชุดละ 3 ข้อต่อ',articulated:true,joints:12},
   differential: { icon:'🚗', name:'Differential 2WD', hint:'ล้อขับซ้าย–ขวา 2 ล้อ', pattern:'differential', wheels:2 },
   skid:         { icon:'🚙', name:'Skid-steer 4WD', hint:'ล้อขับ 4 ล้อ เหมาะกับหุ่นภาคพื้น', pattern:'skid', wheels:4 },
   omni3:        { icon:'🔺', name:'Omni 3 ล้อ', hint:'เคลื่อนที่ได้รอบทิศทางแบบ 120°', pattern:'omni3', wheels:3 },
   omni4:        { icon:'✣', name:'Omni 4 ล้อ', hint:'เคลื่อนที่รอบทิศทางด้วยล้อ Omni', pattern:'omni4', wheels:4 },
   mecanum:      { icon:'✖️', name:'Mecanum 4 ล้อ', hint:'เดินหน้า ถอยหลัง และสไลด์ด้านข้าง', pattern:'mecanum', wheels:4 },
+  mecanum_xy: {icon:'✖️',name:'Mecanum 4 ล้อ + Encoder X/Y',hint:'STM32 · BNO08x · Position control · ล้อ 5 นิ้ว',pattern:'mecanum',wheels:4},
   rover6:       { icon:'🛰️', name:'Rover 6WD', hint:'ฐานยาว ล้อ 6 ล้อ สำหรับพื้นที่ขรุขระ', pattern:'skid', wheels:6 },
 };
 
@@ -217,46 +444,147 @@ function tfTemplateComp(type, name, parent, pos, params, rpy) {
     rpy:Object.assign({ r:0, p:0, y:0 }, rpy || {}),
     params:Object.assign(tfDefaultParams(type), params || {}),
     group:null, _mat:null, viewGroup:type === 'wheel' || type === 'omni' ? 'ระบบขับเคลื่อน' : '',
+    baseOrigin:type === 'base' ? TF_BASE_ORIGIN : undefined,
   };
 }
 
 function tfTemplateDriveParts(kind) {
-  const standard=(name,x,y)=>tfTemplateComp('wheel',name,'base_link',[x,y,-0.03],{radius:0.09,width:0.055});
-  const omni=(name,x,y,yaw=0)=>tfTemplateComp('omni',name,'base_link',[x,y,-0.03],{radius:0.09,width:0.055,rollerR:0.018},{y:yaw});
+  const standard=(name,x,y)=>tfTemplateComp('wheel',name,'base_link',[x,y,.06],{radius:0.09,width:0.055});
+  const omni=(name,x,y,yaw=0)=>tfTemplateComp('omni',name,'base_link',[x,y,.06],{radius:0.09,width:0.055,rollerR:0.018},{y:yaw});
   if(kind==='differential') return [standard('wheel_left',0,.23),standard('wheel_right',0,-.23)];
   if(kind==='skid') return [standard('wheel_fl',.22,.23),standard('wheel_fr',.22,-.23),standard('wheel_rl',-.22,.23),standard('wheel_rr',-.22,-.23)];
   if(kind==='rover6') return [.3,0,-.3].flatMap((x,i)=>[standard(`wheel_${['front','mid','rear'][i]}_left`,x,.23),standard(`wheel_${['front','mid','rear'][i]}_right`,x,-.23)]);
-  if(kind==='omni3') return [[0,.25,90],[-.217,-.125,210],[.217,-.125,330]].map((p,i)=>omni(`omni_${i+1}`,p[0],p[1],p[2]));
+  if(kind==='omni3') return [[0,.25,180],[-.217,-.125,300],[.217,-.125,60]].map((p,i)=>omni(`omni_${i+1}`,p[0],p[1],p[2]));
   if(kind==='omni4') return [[.2,.2,135],[.2,-.2,45],[-.2,.2,225],[-.2,-.2,315]].map((p,i)=>omni(`omni_${i+1}`,p[0],p[1],p[2]));
-  return [[.22,.23,45],[.22,-.23,-45],[-.22,.23,-45],[-.22,-.23,45]].map((p,i)=>omni(`mecanum_${['fl','fr','rl','rr'][i]}`,p[0],p[1],p[2]));
+  // Wheels stay parallel; only their rollers are angled. Viewed from above,
+  // the front/rear pairs form an X (opposite handedness on each side).
+  return [[.22,.23,-1],[.22,-.23,1],[-.22,.23,1],[-.22,-.23,-1]].map((p,i)=>
+    tfTemplateComp('omni',`mecanum_${['fl','fr','rl','rr'][i]}`,'base_link',[p[0],p[1],.06],
+      {radius:.09,width:.055,rollerR:.018,wheelStyle:'mecanum',handedness:p[2],rollerCount:10}));
 }
 
+// Joint frames sit at pivots; the visible links are fixed children offset from those pivots.
+function tfArticulatedTemplate(kind){
+  const parts=[],white=0xdce3ea,dark=0x26313c,metal=0x788a9a,accent=kind==='arm6'?0xf28b24:kind==='quadruped'?0xd6b251:0x38b8d0;
+  const add=(type,name,parent,pos,params,color=white)=>{const c=tfTemplateComp(type,name,parent,pos,{...params,articulatedVisual:true});c.color=color;c.viewGroup='แขนและข้อต่อ';parts.push(c);return c;};
+  const box=(name,parent,pos,size,color=white)=>add('box',name,parent,pos,{sx:size[0],sy:size[1],sz:size[2],rosBox:true,bevel:Math.min(...size)*.18},color);
+  const cyl=(name,parent,pos,radius,height,color=metal,axis='0 0 1')=>add('cylinder',name,parent,pos,{radius,height,visualAxis:axis},color);
+  const orient=(name,rpy)=>{const c=parts.find(p=>p.name===name);Object.assign(c.rpy,rpy);return name;};
+  const joint=(name,parent,pos,axis,lower=-1.57,upper=1.57,radius=.035)=>{
+    const c=cyl(name,parent,pos,radius,radius*1.6,dark,axis);c.joint={type:'revolute',axis,lower,upper,effort:10,velocity:1};
+    const v=axis.split(' ').map(Number);
+    for(const side of [-1,1]){
+      const p=v.map(n=>n*side*radius*.86);
+      cyl(name+'_cap_'+(side<0?'a':'b'),name,p,radius*.8,.009,metal,axis);
+      cyl(name+'_hub_'+(side<0?'a':'b'),name,v.map(n=>n*side*(radius*.86+.006)),radius*.38,.006,accent,axis);
+    }
+    return name;
+  };
+  const segment=(name,parent,length,direction=1,width=.06,color=white)=>{
+    box(name,parent,[0,0,direction*length/2],[width,width*.85,length*.86],color);
+    box(name+'_inlay',name,[width*.51,0,0],[.008,width*.52,length*.55],dark);
+    for(const z of [-1,1])box(name+'_collar_'+(z<0?'a':'b'),name,[0,0,z*length*.32],[width*1.04,width*.91,.018],metal);
+  };
+  const root=add('base','base_link','',[0,0,0],{sx:kind==='arm6'?.32:.025,sy:kind==='arm6'?.28:.025,sz:kind==='arm6'?.035:.006},dark);
+  if(kind==='arm6'){
+    cyl('pedestal','base_link',[0,0,.075],.09,.08,dark);
+    cyl('base_trim','pedestal',[0,0,.042],.095,.012,metal);
+    for(const x of [-.115,.115])for(const y of [-.09,.09])cyl('mount_bolt_'+(x<0?'l':'r')+(y<0?'a':'b'),'base_link',[x,y,.041],.01,.012,metal);
+    const lengths=[.12,.29,.26,.095,.075,.065],axes=['0 0 1','0 1 0','0 1 0','0 0 1','0 1 0','0 0 1'];let parent='base_link';
+    lengths.forEach((len,i)=>{const j=joint('arm_joint_'+(i+1)+'_link',parent,[0,0,i?lengths[i-1]:.13],axes[i],-2.6,2.6,i<3?.052:.033);if(i===1)orient(j,{p:28});if(i===2)orient(j,{p:65});if(i===4)orient(j,{p:30});segment('arm_link_'+(i+1),j,len,1,i<3?.095:.055,i<3?accent:white);parent=j;});
+    cyl('tool_flange',parent,[0,0,.075],.039,.018,metal);
+    box('tool0','tool_flange',[0,0,.035],[.065,.11,.04],dark);
+    for(const side of [-1,1]){const name='finger_'+(side<0?'right':'left');box(name,'tool0',[0,side*.045,.065],[.024,.022,.1],metal);box(name+'_pad',name,[.0,-side*.014,.026],[.023,.01,.035],dark);}
+  }else if(kind==='humanoid'){
+    const waist=joint('waist_link','base_link',[0,0,.75],'0 0 1',-.7,.7,.055);
+    box('pelvis',waist,[0,0,-.025],[.16,.23,.1],dark);
+    box('abdomen',waist,[0,0,.09],[.14,.2,.13],metal);
+    box('torso_link',waist,[0,0,.225],[.19,.31,.24],white);
+    box('chest_panel','torso_link',[.1,0,.005],[.014,.22,.135],dark);
+    box('chest_light','chest_panel',[.01,0,.025],[.008,.125,.013],accent);
+    box('backpack','torso_link',[-.12,0,0],[.06,.21,.18],dark);
+    const neck=joint('neck_link',waist,[0,0,.385],'0 0 1',-1.2,1.2,.029);
+    box('head_link',neck,[0,0,.09],[.145,.165,.15],white);
+    box('face_visor','head_link',[.076,0,.01],[.022,.145,.068],dark);
+    for(const side of [-1,1])cyl('eye_'+(side<0?'r':'l'),'face_visor',[.014,side*.044,.003],.013,.007,accent,'1 0 0');
+    for(const [side,sign] of [['left',1],['right',-1]]){
+      let parent=joint(side+'_shoulder_link',waist,[0,sign*.2,.28],'0 1 0',-1.57,1.57,.047);orient(parent,{r:sign*9});segment(side+'_upper_arm',parent,.22,-1,.075);
+      parent=joint(side+'_elbow_link',parent,[0,0,-.22],'0 1 0',-2.2,.2,.033);orient(parent,{p:-12});segment(side+'_forearm',parent,.2,-1,.062);
+      parent=joint(side+'_wrist_link',parent,[0,0,-.2],'0 0 1',-1.57,1.57,.027);box(side+'_hand',parent,[0,0,-.046],[.07,.044,.075],dark);
+      for(let finger=0;finger<3;finger++)box(side+'_finger_'+finger,side+'_hand',[(finger-1)*.022,0,-.057],[.017,.032,.042],metal);
+      parent=joint(side+'_hip_link',waist,[0,sign*.09,-.07],'0 1 0',-1.57,1.57,.045);segment(side+'_thigh',parent,.29,-1,.092);
+      parent=joint(side+'_knee_link',parent,[0,0,-.29],'0 1 0',-.1,2.2,.038);segment(side+'_shin',parent,.29,-1,.075);
+      box(side+'_knee_guard',parent,[.043,0,-.015],[.04,.07,.09],accent);
+      parent=joint(side+'_ankle_link',parent,[0,0,-.29],'0 1 0',-.7,.7,.03);box(side+'_foot',parent,[.04,0,-.058],[.22,.108,.06],white);box(side+'_sole',side+'_foot',[0,0,-.034],[.226,.114,.016],dark);
+    }
+  }else{
+    box('body_link','base_link',[0,0,.47],[.54,.26,.145],dark);
+    box('top_shell','body_link',[0,0,.064],[.48,.25,.058],accent);
+    for(const side of [-1,1]){box('side_rail_'+side,'body_link',[0,side*.137,0],[.39,.02,.064],metal);for(let i=0;i<5;i++)box('vent_'+side+'_'+i,'body_link',[-.11+i*.05,side*.151,.015],[.024,.012,.025],dark);}
+    box('front_sensor','body_link',[.281,0,.005],[.047,.18,.08],dark);
+    for(const side of [-1,1])cyl('front_lens_'+side,'front_sensor',[.026,side*.055,0],.02,.012,0x38b8d0,'1 0 0');
+    box('carry_handle','top_shell',[-.035,0,.06],[.16,.045,.025],metal);
+    for(const x of [-.1,.03])box('handle_mount_'+x,'top_shell',[x,0,.035],[.026,.045,.045],metal);
+    for(const [name,x,y] of [['fl',.205,.16],['fr',.205,-.16],['rl',-.205,.16],['rr',-.205,-.16]]){
+      const hip=joint(name+'_hip_link','body_link',[x,y,0],'1 0 0',-.6,.6,.041);
+      box(name+'_hip_yoke',hip,[0,Math.sign(y)*.037,0],[.075,.09,.06],accent);
+      const upper=joint(name+'_upper_link',hip,[0,Math.sign(y)*.074,0],'0 1 0',-1.57,1.57,.044);orient(upper,{p:-28});segment(name+'_thigh',upper,.235,-1,.065,accent);
+      const lower=joint(name+'_lower_link',upper,[0,0,-.235],'0 1 0',-.1,2.4,.034);orient(lower,{p:56});segment(name+'_shin',lower,.235,-1,.043,metal);
+      const foot=box(name+'_foot',lower,[0,0,-.24],[.077,.065,.045],dark);foot.rpy.p=-28;
+    }
+  }
+  return parts;
+}
 function tfOpenTemplateModal() {
   const grid=document.getElementById('tf-template-grid');
-  if(grid) grid.innerHTML=Object.entries(TF_ROBOT_TEMPLATES).map(([id,t])=>`
+  if(grid) grid.innerHTML=Object.entries(TF_ROBOT_TEMPLATES).filter(([,t])=>!t.articulated||(typeof isSimWorkspace!=='undefined'&&!isSimWorkspace)).map(([id,t])=>`
     <button type="button" class="tf-template-card" onclick="tfApplyRobotTemplate('${id}')">
-      <span class="tf-template-icon">${t.icon}</span><span><b>${t.name}</b><small>${t.hint}</small><em>${t.wheels} ล้อ · ${t.pattern}</em></span>
+      <span class="tf-template-icon">${t.icon}</span><span><b>${t.name}</b><small>${t.hint}</small><em>${t.articulated?`${t.joints} ข้อต่อ · URDF สำหรับตั้งค่า MoveIt ต่อ`:`${t.wheels} ล้อ · ${t.pattern}`}</em></span>
     </button>`).join('');
   const modal=document.getElementById('tf-template-modal');if(modal)modal.style.display='flex';
 }
 function tfCloseTemplateModal() { const modal=document.getElementById('tf-template-modal');if(modal)modal.style.display='none'; }
 function tfApplyRobotTemplate(kind) {
   const template=TF_ROBOT_TEMPLATES[kind];if(!template)return;
+  if(template.articulated&&(typeof isSimWorkspace==='undefined'||isSimWorkspace))return;
   if(tf.comps.length>1&&!window.confirm(`แทนที่โมเดลปัจจุบันด้วย ${template.name} หรือไม่?`))return;
   tfClearRenderedComponents(tf.comps);
   tf._nid=1;tf.selected=null;tf.groupVis={};
+  if(template.articulated){
+    tf.comps=tfArticulatedTemplate(kind);
+    tf.odom={wheels:[],pattern:'differential',ppr:1024,channels:4};tfOdomSave();
+    tfAfterChange();tfSelect(tf.comps[0].id);tfResetView();tfCloseTemplateModal();
+    sbMsg('สร้าง '+template.name+' แล้ว · ข้อต่ออยู่ใน URDF สำหรับตั้งค่า MoveIt ต่อ',6000);return;
+  }
   const longBase=kind==='rover6';
   const driveParts=tfTemplateDriveParts(kind);
-  const encoderParts=driveParts.map(wheel=>tfTemplateComp('encoder',`encoder_${wheel.name}`,'base_link',[wheel.pos.x,wheel.pos.y,wheel.pos.z],{}));
+  if(kind==='mecanum_xy') driveParts.forEach(w=>{w.params.radius=.0635;w.params.width=.055;w.params.rollerR=.012;w.pos.x=Math.sign(w.pos.x)*.30;w.pos.y=Math.sign(w.pos.y)*.36;w.pos.z=.0635;});
+  const encoderParts=driveParts.map(wheel=>{
+    const yaw=wheel.rpy.y*Math.PI/180, axis=[-Math.sin(yaw),Math.cos(yaw)];
+    const side=wheel.pos.x*axis[0]+wheel.pos.y*axis[1]>=0?1:-1;
+    const inset=wheel.params.width/2+.055;
+    return tfTemplateComp('encoder',`encoder_${wheel.name}`,'base_link',
+      [wheel.pos.x-axis[0]*side*inset,wheel.pos.y-axis[1]*side*inset,wheel.pos.z],{},
+      {r:-90*side,y:wheel.rpy.y});
+  });
   tf.comps=[
-    tfTemplateComp('base','base_link','',[0,0,.12],{sx:longBase ? .82 : .58,sy:.4,sz:.18}),
+    tfTemplateComp('base','base_link','',[0,0,0],{sx:longBase ? .82 : kind.startsWith('omni') ? .32 : .58,sy:kind.startsWith('omni') ? .28 : .4,sz:.18}),
     ...driveParts,
     ...encoderParts,
-    tfTemplateComp('lidar','laser_link','base_link',[.12,0,.15],{radius:.055,height:.09}),
-    tfTemplateComp('imu','imu_link','base_link',[0,0,.12],{s:.045}),
+    tfTemplateComp('lidar','laser_link','base_link',[.12,0,.24],{radius:.055,height:.09}),
+    tfTemplateComp('imu','imu_link','base_link',[0,0,.21],{s:.045}),
   ];
+  if(kind==='mecanum_xy') {
+    Object.assign(tf.comps[0].params,{sx:.660,sy:.662,sz:.18,hardwareTemplate:'mecanum_xy'});
+    encoderParts.forEach((e,i)=>Object.assign(e.params,{ppr:600,channels:1,encoderRole:'motor_feedback',encoderInvert:i===0?1:-1,attachedWheel:driveParts[i].name}));
+    for(const [axis,x,y,yaw,invert] of [['x',-.110,0,0,-1],['y',0,0,90,1]]) {
+      const enc=tfTemplateComp('encoder','encoder_odom_'+axis,'base_link',[x,y,.029],{passiveOdom:true,encoderRole:'odom_'+axis,ppr:600,channels:1,encoderInvert:invert},{r:-90,y:yaw});
+      const wheel=tfTemplateComp('omni','tracking_wheel_'+axis,'base_link',[x,y,.029],{radius:.029,width:.012,rollerR:.005,passiveOdom:true},{y:yaw});
+      tf.comps.push(enc,wheel);
+    }
+  }
   tf.odom={wheels:[],pattern:template.pattern,ppr:1024,channels:4};
-  tfOdomDetect();tf.odom.pattern=template.pattern;tfOdomSave();
+  tfOdomDetect({reset:true});tf.odom.pattern=template.pattern;tfOdomSave();
   tfAfterChange();tfSelect(tf.comps[0].id);tfResetView();tfCloseTemplateModal();
   sbMsg(`สร้าง Template ${template.name} แล้ว · พร้อมบันทึก TF / ODOM / Model`,4500);
 }
@@ -278,15 +606,20 @@ function tfAddEncoderOmni() {
 function tfDeleteComp(id) {
   const c = tf.comps.find(x => x.id === id);
   if (!c) return;
+  if (tfEditBlocker(c)) { sbMsg(tfLockMessage(c)); return; }
   // ลบลูกที่อ้างอิงด้วย
-  tf.comps = tf.comps.filter(x => x.id !== id && x.parent !== c.name);
-  if (tf.selected === id) tf.selected = null;
+  const removed = new Set(tfCompBranch(c));
+  tfClearRenderedComponents([...removed]);
+  tf.comps = tf.comps.filter(x => !removed.has(x));
+  if (!tf.comps.some(x => x.id === tf.selected)) tf.selected = null;
   tfAfterChange();
+  tfRenderProps();
 }
 // ปุ่มลบใหญ่ → ยืนยันก่อนลบ (ลบคอมโพเนนต์นี้และลูกที่อ้างอิง)
 function tfDeleteCompConfirm(id) {
   const c = tf.comps.find(x => x.id === id);
   if (!c) return;
+  if (tfEditBlocker(c)) { sbMsg(tfLockMessage(c)); return; }
   const kids = tf.comps.filter(x => x.parent === c.name).map(x => x.name);
   const extra = kids.length ? `\nและจะลบคอมโพเนนต์ลูก: ${kids.join(', ')}` : '';
   if (window.confirm(`ลบคอมโพเนนต์ "${c.name}" ?${extra}`)) tfDeleteComp(id);
@@ -297,68 +630,34 @@ function tfMat(color) {
   return new THREE.MeshStandardMaterial({ color, roughness: 0.65, metalness: 0.1 });
 }
 function tfBuildMesh(c) {
-  if (c.type === 'custom') return tfBuildCustomMesh(c);
-  const meta = tfTypeMeta[c.type];
-  const mat = tfMat(meta.color); c._mat = mat;
-  const P = c.params;
-  let m;
-  if (c.type === 'base') {
-    // ROS: x=length,y=width,z=height → Three: X=width(y), Y=height(z), Z=length(x)
-    m = new THREE.Mesh(new THREE.BoxGeometry(P.sy, P.sz, P.sx), mat);
-  } else if (c.type === 'wheel') {
-    const geo = new THREE.CylinderGeometry(P.radius, P.radius, P.width, 20);
-    geo.rotateZ(Math.PI / 2);           // ให้แกนล้อชี้ along ROS-y (ซ้าย-ขวา)
-    m = new THREE.Mesh(geo, mat);
-  } else if (c.type === 'lidar') {
-    m = new THREE.Mesh(new THREE.CylinderGeometry(P.radius, P.radius, P.height, 20), mat);
-    const cap = new THREE.Mesh(new THREE.BoxGeometry(P.radius * 1.4, P.radius * 0.6, P.radius * 1.4), tfMat(0x2a2f3a));
-    cap.position.y = P.height / 2; m.add(cap);
-  } else if (c.type === 'camera') {
-    m = new THREE.Mesh(new THREE.BoxGeometry(P.d, P.h, P.w), mat);
-  } else if (c.type === 'imu') {
-    m = new THREE.Mesh(new THREE.BoxGeometry(P.s, P.s, P.s), mat);
-  } else if (c.type === 'box') {
-    m = new THREE.Mesh(new THREE.BoxGeometry(P.sx, P.sz, P.sy), mat);
-  } else if (c.type === 'cylinder') {
-    m = new THREE.Mesh(new THREE.CylinderGeometry(P.radius, P.radius, P.height, 20), mat);
-  } else if (c.type === 'encoder') {
-    // เอนโคเดอร์หมุน: ลำตัว (body) + แกน shaft + จาน code disc
-    const g = new THREE.Group();
-    const body = new THREE.Mesh(new THREE.CylinderGeometry(P.bodyR, P.bodyR, P.bodyH, 24), mat);
-    g.add(body);
-    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(P.shaftR, P.shaftR, P.shaftH, 16), tfMat(0x2a2f3a));
-    shaft.position.y = P.bodyH / 2 + P.shaftH / 2;
-    g.add(shaft);
-    const disc = new THREE.Mesh(new THREE.CylinderGeometry(P.bodyR * 0.7, P.bodyR * 0.7, P.bodyH * 0.12, 24), tfMat(0xb98cff));
-    disc.position.y = P.bodyH * 0.5 - P.bodyH * 0.06;
-    g.add(disc);
-    g.userData.compId = c.id;
-    g.children.forEach(ch => ch.userData.compId = c.id);
-    return g;
-  } else if (c.type === 'omni') {
-    // ล้อ omni: แกนหลัก (core) + ลูก rollers ล้อมรอบ (หมุนแนวสัมผัส)
-    const g = new THREE.Group();
-    const core = new THREE.Mesh(new THREE.CylinderGeometry(P.radius, P.radius, P.width, 24), mat);
-    core.rotation.z = Math.PI / 2; // ชี้ along ROS-y (ซ้าย-ขวา)
-    g.add(core);
-    const nR = 4;
-    for (let i = 0; i < nR; i++) {
-      const a = (i / nR) * Math.PI * 2;
-      const roller = new THREE.Mesh(new THREE.CylinderGeometry(P.rollerR, P.rollerR, P.width * 1.04, 14), tfMat(0x2a2f3a));
-      // วางลูก roller ริมแกนหลัก แล้วหมุนแกนตัวเองให้สัมผัสผิว
-      roller.position.set(Math.cos(a) * (P.radius - P.rollerR * 0.6), 0, Math.sin(a) * (P.radius - P.rollerR * 0.6));
-      roller.rotation.x = Math.PI / 2;      // แกนลูกหมุนแนวนอน
-      roller.rotation.y = -a;               // เอียงตามทิศรอบแกนหลัก
-      g.add(roller);
-    }
-    g.userData.compId = c.id;
-    g.children.forEach(ch => ch.userData.compId = c.id);
-    return g;
-  } else {
-    m = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.15), mat);
+  if (c.type === 'custom') {
+    const mesh = tfBuildCustomMesh(c);
+    if (tfValidColor(c.color)) mesh.traverse(o => {
+      for (const material of Array.isArray(o.material) ? o.material : [o.material]) if (material?.color) material.color.setHex(c.color);
+    });
+    return mesh;
   }
-  m.userData.compId = c.id; // ทำเครื่องหมายบน mesh หลักเพื่อ raycast
-  return m;
+  const accessory = tfAccessoryParts(c);
+  const detailed = RobotVisuals.mesh(c, THREE, accessory.length ? accessory : undefined);
+  if (detailed) return detailed;
+  const mat = tfMat(tfObjectColor(c)); c._mat = mat;
+  const P = c.params;
+  // Geometry must follow the same ROS XYZ dimensions as the saved URDF in
+  // BOTH workspaces. This changes the view, never the component's TF or ODOM.
+  const geo = c.type === 'box' ? new THREE.BoxGeometry(P.sy, P.sz, P.sx, P.bevel?6:1, P.bevel?6:1, P.bevel?6:1)
+    : c.type === 'cylinder' ? new THREE.CylinderGeometry(P.radius, P.radius, P.height, 32)
+    : new THREE.BoxGeometry(.15, .15, .15);
+  if(c.type==='box'&&P.bevel){
+    const half=[P.sy/2,P.sz/2,P.sx/2],radius=Math.min(P.bevel,...half)*.95;
+    const attr=geo.attributes.position,v=new THREE.Vector3(),nearest=new THREE.Vector3();
+    for(let i=0;i<attr.count;i++){v.fromBufferAttribute(attr,i);nearest.set(Math.max(-half[0]+radius,Math.min(half[0]-radius,v.x)),Math.max(-half[1]+radius,Math.min(half[1]-radius,v.y)),Math.max(-half[2]+radius,Math.min(half[2]-radius,v.z)));v.sub(nearest).normalize().multiplyScalar(radius).add(nearest);attr.setXYZ(i,v.x,v.y,v.z);}
+    geo.computeVertexNormals();
+  }
+  if(c.type==='cylinder'&&P.visualAxis==='1 0 0')geo.rotateX(Math.PI/2);
+  if(c.type==='cylinder'&&P.visualAxis==='0 1 0')geo.rotateZ(Math.PI/2);
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.userData.compId = c.id;
+  return mesh;
 }
 // สร้างเมชจาก shape/params/color (ใช้ทั้ง custom instance และ preview)
 function tfBuildShapeObject(shape, P, color) {
@@ -366,7 +665,7 @@ function tfBuildShapeObject(shape, P, color) {
   const mat = tfMat(color);
   const accent = tfMat(0x2a2f3a);
   if (shape === 'box') {
-    g.add(new THREE.Mesh(new THREE.BoxGeometry(P.sx, P.sz, P.sy), mat));
+    g.add(new THREE.Mesh(new THREE.BoxGeometry(P.sy, P.sz, P.sx), mat));
   } else if (shape === 'cylinder') {
     g.add(new THREE.Mesh(new THREE.CylinderGeometry(P.radius, P.radius, P.height, 24), mat));
   } else if (shape === 'cone') {
@@ -423,7 +722,15 @@ function tfBuildShapeObject(shape, P, color) {
   return g;
 }
 function tfBuildCustomMesh(c) {
-  const def = (tf.userComps || []).find(x => x.id === c.customId);
+  const g = tfBuildCustomMeshUnscaled(c);
+  if (tfRealGeometry() && c.params?.visualScale) {
+    const s = c.params.visualScale;
+    g.scale.set(s.y, s.z, s.x);
+  }
+  return g;
+}
+function tfBuildCustomMeshUnscaled(c) {
+  const def = tfCustomDefinition(c);
   // CAD mesh import (shape === 'cad') → สร้าง BufferGeometry จาก mesh.pos/nor
   if (def && def.shape === 'cad') {
     const g = tfBuildCadMesh(def, def.color);
@@ -446,7 +753,7 @@ function tfBuildCustomMesh(c) {
   }
   const color = def ? def.color : 0x8aa0b5;
   const shape = def ? def.shape : 'box';
-  const P = def ? def.params : { sx: 0.2, sy: 0.2, sz: 0.2 };
+  const P = def ? (tfRealGeometry() ? {...def.params, ...c.params} : def.params) : { sx: 0.2, sy: 0.2, sz: 0.2 };
   const g = tfBuildShapeObject(shape, P, color);
   c._mat = g.children.length ? g.children[0].material : tfMat(color);
   g.userData.compId = c.id;
@@ -539,8 +846,7 @@ function tfMakeLabel(text) {
 }
 
 // ── axes helper with RViz colors: X=Red, Y=Blue, Z=Green ──
-// rotated so the arrows align with the ROS frame (tf_r2t: ROS X→-Z, Y→-X, Z→+Y)
-// ── axes helper with RViz colors: X=Red, Y=Blue, Z=Green ──
+// ROS X→Three +Z, Y→Three +X, Z→Three +Y. X red / Y green / Z blue.
 function tfMakeAxes(size) {
   const axes = new THREE.AxesHelper(size);
   const col = axes.geometry.attributes.color;
@@ -571,6 +877,7 @@ function tfDisposeRenderedObject(root) {
   });
 }
 function tfClearRenderedComponents(components=tf.comps) {
+  tf.selectionHalo?.clear();
   if(tf.transformControls?.object)tf.transformControls.detach();
   const groups=new Set((Array.isArray(components)?components:[]).map(component=>component?.group).filter(Boolean));
   groups.forEach(group=>{
@@ -596,10 +903,12 @@ function tfBuildScene() {
   tf.comps.forEach(c => {
     const g = new THREE.Group();
     g.add(tfBuildMesh(c));
+    if (c.type === 'lidar') g.add(tfLidarScanGuide(c));
     g.position.copy(tf_r2t(c.pos.x, c.pos.y, c.pos.z));
     g.quaternion.copy(tfRosToQuat(c.rpy.r, c.rpy.p, c.rpy.y));
-    g.add(tfMakeAxes(0.12));
-    if (tf.showLabels) {
+    const showAnnotation=!c.params?.articulatedVisual||c.id===tf.selected;
+    if(showAnnotation)g.add(tfMakeAxes(0.12));
+    if (tf.showLabels&&showAnnotation) {
       const lbl = tfMakeLabel(c.name); lbl.position.set(0, 0, 0.15); g.add(lbl);
       c.label = lbl;
     } else {
@@ -615,7 +924,7 @@ function tfBuildScene() {
   // re-attach the transform gizmo to the (new) selected group
   if (tf.transformControls) {
     const sel = tf.comps.find(x => x.id === tf.selected);
-    if (sel && sel.group && tfCompVisible(sel)) tf.transformControls.attach(sel.group);
+    if (sel && sel.group && tfCompVisible(sel) && !tfEditBlocker(sel)) tf.transformControls.attach(sel.group);
     else tf.transformControls.detach();
   }
   tfApplyGroupVisibility();
@@ -631,11 +940,25 @@ function tfSyncGroup(c) {
   const old = c.group.children.find(o => o.userData && o.userData.compId === c.id);
   if (old) {
     c.group.remove(old);
-    if (old.geometry && old.geometry.dispose) old.geometry.dispose();
-    old.traverse(o => { if (o !== old && o.geometry && o.geometry.dispose) o.geometry.dispose(); });
+    tfDisposeRenderedObject(old);
   }
+  const oldGuide = c.group.children.find(o => o.userData?.lidarScanGuide);
+  if (oldGuide) { c.group.remove(oldGuide); tfDisposeRenderedObject(oldGuide); }
   c.group.add(tfBuildMesh(c));
+  if (c.type === 'lidar') c.group.add(tfLidarScanGuide(c));
   tfUpdateSelBox();
+}
+// The translucent ring is the scan plane at the LiDAR frame origin. Its arrow
+// points along ROS +X (Three.js +Z), so roll/pitch/yaw remain visible in 3D.
+function tfLidarScanGuide(c) {
+  const g = new THREE.Group(); g.userData.lidarScanGuide = true;
+  const radius = Math.max(0.12, Number(c.params?.radius || 0.05) * 2.5);
+  const ring = new THREE.Mesh(new THREE.RingGeometry(radius * 0.96, radius, 48),
+    new THREE.MeshBasicMaterial({color:0x43e5bc, transparent:true, opacity:0.58, side:THREE.DoubleSide, depthWrite:false}));
+  ring.rotation.x = -Math.PI / 2; g.add(ring);
+  const arrow = new THREE.ArrowHelper(new THREE.Vector3(0,0,1),new THREE.Vector3(0,0,0),radius*1.3,0xffb84d,radius*.28,radius*.15);
+  g.add(arrow);
+  return g;
 }
 
 // ── selection ──
@@ -644,30 +967,48 @@ function tfSelect(id) {
   tfBuildScene();
   tfRenderProps();
   tfRenderTree();
+  tfHistory?.select();
+  tfSyncClipboardButtons();
 }
 function tfUpdateSelBox() {
-  if (tf.selBox) { tf.scene.remove(tf.selBox); tf.selBox = null; }
   const c = tf.comps.find(x => x.id === tf.selected);
-  if (c && c.group) {
-    tf.selBox = new THREE.BoxHelper(c.group, 0xffd166);
-    //tf.scene.add(tf.selBox);
-  }
-  if (tf._mat) tf._mat.emissive && tf._mat.emissive.setHex(0x000000);
+  const mesh = c?.group?.children.find(o => o.userData?.compId === c.id);
+  tf.selectionHalo?.set(mesh || null);
 }
 
 // ── after any change ──
 function tfAfterChange() {
+  tfPinBaseLink();
   tfBuildScene();
   tfRenderTree();
   tfRenderGroups();
   tfSave();
+  tfSyncClipboardButtons();
 }
 
-// ── camera controls (mirror rviz.js) ──
+// ── assembly camera controls (separate from RViz and the Sim runtime) ──
 function tfBindCam(el) {
+  document.addEventListener('pointerdown',e=>{if(tfContextMenu&&!tfContextMenu.contains(e.target))tfCloseContextMenu();},true);
+  document.addEventListener('keydown',e=>{if(tfContextMenu&&(e.key==='Escape'||e.key==='Tab')){tfCloseContextMenu();if(e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();}}},true);
+  window.addEventListener('resize',tfCloseContextMenu);
+  document.addEventListener('scroll',tfCloseContextMenu,true);
+  const pointers=new Map();
+  let gesture=null,holdTimer=null,previousEnabled=null;
+  const cancelHold=()=>{clearTimeout(holdTimer);holdTimer=null;};
+  const disableGizmo=()=>{if(tf.transformControls){if(previousEnabled===null)previousEnabled=tf.transformControls.enabled;tf.transformControls.enabled=false;}};
+  const finishGizmo=()=>{
+    const tc=tf.transformControls;if(!tc)return;
+    const enabled=tc.enabled;tc.enabled=true;
+    // Also release the stock control's document-level move listener.
+    tc._onPointerUp({button:0,clientX:0,clientY:0});tc.enabled=enabled;
+    el.style.touchAction='none';
+  };
+  const restoreGizmo=()=>{if(previousEnabled!==null&&tf.transformControls)tf.transformControls.enabled=previousEnabled;previousEnabled=null;el.style.touchAction='none';};
+  const center=()=>{const p=[...pointers.values()];return {x:p.reduce((s,v)=>s+v.x,0)/p.length,y:p.reduce((s,v)=>s+v.y,0)/p.length,distance:p.length>1?Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y):0};};
+  const cameraChanged=()=>{tfCancelCamAnimation();document.querySelectorAll('.tf-view-btn[data-view]').forEach(b=>b.classList.remove('active'));};
   // ── เลือกคอมโพเนนต์ (raycast) — ใช้ร่วมกับ mouse click + touch tap ──
   function pickAt(clientX, clientY) {
-    if (tf.transformControls && (tf.transformControls.axis || tf.transformControls.dragging)) return;
+    if (tf.transformControls?.dragging) return;
     if (!tf.ray || !tf.camera) return;
     const r = el.getBoundingClientRect();
     const nx = ((clientX - r.left) / r.width) * 2 - 1;
@@ -685,95 +1026,72 @@ function tfBindCam(el) {
     }
   }
 
-  el.addEventListener('mousedown', e => {
-    // don't start orbiting when the user grabs a gizmo handle
-    if (tf.transformControls && (tf.transformControls.axis || tf.transformControls.dragging)) return;
-    tf.cam.drag = true; tf.cam.rightDrag = (e.button === 2 || e.button === 1);
-    tf.cam.lx = e.clientX; tf.cam.ly = e.clientY;
+  // Capture intent before TransformControls receives pointerdown: modifiers,
+  // secondary buttons and two fingers always navigate, even over a handle.
+  el.addEventListener('pointerdown',e=>{
+    if(e.pointerType==='mouse'&&e.button>2)return;
+    pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(pointers.size>1){finishGizmo();disableGizmo();}
+    else if(e.button!==0||e.shiftKey)disableGizmo();
+  },true);
+  el.addEventListener('pointerdown',e=>{
+    if(!pointers.has(e.pointerId))return;
+    cancelHold();tfCloseContextMenu();tfCancelCamAnimation();
+    el.setPointerCapture(e.pointerId);e.preventDefault();
+    const point=center(),multi=pointers.size>1;
+    const kind=multi?'pan':tf.transformControls?.dragging?'gizmo':e.button!==0||e.shiftKey?'pan':'orbit';
+    gesture={kind,start:point,last:point,moved:multi,button:e.button,touch:e.pointerType==='touch',started:Date.now()};
+    tf.cam.drag=kind==='pan'||kind==='orbit';
+    if(kind!=='gizmo')disableGizmo();
+    el.style.cursor=kind==='gizmo'?'move':'grabbing';
+    if(e.pointerType==='touch'&&!multi&&kind==='orbit')holdTimer=setTimeout(()=>{
+      if(!gesture||gesture.moved||tf.gizmoDragging)return;
+      gesture.kind='menu';tf.cam.drag=false;pickAt(point.x,point.y);tfOpenContextMenu(point.x,point.y);
+    },550);
   });
-  window.addEventListener('mouseup', () => { tf.cam.drag = false; });
-  window.addEventListener('mousemove', e => {
-    if (!tf.cam.drag) return;
-    if (tf.transformControls && tf.transformControls.dragging) return; // gizmo owns the drag
-    const dx = e.clientX - tf.cam.lx, dy = e.clientY - tf.cam.ly;
-    tf.cam.lx = e.clientX; tf.cam.ly = e.clientY;
-    if (tf.cam.rightDrag) {
-      const s = tf.cam.radius * 0.002;
-      tf.cam.target.x -= dx * s; tf.cam.target.z -= dy * s;
-    } else {
-      tf.cam.theta -= dx * 0.012;
-      tf.cam.phi = Math.max(0.02, Math.min(Math.PI - 0.02, tf.cam.phi - dy * 0.012));
+  el.addEventListener('pointermove',e=>{
+    if(!gesture||!pointers.has(e.pointerId))return;
+    pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    const point=center(),last=gesture.last;
+    if(Math.hypot(point.x-gesture.start.x,point.y-gesture.start.y)>5||Math.abs(point.distance-gesture.start.distance)>3){gesture.moved=true;cancelHold();}
+    if(!gesture.moved||gesture.kind==='menu'||gesture.kind==='gizmo')return;
+    e.preventDefault();cameraChanged();
+    const height=el.getBoundingClientRect().height;
+    if(gesture.kind==='orbit')RobotEditorView.orbit(tf.cam,point.x-last.x,point.y-last.y,height);
+    else {
+      tfCamUpdate();RobotEditorView.pan(tf.cam,tf.camera,point.x-last.x,point.y-last.y,height,THREE);
+      if(point.distance>2&&last.distance>2)RobotEditorView.zoom(tf.cam,Math.log(last.distance/point.distance)/.0015);
     }
+    gesture.last=point;tfCamUpdate();
   });
+  const release=(e,cancelled=false)=>{
+    if(!pointers.has(e.pointerId))return;
+    const old=gesture;pointers.delete(e.pointerId);cancelHold();
+    if(old?.kind==='gizmo')finishGizmo();
+    if(pointers.size){const point=center();gesture={...old,kind:pointers.size>1?'pan':'orbit',start:point,last:point,moved:true};disableGizmo();tf.cam.drag=true;}
+    else {
+      gesture=null;tf.cam.drag=false;restoreGizmo();el.style.cursor='grab';
+      if(!cancelled&&old&&!old.moved&&old.kind!=='gizmo'&&old.kind!=='menu'){
+        if(old.button===2){pickAt(e.clientX,e.clientY);tfOpenContextMenu(e.clientX,e.clientY);}
+        else if(old.button===0&&(!old.touch||Date.now()-old.started<500))pickAt(e.clientX,e.clientY);
+      }
+    }
+    if(el.hasPointerCapture(e.pointerId))el.releasePointerCapture(e.pointerId);
+  };
+  el.addEventListener('pointerup',e=>release(e));
+  el.addEventListener('pointercancel',e=>release(e,true));
+  el.addEventListener('lostpointercapture',e=>release(e,true));
+  window.addEventListener('blur',()=>{cancelHold();finishGizmo();pointers.clear();gesture=null;tf.cam.drag=false;restoreGizmo();el.style.cursor='grab';});
   el.addEventListener('wheel', e => {
     e.preventDefault();
-    tf.cam.radius = Math.max(0.4, Math.min(200, tf.cam.radius * (1 + Math.sign(e.deltaY) * 0.1)));
+    if(tf.gizmoDragging||pointers.size)return;
+    cameraChanged();
+    const pixels=e.deltaY*(e.deltaMode===1?16:e.deltaMode===2?el.clientHeight:1);
+    RobotEditorView.zoom(tf.cam,pixels);tfCamUpdate();
   }, { passive: false });
-  el.addEventListener('contextmenu', e => e.preventDefault());
-  el.addEventListener('click', e => pickAt(e.clientX, e.clientY));
-
-  // ── TOUCH EVENTS (Tablet / Mobile) — เหมือน rviz.js ──
-  // 1 นิ้ว = Orbit (หมุน) · 2 นิ้ว = Pan (เลื่อนเป้าหมาย) + Pinch Zoom (ซูม)
-  let _pinch = null, _tapX = 0, _tapY = 0, _tapT = 0, _tapFingers = 0, _moved = 0;
-  const _now = () => (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-  el.addEventListener('touchstart', e => {
-    if (tf.transformControls && (tf.transformControls.axis || tf.transformControls.dragging)) return; // ให้ gizmo จัดการ
-    e.preventDefault(); // กันเด้ง/scroll หน้าเว็บ
-    _tapFingers = e.touches.length; _moved = 0;
-    _tapX = e.touches[0].clientX; _tapY = e.touches[0].clientY; _tapT = _now();
-    if (e.touches.length === 1) {
-      // 1 นิ้ว = Orbit (เหมือนคลิกซ้าย)
-      tf.cam.drag = true; tf.cam.rightDrag = false;
-      tf.cam.lx = e.touches[0].clientX; tf.cam.ly = e.touches[0].clientY;
-    } else if (e.touches.length >= 2) {
-      // 2 นิ้ว = Pan + Zoom
-      const dx = e.touches[0].clientX - e.touches[1].clientX;
-      const dy = e.touches[0].clientY - e.touches[1].clientY;
-      _pinch = Math.hypot(dx, dy);
-      tf.cam.drag = true; tf.cam.rightDrag = true; // โหมด Pan
-      tf.cam.lx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-      tf.cam.ly = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-    }
-  }, { passive: false });
-  el.addEventListener('touchmove', e => {
-    if (tf.transformControls && tf.transformControls.dragging) return; // gizmo owns the drag
-    if (!tf.cam.drag) return;
-    e.preventDefault();
-    if (e.touches.length === 1) {
-      const dx = e.touches[0].clientX - tf.cam.lx, dy = e.touches[0].clientY - tf.cam.ly;
-      _moved += Math.abs(dx) + Math.abs(dy);
-      tf.cam.lx = e.touches[0].clientX; tf.cam.ly = e.touches[0].clientY;
-      tf.cam.theta -= dx * 0.012;
-      tf.cam.phi = Math.max(0.02, Math.min(Math.PI - 0.02, tf.cam.phi - dy * 0.012));
-    } else if (e.touches.length >= 2) {
-      // คำนวณระยะห่าง 2 นิ้วเพื่อซูม
-      const dx = e.touches[0].clientX - e.touches[1].clientX;
-      const dy = e.touches[0].clientY - e.touches[1].clientY;
-      const dist = Math.hypot(dx, dy);
-      if (_pinch) {
-        const zoomDelta = _pinch / dist;
-        tf.cam.radius = Math.max(0.4, Math.min(200, tf.cam.radius * zoomDelta));
-        _pinch = dist; // อัปเดตระยะล่าสุด
-      }
-      // จุดกึ่งกลาง เพื่อคำนวณ Pan
-      const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-      const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-      const pdx = cx - tf.cam.lx, pdy = cy - tf.cam.ly;
-      _moved += Math.abs(pdx) + Math.abs(pdy);
-      tf.cam.lx = cx; tf.cam.ly = cy;
-      const s = tf.cam.radius * 0.002;
-      tf.cam.target.x -= pdx * s; tf.cam.target.z -= pdy * s;
-    }
-  }, { passive: false });
-  ['touchend', 'touchcancel'].forEach(ev => el.addEventListener(ev, e => {
-    // tap (แตะสั้น ๆ แทบไม่ขยับ) → เลือกคอมโพเนนต์เหมือนคลิกซ้าย
-    // (touch-action:none ปิด synthesized click ของเบราว์เซอร์ ต้องเลือกเอง)
-    if (ev === 'touchend' && _tapFingers === 1 && _moved < 8) {
-      const t = e.changedTouches && e.changedTouches[0];
-      if (t && (_now() - _tapT) < 500) pickAt(t.clientX, t.clientY);
-    }
-    tf.cam.drag = false; _pinch = null; _moved = 0;
-  }));
+  // Context menu opens only after a stationary right-click, never after pan.
+  el.addEventListener('contextmenu',e=>e.preventDefault());
+  el.addEventListener('dblclick',e=>{if(!tf.gizmoDragging){pickAt(e.clientX,e.clientY);tfFocusSelection();}});
 }
 function tfCamUpdate() {
   const c = tf.camera; if (!c) return;
@@ -804,18 +1122,22 @@ function tfToggleLabels() {
 }
 
 // ── view presets (SolidWorks-style) ──
+function tfCancelCamAnimation() { tf._camAnimation=(tf._camAnimation||0)+1; }
 function tfAnimateCam(toTheta, toPhi, toRadius, toTarget) {
+  tfCancelCamAnimation();
+  const animation=tf._camAnimation;
   const s = {
     theta: tf.cam.theta, phi: tf.cam.phi, radius: tf.cam.radius,
     tx: tf.cam.target.x, ty: tf.cam.target.y, tz: tf.cam.target.z,
   };
   const e = {
-    theta: toTheta, phi: Math.max(0.02, Math.min(Math.PI - 0.02, toPhi)),
+    theta: tf.cam.theta+Math.atan2(Math.sin(toTheta-tf.cam.theta),Math.cos(toTheta-tf.cam.theta)), phi: Math.max(0.015, Math.min(Math.PI - 0.015, toPhi)),
     radius: toRadius, tx: toTarget.x, ty: toTarget.y, tz: toTarget.z,
   };
-  const dur = 420;
+  const dur = 260;
   let t0 = null;
   function step(now) {
+    if(animation!==tf._camAnimation)return;
     if (t0 === null) t0 = now;
     const t = Math.min(1, (now - t0) / dur);
     const k = 1 - Math.pow(1 - t, 3); // ease-out cubic
@@ -825,6 +1147,7 @@ function tfAnimateCam(toTheta, toPhi, toRadius, toTarget) {
     tf.cam.target.x = s.tx + (e.tx - s.tx) * k;
     tf.cam.target.y = s.ty + (e.ty - s.ty) * k;
     tf.cam.target.z = s.tz + (e.tz - s.tz) * k;
+    tfCamUpdate();
     if (t < 1) requestAnimationFrame(step);
   }
   requestAnimationFrame(step);
@@ -833,10 +1156,10 @@ function tfSetView(view) {
   const r = tf.cam.radius;
   const tgt = tf.cam.target;
   const presets = {
-    top:     { theta: 0,            phi: 0.001 },
-    bottom:  { theta: 0,            phi: Math.PI - 0.001 },
-    front:   { theta: -Math.PI / 2, phi: Math.PI / 2 },  // ROS +X (forward) → Three -Z
-    back:    { theta: Math.PI / 2,  phi: Math.PI / 2 },  // ROS -X (back)    → Three +Z
+    top:     { theta: -Math.PI/2,   phi: 0.001 }, // plan: ROS +X up, +Y left
+    bottom:  { theta: Math.PI/2,    phi: Math.PI - 0.001 },
+    front:   { theta: Math.PI / 2, phi: Math.PI / 2 },  // ROS +X → Three +Z
+    back:    { theta: -Math.PI / 2, phi: Math.PI / 2 },
     left:    { theta: 0,            phi: Math.PI / 2 },  // ROS +Y (left)    → Three +X
     right:   { theta: Math.PI,      phi: Math.PI / 2 },  // ROS -Y (right)   → Three -X
     iso:     { theta: Math.PI / 4,  phi: Math.PI / 3 },
@@ -847,7 +1170,23 @@ function tfSetView(view) {
   document.querySelectorAll('.tf-view-btn[data-view]').forEach(b =>
     b.classList.toggle('active', b.dataset.view === view));
 }
-function tfResetView() { tfSetView('iso'); }
+function tfFitView(selectedOnly=false, reset=false) {
+  if(!tf.scene)return false;
+  const bounds=new THREE.Box3();
+  for(const c of tf.comps){
+    if((selectedOnly&&c.id!==tf.selected)||!tfCompVisible(c))continue;
+    const mesh=c.group?.children.find(o=>o.userData?.compId===c.id);
+    if(mesh){mesh.updateWorldMatrix(true,true);bounds.union(new THREE.Box3().setFromObject(mesh));}
+  }
+  if(bounds.isEmpty())return false;
+  const target=bounds.getCenter(new THREE.Vector3()),size=bounds.getSize(new THREE.Vector3());
+  const aspect=(tf.container?.offsetWidth||800)/(tf.container?.offsetHeight||600);
+  const radius=RobotEditorView.fitRadius(size,aspect,tf.perspCam?.fov||45);
+  tfAnimateCam(reset?Math.PI/4:tf.cam.theta,reset?Math.PI/3:tf.cam.phi,radius,target);
+  return true;
+}
+function tfFocusSelection() { if(!tfFitView(true))sbMsg('เลือกชิ้นส่วนที่ต้องการโฟกัสก่อนครับ'); }
+function tfResetView() { if(!tfFitView(false,true))tfSetView('iso'); }
 
 // ── projection switch: Perspective ↔ Isometric (Orthographic) ──
 function tfSetProjection(proj) {
@@ -859,7 +1198,7 @@ function tfSetProjection(proj) {
   if (tf.transformControls) {
     try { tf.transformControls.camera = cam; } catch (e) {}
     const sel = tf.comps.find(x => x.id === tf.selected);
-    if (sel && sel.group && tfCompVisible(sel)) { tf.transformControls.detach(); tf.transformControls.attach(sel.group); }
+    if (sel && sel.group && tfCompVisible(sel) && !tfEditBlocker(sel)) { tf.transformControls.detach(); tf.transformControls.attach(sel.group); }
     else tf.transformControls.detach();
   }
   document.querySelectorAll('.tf-proj-btn').forEach(b => b.classList.toggle('active', b.dataset.proj === proj));
@@ -871,21 +1210,27 @@ function tfSetProjection(proj) {
 function tfT2RPos(p) { return { x: p.z, y: p.x, z: p.y }; }
 function tfT2RRpy(q) {
   const rq = new THREE.Quaternion(q.z, q.x, q.y, q.w);
-  const e = new THREE.Euler().setFromQuaternion(rq, 'XYZ');
+  const e = new THREE.Euler().setFromQuaternion(rq, 'ZYX');
   return { r: THREE.MathUtils.radToDeg(e.x), p: THREE.MathUtils.radToDeg(e.y), y: THREE.MathUtils.radToDeg(e.z) };
 }
 // bake a local group.scale back into the component's size params
 function tfApplyScale(c, s) {
   const base = c._scaleBase || c.params;
-  const eff = {};
+  const eff = { ...base };
+  if (tfRealGeometry() && c.type === 'custom') {
+    const v=base.visualScale || {x:1,y:1,z:1};
+    eff.visualScale={x:v.x*s.z,y:v.y*s.x,z:v.z*s.y};
+    return eff;
+  }
   if ('sx' in base) {
-    const m = tfGeoAxisMap[c.type] || { x: 'x', y: 'z', z: 'y' };
+    const m = tfGeoAxisMap[c.type] || {x:'z', y:'x', z:'y'};
     eff.sx = +((base.sx) * s[m.x]).toFixed(4);
     eff.sy = +((base.sy) * s[m.y]).toFixed(4);
     eff.sz = +((base.sz) * s[m.z]).toFixed(4);
   } else {
     const f = (s.x + s.y + s.z) / 3;
-    Object.keys(base).forEach(k => { if (typeof base[k] === 'number') eff[k] = +(base[k] * f).toFixed(4); });
+    const dimensions = ['radius','width','height','w','h','d','s','bodyR','bodyH','shaftR','shaftH','rollerR'];
+    dimensions.forEach(k => { if (typeof base[k] === 'number') eff[k] = +(base[k] * f).toFixed(4); });
   }
   return eff;
 }
@@ -913,6 +1258,7 @@ function tfRenderAddGrid() {
     cylinder: 'ทรงกระบอก',
     encoder: 'Encoder',
     omni: 'ล้อ Omni',
+    mecanum: 'ล้อ Mecanum',
   };
   const hints = {
     base: 'ฐานหลัก',
@@ -923,30 +1269,47 @@ function tfRenderAddGrid() {
     box: 'กล่องเสริม',
     cylinder: 'แกน/เสา',
     encoder: 'วัดรอบ',
-    omni: 'ล้อพิเศษ',
+    omni: 'ลูกกลิ้งสองแถว',
+    mecanum: 'ลูกกลิ้งเอียง 45°',
   };
-  const compButton = t => `<button class="tf-comp-btn" onclick="tfAddComp('${t}')"><span class="tf-comp-ico">${tfIcons[t]}</span><span><b>+ ${labels[t]}</b><small>${hints[t]}</small></span></button>`;
+  const compButton = t => `<button class="tf-comp-btn" onclick="tfAddComp('${t}')"><span class="tf-comp-ico">${tfIcons[t] || tfIcons.omni}</span><span><b>+ ${labels[t]}</b><small>${hints[t]}</small></span></button>`;
   const deviceGroup = (title, icon, body, count, open) => `<details class="tf-device-group" ${open ? 'open' : ''}>
     <summary><span>${icon}</span><span>${title}</span><span class="tf-device-count">${count}</span></summary>
     <div class="tf-device-grid">${body}</div>
   </details>`;
 
   let html = deviceGroup('โครงสร้างและตัวถัง', '▣', ['base', 'box', 'cylinder'].map(compButton).join(''), 3, true);
-  html += deviceGroup('ระบบขับเคลื่อน', '⚙', ['wheel', 'omni', 'encoder'].map(compButton).join(''), 3, false);
+  html += deviceGroup('ระบบขับเคลื่อน', '⚙', ['wheel', 'omni', 'mecanum', 'encoder'].map(compButton).join(''), 4, true);
   html += deviceGroup('เซนเซอร์', '◉', ['lidar', 'camera', 'imu'].map(compButton).join(''), 3, true);
+  const presetButton=p=>`<button class="tf-comp-btn" onclick="tfAddPreset('${p.id}')"><span class="tf-comp-ico">${p.icon}</span><span><b>+ ${p.label}</b><small>ปรับขนาดและสีได้</small></span></button>`;
+  const regularPresets=TF_COMPONENT_PRESETS.filter(p=>!TF_ARTICULATED_OBJECT_IDS.has(p.id));
+  const previews=tf.renderer && typeof RobotAccessoryPreviews!=='undefined' && typeof RobotAccessories!=='undefined'
+    ? RobotAccessoryPreviews.build(regularPresets,THREE,RobotVisuals,RobotAccessories) : {};
+  const accessoryButton=p=>`<button class="tf-comp-btn tf-accessory" data-accessory="${p.id}" onclick="tfAddPreset('${p.id}')" title="${p.label} · โมเดล 3D รุ่น 2 · X ยาว / Y กว้าง / Z สูง"><span class="tf-comp-ico">${previews[p.id]?`<img src="${previews[p.id]}" alt="" draggable="false">`:p.icon}</span><span><b>${p.label}</b><small>โมเดล 3D · รุ่น 2</small></span></button>`;
+  html += deviceGroup('อุปกรณ์เสริม', '🧰', regularPresets.map(accessoryButton).join(''), regularPresets.length, true);
+  if(typeof isSimWorkspace!=='undefined'&&!isSimWorkspace){const articulated=TF_COMPONENT_PRESETS.filter(p=>TF_ARTICULATED_OBJECT_IDS.has(p.id));html+=deviceGroup('แขนกลและหุ่นยนต์ขา','🦾',articulated.map(presetButton).join(''),articulated.length,true);}
   const quick = `<button class="tf-comp-btn tf-comp-special" onclick="tfAddWheelSet(4)"><span class="tf-comp-ico">${tfIcons.wheel}</span><span><b>+ ชุดล้อ 4 ล้อ</b><small>เริ่มเร็ว</small></span></button>
     <button class="tf-comp-btn tf-comp-special" onclick="tfAddEncoderOmni()"><span class="tf-comp-ico">${tfIcons.encoder}</span><span><b>+ Encoder + Omni</b><small>ชุดวัดรอบ</small></span></button>`;
   html += deviceGroup('ชุดอุปกรณ์สำเร็จ', '✦', quick, 2, false);
 
-  let custom = `<button class="tf-comp-btn tf-comp-create" onclick="tfOpenCustom()"><span class="tf-comp-ico">＋</span><span><b>+ สร้างเอง</b><small>ชิ้นส่วนใหม่</small></span></button>
+  let custom = `<button class="tf-comp-btn tf-comp-create" onclick="tfOpenComponentDesigner()"><span class="tf-comp-ico">🧩</span><span><b>ประกอบ 3D</b><small>สร้างจากหลายรูปทรง</small></span></button><button class="tf-comp-btn tf-comp-create" onclick="tfOpenCustom()"><span class="tf-comp-ico">＋</span><span><b>+ สร้างเอง</b><small>ชิ้นส่วนใหม่</small></span></button>
     <button class="tf-comp-btn tf-comp-create" onclick="tfOpenCadImport()"><span class="tf-comp-ico">⇩</span><span><b>+ นำเข้า CAD</b><small>STL/OBJ</small></span></button>`;
   const uc = tf.userComps || [];
   if (uc.length) {
     custom += uc.map(d => `<button class="tf-comp-btn" onclick="tfAddCustomComp(decodeURIComponent('${encArg(d.id)}'))" title="เพิ่ม ${escH(d.name)} (offset ${d.offset.pos.x},${d.offset.pos.y},${d.offset.pos.z})">
       <span class="tf-comp-ico" style="color:#${('000000' + d.color.toString(16)).slice(-6)}">◆</span><span><b>${escH(d.name)}</b><small>ของฉัน</small></span></button>`).join('');
   }
-  html += deviceGroup('อุปกรณ์ของฉัน', '★', custom, uc.length + 2, false);
+  html += deviceGroup('อุปกรณ์ของฉัน', '★', custom, uc.length + 3, false);
   el.innerHTML = html;
+  for(const button of el.querySelectorAll('.tf-comp-btn')){
+    const label=button.querySelector('b'),hint=button.querySelector('small');
+    if(!label)continue;
+    const name=label.textContent.replace(/^\+\s*/, '');
+    label.textContent=name;
+    button.type='button';
+    button.setAttribute('aria-label',name+(hint?' — '+hint.textContent:''));
+    if(!button.title)button.title=name+(hint?' — '+hint.textContent:'');
+  }
 }
 
 // ══ Custom Components (สร้างโมเดลเอง + เก็บเป็น library ของ user) ══
@@ -1025,6 +1388,10 @@ function tfReadCustomForm(forSave) {
     def.id = 'uc_' + Date.now().toString(36);
   }
   return def;
+}
+function tfOpenComponentDesigner(){
+  tfCloseCustom();
+  switchPage('3dcomp');
 }
 function tfOpenCustom() {
   const nm = document.getElementById('tf-c-name'); if (nm) nm.value = '';
@@ -1461,19 +1828,12 @@ function tfSetupGizmo() {
   tc.setSpace('local');
   tc.setMode('translate');
   tc.setSize(0.85);
-  // RViz axis colors: X=Red, Y=Blue, Z=Green
-  // (r128 TransformControls has no public color props → recolor materials by default color)
-  tc.traverse(o => {
-    if (o.material && o.material.color) {
-      const hex = o.material.color.getHex();
-      if (hex === 0xff0000) o.material.color.setHex(0x44ff66);      // X = red 0x4488ff
-      else if (hex === 0x00ff00) o.material.color.setHex(0x4488ff); // Z = green (swap) 
-      else if (hex === 0x0000ff) o.material.color.setHex(0xff4444); // Y = blue (swap) 0xff4444
-    }
-  });
+  RobotEditorView.positiveGizmo(tc,THREE);
   tc.addEventListener('dragging-changed', e => {
     tf.gizmoDragging = e.value;
     if (e.value) {
+      tfHistory?.begin();
+      tfCancelCamAnimation();
       tf.cam.drag = false; // hand the pointer to the gizmo
       if (tc.mode === 'scale') {
         const c = tf.comps.find(x => x.id === tf.selected);
@@ -1485,13 +1845,23 @@ function tfSetupGizmo() {
       if (c && c.group && tc.mode === 'scale') c.group.scale.set(1, 1, 1); // size already baked into params
       if (c) tfSyncGroup(c);
       tfSave();
+      tfHistory?.end();
     }
   });
   tc.addEventListener('objectChange', () => {
     const c = tf.comps.find(x => x.id === tf.selected); if (!c || !c.group) return;
+    if (tfEditBlocker(c)) {
+      c.group.position.copy(tf_r2t(c.pos.x, c.pos.y, c.pos.z));
+      c.group.quaternion.copy(tfRosToQuat(c.rpy.r, c.rpy.p, c.rpy.y));
+      c.group.scale.set(1, 1, 1);
+      tfSyncPropInputs(c);
+      return;
+    }
     if (tc.mode === 'translate') {
       const ros = tfT2RPos(c.group.position);
-      c.pos.x = +ros.x.toFixed(3); c.pos.y = +ros.y.toFixed(3); c.pos.z = +ros.z.toFixed(3);
+      c.pos.x = +ros.x.toFixed(3); c.pos.y = +ros.y.toFixed(3);
+      c.pos.z = c.type === 'base' ? 0 : +ros.z.toFixed(3);
+      if (c.type === 'base') c.group.position.y = 0;
     } else if (tc.mode === 'rotate') {
       const rpy = tfT2RRpy(c.group.quaternion);
       c.rpy.r = +rpy.r.toFixed(1); c.rpy.p = +rpy.p.toFixed(1); c.rpy.y = +rpy.y.toFixed(1);
@@ -1525,8 +1895,12 @@ function tfSetupGizmoUI() {
     snap.classList.toggle('on', tf.snap);
   });
   window.addEventListener('keydown', e => {
+    if (!document.getElementById('page-transformation')?.classList.contains('show') || e.ctrlKey || e.metaKey || e.altKey) return;
     const a = document.activeElement;
-    if (a && /INPUT|SELECT|TEXTAREA/.test(a.tagName)) return;
+    if (a && (a.isContentEditable || /INPUT|SELECT|TEXTAREA/.test(a.tagName))) return;
+    if(tf.gizmoDragging||tf.cam.drag)return;
+    if(e.key==='f'||e.key==='F'){e.preventDefault();tfFocusSelection();return;}
+    if(e.key==='Home'){e.preventDefault();tfResetView();return;}
     if (!tf.transformControls) return;
     let mode = null;
     if (e.key === 'w' || e.key === 'W') mode = 'translate';
@@ -1545,22 +1919,27 @@ async function tfInitThree() {
   const c = document.getElementById('tf-3d-container'); if (!c) return;
   tf.container = c;
   tf.renderer = new THREE.WebGLRenderer({ antialias: true });
+  tf.renderer.outputEncoding = THREE.sRGBEncoding;
+  tf.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  tf.renderer.toneMappingExposure = 1.15;
   tf.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   tf.renderer.setClearColor(tfWorkspaceBgColor(), 1);
   tf.renderer.domElement.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;outline:none;cursor:grab;touch-action:none;';
   c.appendChild(tf.renderer.domElement);
   tf.scene = new THREE.Scene();
+  tf.selectionHalo = EditorSelection.create(THREE, tf.scene);
   const W = c.offsetWidth || 800, H = c.offsetHeight || 600;
   tf.perspCam = new THREE.PerspectiveCamera(45, W / H, 0.01, 2000);
   tf.orthoCam = new THREE.OrthographicCamera(-1, 1, 1, -1, -2000, 2000);
   tf.camera = tf.perspCam;
-  tf.scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-  const dl = new THREE.DirectionalLight(0xffffff, 0.6); dl.position.set(3, 8, 5); tf.scene.add(dl);
+  tf.scene.add(new THREE.HemisphereLight(0xe6efff, 0x586374, .85));
+  const dl = new THREE.DirectionalLight(0xfff1db, 1.1); dl.position.set(3, 8, 5); tf.scene.add(dl);
+  const fill = new THREE.DirectionalLight(0xa8caff, .65); fill.position.set(-4, 3, -2); tf.scene.add(fill);
   tf.scene.add(new THREE.GridHelper(10, 20, 0x394150, 0x262d3a));
   tf.scene.add(tfMakeAxes(0.4));
   tf.ray = new THREE.Raycaster();
-  tfBindCam(tf.renderer.domElement);
   tfSetupGizmo();
+  tfBindCam(tf.renderer.domElement);
   tfSetupGizmoUI();
   tfRenderAddGrid();
   new ResizeObserver(tfResize).observe(c);
@@ -1580,9 +1959,12 @@ async function tfInitThree() {
     requestAnimationFrame(loop);
     tfCamUpdate();
     if (tf.selBox) tf.selBox.update();
+    tf.selectionHalo?.update();
     tf.renderer.render(tf.scene, tf.camera);
   })();
   tf.ready = true;
+  tfInitHistory();
+  tfResetView();
 }
 function initTransformation() {
   if (tf.renderer) {
@@ -1628,10 +2010,10 @@ function tfRenderTree() {
   const rows = tf.comps.map(c => {
     const d = depth(c, new Set());
     const sel = c.id === tf.selected ? ' style="background:rgba(79,142,247,.15);color:#fff"' : '';
-    const def = c.type === 'custom' ? (tf.userComps || []).find(x => x.id === c.customId) : null;
+    const def = c.type === 'custom' ? tfCustomDefinition(c) : null;
     const tlabel = c.type === 'custom' ? (def ? def.name : 'Custom') : (tfTypeMeta[c.type] ? tfTypeMeta[c.type].label.split(' ')[0] : c.type);
     return `<div class="ti" ${sel} onclick="tfSelect(decodeURIComponent('${encArg(c.id)}'))" style="padding-left:${10 + d * 16}px;display:flex;justify-content:space-between;gap:6px;cursor:pointer">
-      <span><span style="opacity:.7">${escH(tlabel)}</span> ${escH(c.name)}</span>
+      <span><span style="opacity:.7">${escH(tlabel)}</span> ${escH(c.name)}${c.locked ? ' <span title="ล็อกชิ้นส่วนอยู่" aria-label="ล็อกอยู่">🔒</span>' : ''}</span>
       <span style="color:var(--dim);font-size:10px">${escH(c.parent || '—')}</span>
     </div>`;
   });
@@ -1666,6 +2048,7 @@ function tfToggleGroup(g) {
   const sel = tf.comps.find(x => x.id === tf.selected);
   if (sel && !tfCompVisible(sel) && tf.transformControls) tf.transformControls.detach();
   tfRenderGroups();
+  tfSave();
 }
 function tfSelectGroup(g) {
   const m = tf.comps.filter(c => (c.viewGroup || 'Default') === g);
@@ -1677,7 +2060,7 @@ function tfRenderProps() {
   const el = document.getElementById('tf-props'); if (!el) return;
   const c = tf.comps.find(x => x.id === tf.selected);
   if (!c) { el.innerHTML = '<div style="padding:16px;color:var(--dim);font-size:12px">เลือกคอมโพเนนต์เพื่อแก้ไขเฟรม / ตำแหน่ง</div>'; return; }
-  const def = c.type === 'custom' ? (tf.userComps || []).find(x => x.id === c.customId) : null;
+  const def = c.type === 'custom' ? tfCustomDefinition(c) : null;
   const meta = c.type === 'custom' ? { label: (def ? def.name : 'Custom') + ' ⭐' } : tfTypeMeta[c.type];
   const parentOpts = ['<option value="">— root —</option>'].concat(
     tf.comps.filter(x => x.id !== c.id).map(x => `<option value="${escH(x.name)}" ${x.name === c.parent ? 'selected' : ''}>${escH(x.name)}</option>`)
@@ -1728,10 +2111,23 @@ function tfRenderProps() {
     };
     sizeRows = customSizes[def.shape] || '';
   }
-  const typeName = c.type === 'custom' ? (def ? def.name : 'Custom') : (meta.label.split(' ')[1] || meta.label).trim();
+  if (c.type === 'omni') {
+    const style = RobotVisuals.wheelStyle(c);
+    sizeRows += `<div class="tf-prop"><label>ชนิดล้อ</label><select id="tf-p-wheel-style"><option value="omni" ${style === 'omni' ? 'selected' : ''}>Omni · ลูกกลิ้งสองแถว</option><option value="mecanum" ${style === 'mecanum' ? 'selected' : ''}>Mecanum · ลูกกลิ้ง 45°</option></select></div>
+      <div class="tf-grid2"><div><label>ลูกกลิ้งต่อแถว</label><input id="tf-p-roller-count" type="number" min="6" max="16" step="1" value="${p.rollerCount || (style === 'mecanum' ? 10 : 8)}"></div>
+      ${style === 'mecanum' ? `<div><label>ทิศลูกกลิ้ง</label><select id="tf-p-handedness"><option value="1" ${RobotVisuals.handedness(c) === 1 ? 'selected' : ''}>+45°</option><option value="-1" ${RobotVisuals.handedness(c) === -1 ? 'selected' : ''}>−45°</option></select></div>` : ''}</div>`;
+  }
+  const typeName = c.type === 'omni' ? (RobotVisuals.wheelStyle(c) === 'mecanum' ? 'Mecanum Wheel' : 'Omni Wheel') : c.type === 'custom' ? (def ? def.name : 'Custom') : (meta.label.split(' ')[1] || meta.label).trim();
   const axisIcon = `<svg class="tf-axis-ico" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M12 12 20 6" stroke="#4488ff"/><path d="M12 12 6 20" stroke="#ff4444"/><path d="M12 12 12 3" stroke="#44ff66"/><circle cx="12" cy="12" r="1.5" fill="#fff"/></svg>`;
+  const blocked = !!tfEditBlocker(c);
   el.innerHTML = `
     <div class="tf-props-head">${axisIcon}<span>การตั้งค่า Transform (${escH(typeName)})</span></div>
+    <div class="editor-object-lock">
+      <button type="button" id="tf-lock" class="editor-lock-button" aria-pressed="${c.locked === true}" onclick="tfToggleLock()">${c.locked ? '🔒 ปลดล็อกชิ้นส่วน' : '🔓 ล็อกชิ้นส่วน'}</button>
+      <small>${escH(tfLockMessage(c))}</small>
+    </div>
+    <fieldset class="editor-object-fields" ${blocked ? 'disabled' : ''}>
+    <div class="tf-prop editor-color-field"><label for="tf-object-color">สีของชิ้นส่วน</label><input id="tf-object-color" type="color" value="#${tfObjectColor(c).toString(16).padStart(6,'0')}" oninput="tfChangeColor(this.value)"></div>
     <div class="tf-prop"><label>ชื่อเฟรม (frame_id)</label><input id="tf-p-name" value="${escH(c.name)}"></div>
     <div class="tf-prop"><label>Parent frame</label><select id="tf-p-parent">${parentOpts}</select></div>
     <div class="tf-prop"><label>View Group (จัดกลุ่ม)</label><input id="tf-p-group" value="${escH(c.viewGroup || '')}" placeholder="เช่น Arm, Base…"></div>
@@ -1739,7 +2135,7 @@ function tfRenderProps() {
     <div class="tf-grid3">
       <div><label class="tf-axis-x">X (m)</label><input id="tf-p-x" type="number" step="0.01" value="${c.pos.x}"></div>
       <div><label class="tf-axis-y">Y (m)</label><input id="tf-p-y" type="number" step="0.01" value="${c.pos.y}"></div>
-      <div><label class="tf-axis-z">Z (m)</label><input id="tf-p-z" type="number" step="0.01" value="${c.pos.z}"></div>
+      <div><label class="tf-axis-z">Z (m)</label><input id="tf-p-z" type="number" step="0.01" value="${c.type === 'base' ? 0 : c.pos.z}" ${c.type === 'base' ? 'disabled title="base_link ยึดไว้ที่ด้านล่างของตัวถัง (Z=0)"' : ''}></div>
     </div>
     <div class="tf-sec">การหมุน — <span class="tf-axis-x">Roll</span>/<span class="tf-axis-y">Pitch</span>/<span class="tf-axis-z">Yaw</span> <span class="lnk">↔ Rotate Gizmo</span></div>
     <div class="tf-grid3">
@@ -1748,19 +2144,34 @@ function tfRenderProps() {
       <div><label class="tf-axis-z">Yaw°</label><input id="tf-p-yaw" type="number" step="1" value="${c.rpy.y}"></div>
     </div>
     ${sizeRows ? `<div class="tf-sec">ขนาด/พารามิเตอร์ — กว้าง/ยาว/สูง <span class="lnk">↔ Scale Gizmo</span></div>${sizeRows}` : ''}
+    ${c.joint?`<div class="tf-sec">ข้อต่อ Revolute · สำหรับตั้งค่า MoveIt</div><div class="tf-prop"><label>แกนหมุน</label><select id="tf-j-axis">${['1 0 0','0 1 0','0 0 1'].map((axis,i)=>`<option value="${axis}" ${c.joint.axis===axis?'selected':''}>${['X','Y','Z'][i]}</option>`).join('')}</select></div><div class="tf-grid2">${[['lower','ต่ำสุด (rad)'],['upper','สูงสุด (rad)'],['effort','แรงบิด (Nm)'],['velocity','ความเร็ว (rad/s)']].map(([key,label])=>`<div><label>${label}</label><input id="tf-j-${key}" type="number" step="0.1" value="${c.joint[key]}"></div>`).join('')}</div>`:''}
     <div class="tf-del-wrap">
       <button class="btn btn-r tf-del-btn" onclick="tfDeleteCompConfirm(decodeURIComponent('${encArg(c.id)}'))">🗑 ลบคอมโพเนนต์นี้</button>
     </div>
+    </fieldset>
   `;
-  const bind = (id, fn) => { const e = document.getElementById(id); if (e) e.addEventListener('input', fn); };
+  const bind = (id, fn) => { const e = document.getElementById(id); if (e) e.addEventListener('input', event => { if (!tfEditBlocker(c)) fn(event); }); };
   const bindLive = (id, fn) => bind(id, e => { fn(e); tfSyncGroup(c); tfSave(); });
-  bind('tf-p-name', e => { c.name = e.target.value.trim() || c.name; tfAfterChange(); });
+  document.getElementById('tf-p-name')?.addEventListener('change', e => {
+    if (tfEditBlocker(c)) return;
+    const next=e.target.value.trim(),old=c.name;
+    if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(next) || tf.comps.some(other=>other!==c&&other.name===next)) {
+      e.target.value=old; sbMsg('ชื่อเฟรมต้องไม่ซ้ำ และใช้ตัวอักษร ตัวเลข หรือ _ เท่านั้น'); return;
+    }
+    if (next===old) return;
+    tf.comps.forEach(child=>{if(child.parent===old)child.parent=next;});
+    c.name=next;tfAfterChange();tfRenderProps();
+  });
   bind('tf-p-parent', e => { c.parent = e.target.value; tfAfterChange(); tfRenderProps(); });
+  if(c.joint){
+    bind('tf-j-axis',e=>{if(['1 0 0','0 1 0','0 0 1'].includes(e.target.value)){c.joint.axis=e.target.value;tfSave();}});
+    for(const key of ['lower','upper','effort','velocity'])bind('tf-j-'+key,e=>{const v=Number(e.target.value);if(!Number.isFinite(v)||e.target.value===''||(key==='lower'&&v>=c.joint.upper)||(key==='upper'&&v<=c.joint.lower)||(['effort','velocity'].includes(key)&&v<=0))return;c.joint[key]=v;tfSave();});
+  }
   const ge = document.getElementById('tf-p-group');
-  if (ge) ge.addEventListener('change', e => { c.viewGroup = e.target.value.trim(); tfAfterChange(); tfRenderGroups(); });
+  if (ge) ge.addEventListener('change', e => { if (tfEditBlocker(c)) return; c.viewGroup = e.target.value.trim(); tfAfterChange(); tfRenderGroups(); });
   bindLive('tf-p-x', e => { c.pos.x = +e.target.value || 0; });
   bindLive('tf-p-y', e => { c.pos.y = +e.target.value || 0; });
-  bindLive('tf-p-z', e => { c.pos.z = +e.target.value || 0; });
+  bindLive('tf-p-z', e => { c.pos.z = c.type === 'base' ? 0 : (+e.target.value || 0); });
   bindLive('tf-p-r', e => { c.rpy.r = +e.target.value || 0; });
   bindLive('tf-p-p', e => { c.rpy.p = +e.target.value || 0; });
   bindLive('tf-p-yaw', e => { c.rpy.y = +e.target.value || 0; });
@@ -1771,14 +2182,33 @@ function tfRenderProps() {
   pbl('tf-p-bodyR', 'bodyR'); pbl('tf-p-bodyH', 'bodyH'); pbl('tf-p-shaftR', 'shaftR'); pbl('tf-p-shaftH', 'shaftH');
   const colEl = document.getElementById('tf-p-color');
   if (colEl && def) colEl.addEventListener('input', e => {
+    if (tfEditBlocker(c)) return;
     def.color = parseInt((e.target.value || '#8aa0b5').replace('#', ''), 16) || 0x8aa0b5;
     tfSyncGroup(c); tfSaveCustomComps();
+    tfRecordHistory();
   });
   pbl('tf-p-rollerR', 'rollerR');
+  bind('tf-p-wheel-style', e => { c.params.wheelStyle = e.target.value; tfSyncGroup(c); tfSave(); tfRenderProps(); });
+  bindLive('tf-p-handedness', e => { c.params.handedness = +e.target.value === -1 ? -1 : 1; });
+  bindLive('tf-p-roller-count', e => { c.params.rollerCount = Math.max(6, Math.min(16, Math.round(+e.target.value || 8))); });
 }
 // ══ EXPORT ══
 function tfRad(d) { return THREE.MathUtils.degToRad(d); }
 function tfR3(x) { return (+x).toFixed(3); }
+// Preserve the legacy exported wheel frame (Rx 90°), including children that
+// are mounted to a wheel. Correcting the child origin keeps its WORLD pose
+// unchanged; no wheel parameters, ODOM calculations or motor commands change.
+function tfRealExportFrame(c) {
+  const rpy=[tfRad(c.rpy.r)+(c.type==='wheel'?Math.PI/2:0),tfRad(c.rpy.p),tfRad(c.rpy.y)];
+  const pos=[+c.pos.x,+c.pos.y,+c.pos.z];
+  if(tf.comps.find(p=>p.name===c.parent)?.type==='wheel') {
+    const inverse=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),-Math.PI/2);
+    const q=inverse.clone().multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(...rpy,'ZYX')));
+    const e=new THREE.Euler().setFromQuaternion(q,'ZYX');
+    return {pos:new THREE.Vector3(...pos).applyQuaternion(inverse).toArray(),rpy:[e.x,e.y,e.z]};
+  }
+  return {pos,rpy};
+}
 // root link ของโมเดล (chassis ถ้ามี) — ใช้เป็น target ของ tf
 function tfPkgRootName() {
   const b = tf.comps.find(c => c.type === 'base') || tf.comps[0];
@@ -1793,8 +2223,9 @@ function tfBuildSTP() {
     }
     // เพิ่ม roll 90° ให้ล้อ (wheel) เพื่อสอดคล้องกับการหมุน geometry
     const rollAdj = c.type === 'wheel' ? 90 : 0;
-    const x = c.pos.x.toFixed(3), y = c.pos.y.toFixed(3), z = c.pos.z.toFixed(3);
-    const yaw = tfRad(c.rpy.y).toFixed(4), pitch = tfRad(c.rpy.p).toFixed(4), roll = tfRad(c.rpy.r + rollAdj).toFixed(4);
+    let x = c.pos.x.toFixed(3), y = c.pos.y.toFixed(3), z = c.pos.z.toFixed(3);
+    let yaw = tfRad(c.rpy.y).toFixed(4), pitch = tfRad(c.rpy.p).toFixed(4), roll = tfRad(c.rpy.r + rollAdj).toFixed(4);
+    if(tfRealGeometry()){const f=tfRealExportFrame(c);[x,y,z]=f.pos.map(v=>v.toFixed(6));[roll,pitch,yaw]=f.rpy.map(v=>v.toFixed(9));}
     const parent = c.parent || 'map';
     lines.push(`ros2 run tf2_ros static_transform_publisher ${x} ${y} ${z} ${yaw} ${pitch} ${roll} ${parent} ${c.name}`);
   });
@@ -1805,21 +2236,24 @@ function tfHexToRgba(hex) {
   return `${(r / 255).toFixed(3)} ${(g / 255).toFixed(3)} ${(b / 255).toFixed(3)} 1.0`;
 }
 function tfBuildURDF() {
+  tfPinBaseLink();
+  tf._exportMeshFiles = {};
   const byName = {}; tf.comps.forEach(c => byName[c.name] = c);
   const P = c => c.params;
+  const sizeText = value => tfRealGeometry() ? (+value).toFixed(6) : tfR3(value);
   // เลือก root link เดียว (chassis ถ้ามี ไม่เช่นนั้นคอมโพเนนต์ตัวแรก) → URDF ต้องมี root เดียว
   const baseComp = tf.comps.find(c => c.type === 'base') || tf.comps[0];
   const rootName = baseComp ? baseComp.name : 'base_link';
   const visOf = c => {
     const p = P(c);
-    if (c.type === 'base')     return `<box size="${tfR3(p.sx)} ${tfR3(p.sy)} ${tfR3(p.sz)}"/>`;
-    if (c.type === 'wheel')    return `<cylinder radius="${tfR3(p.radius)}" length="${tfR3(p.width)}"/>`;
-    if (c.type === 'lidar' || c.type === 'cylinder') return `<cylinder radius="${tfR3(p.radius)}" length="${tfR3(p.height)}"/>`;
-    if (c.type === 'camera')   return `<box size="${tfR3(p.w)} ${tfR3(p.d)} ${tfR3(p.h)}"/>`;
-    if (c.type === 'imu') return `<box size="${tfR3(p.s)} ${tfR3(p.s)} ${tfR3(p.s)}"/>`;
-    if (c.type === 'box') return `<box size="${tfR3(p.sx)} ${tfR3(p.sy)} ${tfR3(p.sz)}"/>`;
-    if (c.type === 'encoder')  return `<cylinder radius="${tfR3(p.bodyR)}" length="${tfR3(p.bodyH)}"/><!-- + shaft r=${tfR3(p.shaftR)} h=${tfR3(p.shaftH)} -->`;
-    if (c.type === 'omni')    return `<cylinder radius="${tfR3(p.rollerR)}" length="${tfR3(p.width)}"/><!-- omni rollers x4 -->`;
+    if (c.type === 'base')     return `<box size="${sizeText(p.sx)} ${sizeText(p.sy)} ${sizeText(p.sz)}"/>`;
+    if (c.type === 'wheel')    return `<cylinder radius="${sizeText(p.radius)}" length="${sizeText(p.width)}"/>`;
+    if (c.type === 'lidar' || c.type === 'cylinder') return `<cylinder radius="${sizeText(p.radius)}" length="${sizeText(p.height)}"/>`;
+    if (c.type === 'camera')   return `<box size="${sizeText(p.w)} ${sizeText(p.d)} ${sizeText(p.h)}"/>`;
+    if (c.type === 'imu') return `<box size="${sizeText(p.s)} ${sizeText(p.s)} ${sizeText(p.s)}"/>`;
+    if (c.type === 'box') return `<box size="${sizeText(p.sx)} ${sizeText(p.sy)} ${sizeText(p.sz)}"/>`;
+    if (c.type === 'encoder')  return `<cylinder radius="${sizeText(p.bodyR)}" length="${sizeText(p.bodyH)}"/><!-- + shaft r=${sizeText(p.shaftR)} h=${sizeText(p.shaftH)} -->`;
+    if (c.type === 'omni')    return `<cylinder radius="${sizeText(p.radius)}" length="${sizeText(p.width)}"/>`;
     if (c.type === 'custom') {
       const def = (tf.userComps || []).find(x => x.id === c.customId);
       const sh = def ? def.shape : 'box', pp = def ? def.params : p;
@@ -1832,7 +2266,7 @@ function tfBuildURDF() {
       if (sh === 'cylinder' || sh === 'lidar') return `<cylinder radius="${tfR3(pp.radius)}" length="${tfR3(pp.height)}"/>`;
       if (sh === 'sphere') return `<sphere radius="${tfR3(pp.radius)}"/>`;
       if (sh === 'camera') return `<box size="${tfR3(pp.w)} ${tfR3(pp.d)} ${tfR3(pp.h)}"/>`;
-      return `<box size="${tfR3(pp.sx || 0.2)} ${tfR3(pp.sz || 0.2)} ${tfR3(pp.sy || 0.2)}"/>`;
+      return `<box size="${tfR3(pp.sx || 0.2)} ${tfR3(pp.sy || 0.2)} ${tfR3(pp.sz || 0.2)}"/>`;
     }
     return `<box size="0.15 0.15 0.15"/>`;
   };
@@ -1840,10 +2274,15 @@ function tfBuildURDF() {
   const matDefs = Object.entries(tfTypeMeta).map(([type, meta]) =>
     `  <material name="${type}_material"><color rgba="${tfHexToRgba(meta.color)}"/></material>`
   ).join('\n');
-  const customMats = (tf.userComps || []).map(d =>
+  const customDefs = tfRealGeometry() ? [...new Map(tf.comps.filter(c=>c.type==='custom').map(c=>[c.customId,tfCustomDefinition(c)])).values()].filter(Boolean) : (tf.userComps || []);
+  const customMats = customDefs.map(d =>
     `  <material name="custom_${d.id}"><color rgba="${tfHexToRgba(d.color)}"/></material>`
   ).join('\n');
-  const matName = c => c.type === 'custom' ? 'custom_' + c.customId : c.type + '_material';
+  const instanceMats = tf.comps.filter(c => tfValidColor(c.color)).map(c => `  <material name="color_${c.id}"><color rgba="${tfHexToRgba(c.color)}"/></material>`).join('\n');
+  const matName = c => tfValidColor(c.color) ? 'color_' + c.id : c.type === 'custom' ? 'custom_' + c.customId : c.type + '_material';
+  const baseGeometryOrigin = c => c.params?.visualAxis==='1 0 0'?'<origin xyz="0 0 0" rpy="0 1.570796 0"/>':c.params?.visualAxis==='0 1 0'?'<origin xyz="0 0 0" rpy="1.570796 0 0"/>':c.type === 'base'
+    ? `<origin xyz="0.000 0.000 ${tfR3(tfBaseHeight(c) / 2)}" rpy="0 0 0"/>`
+    : '';
   // geometry ของ primitive 1 ชิ้น (ใช้กับ composite parts)
   const shapeGeo = (sh, pp) => {
     if (sh === 'cylinder' || sh === 'lidar') return `<cylinder radius="${tfR3(pp.radius)}" length="${tfR3(pp.height)}"/>`;
@@ -1865,31 +2304,53 @@ function tfBuildURDF() {
     }).join('');
   };
   let s = '<?xml version="1.0"?>\n<robot name="sim_robot_tf">\n';
-  s += matDefs + (customMats ? '\n' + customMats : '') + '\n';
+  s += matDefs + (customMats ? '\n' + customMats : '') + (instanceMats ? '\n' + instanceMats : '') + '\n';
   tf.comps.forEach(c => {
     const comp = compositeMarkup(c);
+    const accessory = tfAccessoryParts(c);
+    const hardware = RobotVisuals.urdf(c, accessory.length ? accessory : undefined);
+    let exact = null;
+    if (tfRealGeometry() && typeof RobotModelAssets !== 'undefined' && (c.type === 'custom' || (c.type === 'box' && c.params.bevel))) {
+      if (c.type === 'custom' && !tfCustomDefinition(c)) throw new Error('ไม่พบรูปทรง Custom ของ '+c.name+' — กรุณาโหลดคลังชิ้นส่วนก่อนบันทึก');
+      const mesh = tfBuildMesh({...c, _mat:null});
+      try { exact = RobotModelAssets.fromMesh(mesh, THREE); }
+      finally { RobotModelAssets.dispose(mesh); }
+      Object.assign(tf._exportMeshFiles, exact.files);
+    }
     s += `  <link name="${c.name}">\n`;
-    if (comp) {
+    if (exact) {
+      s += exact.markup;
+    } else if (hardware) {
+      s += hardware;
+      const collisionOrigin = c.type === 'omni' ? '<origin xyz="0 0 0" rpy="1.570796 0 0"/>' : baseGeometryOrigin(c);
+      s += `    <collision>${collisionOrigin}<geometry>${visOf(c)}</geometry></collision>\n`;
+    } else if (comp) {
       s += comp;
     } else {
-      s += `    <visual><geometry>${visOf(c)}</geometry><material name="${matName(c)}"/></visual>\n`;
-      s += `    <collision><geometry>${visOf(c)}</geometry></collision>\n`;
+      const geometryOrigin = baseGeometryOrigin(c);
+      s += `    <visual>${geometryOrigin}<geometry>${visOf(c)}</geometry><material name="${matName(c)}"/></visual>\n`;
+      s += `    <collision>${geometryOrigin}<geometry>${visOf(c)}</geometry></collision>\n`;
     }
-    s += `    <inertial><mass value="0.1"/><inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.001"/></inertial>\n  </link>\n`;
+    s += `    <inertial>${baseGeometryOrigin(c)}<mass value="0.1"/><inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.001"/></inertial>\n  </link>\n`;
   });
   tf.comps.forEach(c => {
     if (c.name === rootName) return;
     const parent = (c.parent && byName[c.parent]) ? c.parent : rootName;
-    const xyz = `${tfR3(c.pos.x)} ${tfR3(c.pos.y)} ${tfR3(c.pos.z)}`;
+    let xyz = `${tfR3(c.pos.x)} ${tfR3(c.pos.y)} ${tfR3(c.pos.z)}`;
     // เพิ่ม roll 90° ให้ล้อ (wheel) เพื่อสอดคล้องกับการหมุน geometry
     const rollAdj = c.type === 'wheel' ? Math.PI / 2 : 0;
-    const rpy = `${tfRad(c.rpy.r + rollAdj * 180 / Math.PI).toFixed(4)} ${tfRad(c.rpy.p).toFixed(4)} ${tfRad(c.rpy.y).toFixed(4)}`;
-    s += `  <joint name="${c.name}_joint" type="fixed">\n    <parent link="${parent}"/>\n    <child link="${c.name}"/>\n    <origin xyz="${xyz}" rpy="${rpy}"/>\n  </joint>\n`;
+    let rpy = `${tfRad(c.rpy.r + rollAdj * 180 / Math.PI).toFixed(4)} ${tfRad(c.rpy.p).toFixed(4)} ${tfRad(c.rpy.y).toFixed(4)}`;
+    if(tfRealGeometry()){const f=tfRealExportFrame(c);xyz=f.pos.map(v=>v.toFixed(6)).join(' ');rpy=f.rpy.map(v=>v.toFixed(9)).join(' ');}
+    const j=c.joint;
+    const movable=j?.type==='revolute'&&typeof isSimWorkspace!=='undefined'&&!isSimWorkspace;
+    const jointFields=movable?`    <axis xyz="${j.axis}"/>\n    <limit lower="${j.lower}" upper="${j.upper}" effort="${j.effort}" velocity="${j.velocity}"/>\n`:'';
+    s += `  <joint name="${c.name}_joint" type="${movable?'revolute':'fixed'}">\n    <parent link="${parent}"/>\n    <child link="${c.name}"/>\n    <origin xyz="${xyz}" rpy="${rpy}"/>\n${jointFields}  </joint>\n`;
   });
   s += '</robot>\n';
   return s;
 }
 function tfBuildJSON() {
+  tfPinBaseLink();
   const byName = {}; tf.comps.forEach(c => byName[c.name] = c);
   const arr = tf.comps.map(c => ({
     name: c.name, type: c.type, parent: c.parent || null,
@@ -1901,12 +2362,16 @@ function tfBuildJSON() {
 // Serialize the editable model (models + TFs) so it can be reloaded
 // when the workspace is reopened. Same shape as the localStorage copy.
 function tfBuildModelJSON() {
+  tfPinBaseLink();
   const arr = tf.comps.map(c => ({
     id: c.id, type: c.type, name: c.name, parent: c.parent || null,
     pos: { x: +c.pos.x, y: +c.pos.y, z: +c.pos.z },
     rpy: { r: +c.rpy.r, p: +c.rpy.p, y: +c.rpy.y },
     params: c.params || {}, viewGroup: c.viewGroup || '',
-    customId: c.customId || '',
+    customId: c.customId || '', locked: c.locked === true, color: tfValidColor(c.color) ? c.color : undefined,
+    customDef: tfCustomSnapshot(c),
+    joint: c.joint ? {...c.joint} : undefined,
+    baseOrigin: c.type === 'base' ? TF_BASE_ORIGIN : undefined,
   }));
   return JSON.stringify(arr, null, 2);
 }
@@ -1944,6 +2409,7 @@ function tfPkgXml() {
 `;
 }
 function tfPkgSetupPy() {
+  const meshInstall=tfRealGeometry()?"        (os.path.join('share', package_name, 'meshes'), glob('meshes/*.stl')),\n":'';
   return `from setuptools import setup
 from glob import glob
 import os
@@ -1959,7 +2425,7 @@ setup(
         ('share/' + package_name, ['package.xml']),
         (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.py')),
         (os.path.join('share', package_name, 'urdf'), glob('urdf/*.urdf')),
-        # install the standalone node into lib/<pkg> so \`ros2 run sim_robot_tf
+${meshInstall}        # install the standalone node into lib/<pkg> so \`ros2 run sim_robot_tf
         # tf\` AND the launch file (executable='tf')
         # resolve to a real, runnable executable in every ROS 2 layout.
         ('lib/' + package_name, ['scripts/tf']),
@@ -2005,10 +2471,11 @@ function tfTfPy() {
     // base_link เป็นของโหนด odometry (wheel_odom / SIM_STATE_PUB) ที่โพสต์ odom→base_link เคลื่อนที่
     // ห้าม sim_robot_tf โพสต์ base_link→map ซ้ำเดี๋ยว TF ชนกัน → rviz กระพริบ 2 ตำแหน่ง
     if (c.name === 'base_link' && parent === 'map') return null;
-    const x = (+c.pos.x).toFixed(3), y = (+c.pos.y).toFixed(3), z = (+c.pos.z).toFixed(3);
+    let x = (+c.pos.x).toFixed(3), y = (+c.pos.y).toFixed(3), z = (+c.pos.z).toFixed(3);
     // เพิ่ม roll 90° ให้ล้อ (wheel) เพื่อสอดคล้องกับการหมุน geometry
     const rollAdj = c.type === 'wheel' ? Math.PI / 2 : 0;
-    const roll = tfRad(c.rpy.r + rollAdj * 180 / Math.PI).toFixed(4), pitch = tfRad(c.rpy.p).toFixed(4), yaw = tfRad(c.rpy.y).toFixed(4);
+    let roll = tfRad(c.rpy.r + rollAdj * 180 / Math.PI).toFixed(4), pitch = tfRad(c.rpy.p).toFixed(4), yaw = tfRad(c.rpy.y).toFixed(4);
+    if(tfRealGeometry()){const f=tfRealExportFrame(c);[x,y,z]=f.pos.map(v=>v.toFixed(6));[roll,pitch,yaw]=f.rpy.map(v=>v.toFixed(9));}
     return `    ('${c.name}', '${parent}', ${x}, ${y}, ${z}, ${roll}, ${pitch}, ${yaw}),`;
   }).filter(Boolean).join('\n');
   return `#!/usr/bin/env python3
@@ -2197,6 +2664,12 @@ function tfSetExportTab(kind) {
 }
 function tfRefreshExport() {
   const ta = document.getElementById('tf-export-text'); if (!ta) return;
+  if (tfRealGeometry()) {
+    tf.exportError = '';
+    try { ta.value = ({stp:tfBuildSTP,urdf:tfBuildURDF,json:tfBuildJSON,launch:tfBuildLaunchPy}[tfExportKind] || (()=>''))(); }
+    catch (error) { tf.exportError = error.message; ta.value = 'ส่งออกไม่ได้: '+error.message; sbMsg(ta.value,6000); }
+    return;
+  }
   ta.value = { stp: tfBuildSTP(), urdf: tfBuildURDF(), json: tfBuildJSON(), launch: tfBuildLaunchPy() }[tfExportKind] || '';
 }
 function tfOpenExport() {
@@ -2218,14 +2691,27 @@ function tfCloseSaveAlert() {
   if (m) m.style.display = 'none';
 }
 function tfCopyExport() {
+  if (tfRealGeometry() && tf.exportError) { sbMsg(tf.exportError,6000); return; }
   const ta = document.getElementById('tf-export-text');
   ta.select(); document.execCommand('copy');
   sbMsg('คัดลอกแล้ว');
 }
 function tfDownloadExport() {
+  if (tfRealGeometry() && tf.exportError) { sbMsg(tf.exportError,6000); return; }
   const ta = document.getElementById('tf-export-text');
   const ext = { stp: 'sh', urdf: 'urdf', json: 'json', launch: 'launch.py' }[tfExportKind];
   const name = 'tf_' + tfExportKind + '.' + ext;
+  if (tfRealGeometry() && tfExportKind === 'urdf' && Object.keys(tf._exportMeshFiles || {}).length) {
+    const content = RobotModelAssets.zip({'sim_robot_tf/package.xml':tfPkgXml(), 'sim_robot_tf/setup.py':tfPkgSetupPy(),
+      'sim_robot_tf/resource/sim_robot_tf':'', 'sim_robot_tf/sim_robot_tf/__init__.py':'',
+      'sim_robot_tf/sim_robot_tf/tf.py':tfTfPy(), 'sim_robot_tf/scripts/tf':tfTfPy(),
+      'sim_robot_tf/launch/tf_static.launch.py':tfPkgLaunchPy(), 'sim_robot_tf/urdf/robot.urdf':ta.value,
+      'sim_robot_tf/tf_model.json':tfBuildModelJSON(),
+      ...Object.fromEntries(Object.entries(tf._exportMeshFiles).map(([path,data])=>['sim_robot_tf/'+path,data]))});
+    const a=document.createElement('a'),url=URL.createObjectURL(new Blob([content],{type:'application/zip'}));
+    a.href=url;a.download='sim_robot_tf.zip';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+    sbMsg('ดาวน์โหลดแพ็กเกจ TF พร้อม URDF และไฟล์รูปทรง 3D แล้ว');return;
+  }
   const blob = new Blob([ta.value], { type: 'text/plain' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click();
   sbMsg('ดาวน์โหลด ' + name);
@@ -2282,6 +2768,7 @@ async function tfSaveToWorkspace() {
       'launch/tf_static.launch.py':      tfPkgLaunchPy(),
       'tf_model.json':                   tfBuildModelJSON(),
     };
+    if (tfRealGeometry()) Object.assign(files, tf._exportMeshFiles || {});
     // มีล้อเมื่อใด จึงสร้างแพ็กเกจ sim_robot_odom จากค่าล้อ/encoder ไปพร้อมกัน
     tfOdomDetect();
     const odomFiles = (tf.odom && tf.odom.wheels && tf.odom.wheels.length) ? tfOdomPackageFiles() : null;
@@ -2364,24 +2851,26 @@ function tfWorldPosOf(c) {
 
 // ตรวจหาล้อทั้งหมด (wheel + omni) จากโมเดล → คืนตำแหน่งสัมพัทธ์ base + รัศมี
 function tfDetectWheels() {
-  return tf.comps.filter(c => c.type === 'wheel' || c.type === 'omni').map(c => {
+  return tf.comps.filter(c => (c.type === 'wheel' || c.type === 'omni') && !c.params?.passiveOdom).map(c => {
     const wp = tfWorldPosOf(c);
     const R = (c.params && c.params.radius != null) ? c.params.radius : 0.1;
     return {
       name: c.name, type: c.type,
+      wheelStyle: RobotVisuals.wheelStyle(c),
       x: +wp.x.toFixed(3), y: +wp.y.toFixed(3), z: +wp.z.toFixed(3),
-      radius: +R.toFixed(3),
+      radius: +R.toFixed(4),
     };
   });
 }
 function tfDetectEncoders() {
   return tf.comps.filter(c => c.type === 'encoder').map(c => {
     const wp=tfWorldPosOf(c);
-    return {name:c.name,parent:c.parent||'',x:+wp.x.toFixed(3),y:+wp.y.toFixed(3),z:+wp.z.toFixed(3)};
+    return {attachedWheel:c.params?.attachedWheel,passiveOdom:!!c.params?.passiveOdom,role:c.params?.encoderRole,ppr:c.params?.ppr,channels:c.params?.channels,invert:c.params?.encoderInvert,name:c.name,parent:c.parent||'',x:+wp.x.toFixed(3),y:+wp.y.toFixed(3),z:+wp.z.toFixed(3)};
   });
 }
 function tfMatchEncoderWheel(encoder,wheels) {
-  const direct=wheels.find(w=>w.name===encoder.parent)||wheels.find(w=>{
+  if(encoder.passiveOdom)return '';
+  const direct=wheels.find(w=>w.name===encoder.attachedWheel)||wheels.find(w=>encoder.name==='encoder_'+w.name)||wheels.find(w=>w.name===encoder.parent)||wheels.find(w=>{
     const component=tf.comps.find(c=>c.name===w.name);return component?.parent===encoder.name;
   });
   if(direct)return direct.name;
@@ -2392,6 +2881,7 @@ function tfMatchEncoderWheel(encoder,wheels) {
 // เดา pattern จากจำนวน/ชนิดล้อ
 function tfSuggestPattern(wheels) {
   const n = wheels.length;
+  if (wheels.filter(w => w.wheelStyle === 'mecanum').length === 4) return 'mecanum';
   const omnis = wheels.filter(w => w.type === 'omni').length;
   if (omnis >= 3) return omnis === 3 ? 'omni3' : 'omni4';
   if (n === 2) return 'differential';
@@ -2471,6 +2961,7 @@ function tfOdomSave() {
     })), encoders:(tf.odom.encoders||[]).map(e=>({name:e.name,attachedWheel:e.attachedWheel,enabled:e.enabled!==false,role:e.role,ppr:e.ppr,channels:e.channels,invert:e.invert})) };
     localStorage.setItem(tfOdomKey(), JSON.stringify(saved));
   } catch (e) {}
+  tfRecordHistory();
 }
 function tfDefaultMotorRole(w, index, pattern, count) {
   if (count === 2) return w.y >= 0 ? 'left' : 'right';
@@ -2480,10 +2971,10 @@ function tfDefaultMotorRole(w, index, pattern, count) {
 function tfDefaultEncoderRole(pattern) {
   return pattern === 'mecanum' || pattern.indexOf('omni') === 0 ? 'odom_xy' : 'odom_x';
 }
-function tfOdomDetect() {
+function tfOdomDetect({reset=false}={}) {
   let wheels = tfDetectWheels();
   if (!wheels.length) { tf.odom = { wheels: [], pattern: 'differential', ppr: 1024, channels: 4 }; return; }
-  const saved = tfOdomLoad();
+  const saved = reset ? null : tfOdomLoad();
   const savedMap = {}; (saved && saved.wheels || []).forEach(w => savedMap[w.name] = w);
   const savedEncoderMap={};(saved?.encoders||[]).forEach(encoder=>savedEncoderMap[encoder.name]=encoder);
   const pat = (saved && saved.pattern) || tfSuggestPattern(wheels);
@@ -2497,7 +2988,7 @@ function tfOdomDetect() {
     encoderEnabled: savedMap[w.name]?.encoderEnabled !== false,
     encoderRole: savedMap[w.name]?.encoderRole || tfDefaultEncoderRole(pat),
   }));
-  const detected=tfDetectEncoders(),encoders=detected.map(encoder=>{const old=savedEncoderMap[encoder.name]||{};return{...encoder,attachedWheel:old.attachedWheel||tfMatchEncoderWheel(encoder,wheels),enabled:old.enabled!==false,role:old.role||tfDefaultEncoderRole(pat),ppr:Math.max(1,Number(old.ppr)||1024),channels:Number(old.channels)||4,invert:Number(old.invert)===-1?-1:1};});
+  const detected=tfDetectEncoders(),encoders=detected.map(encoder=>{const old=savedEncoderMap[encoder.name]||{};return{...encoder,attachedWheel:encoder.passiveOdom?'':old.attachedWheel||tfMatchEncoderWheel(encoder,wheels),enabled:old.enabled!==false,role:old.role||encoder.role||tfDefaultEncoderRole(pat),ppr:Math.max(1,Number(old.ppr||encoder.ppr)||1024),channels:Number(old.channels||encoder.channels)||4,invert:Number(old.invert??encoder.invert)===-1?-1:1};});
   for(const wheel of wheels){const encoder=encoders.find(item=>item.attachedWheel===wheel.name);if(encoder){wheel.encoderEnabled=encoder.enabled;wheel.encoderRole=encoder.role;wheel.ppr=encoder.ppr;wheel.channels=encoder.channels;wheel.invert=encoder.invert;}else if(detected.length){wheel.encoderEnabled=false;}}
   tf.odom = { wheels, encoders, pattern: pat, ppr: 1024, channels: 4 };
 }
@@ -2621,10 +3112,27 @@ function tfBuildOdomConfig() {
 }
 
 // ══ Generator: wheel_odom.py (self-contained ROS2 node) ══
+function tfLidarPoseInBase() {
+  const base=tfPkgRootName(),lidar=tf.comps.find(c=>c.type==='lidar');
+  if (!lidar) return {frame:'laser_frame',offset:[0,0,.1],quat:[0,0,0,1],edges:[[base,'laser_frame',0,0,.1,0,0,0,1]]};
+  const byName=new Map(tf.comps.map(c=>[c.name,c])),path=[],seen=new Set();
+  let current=lidar;
+  while(current&&current.name!==base&&!seen.has(current.name)){
+    seen.add(current.name);path.unshift(current);current=byName.get(current.parent);
+  }
+  if(!current||current.name!==base)return {frame:'laser_frame',offset:[0,0,.1],quat:[0,0,0,1],edges:[[base,'laser_frame',0,0,.1,0,0,0,1]]};
+  const mul=(a,b)=>[a[3]*b[0]+a[0]*b[3]+a[1]*b[2]-a[2]*b[1],a[3]*b[1]-a[0]*b[2]+a[1]*b[3]+a[2]*b[0],a[3]*b[2]+a[0]*b[1]-a[1]*b[0]+a[2]*b[3],a[3]*b[3]-a[0]*b[0]-a[1]*b[1]-a[2]*b[2]];
+  const rotate=(q,v)=>{const u=[q[0],q[1],q[2]],cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];const t=cross(u,v).map(n=>2*n),s=cross(u,t);return v.map((n,i)=>n+q[3]*t[i]+s[i]);};
+  const fromRpy=rpy=>{const [r,p,y]=[rpy.r,rpy.p,rpy.y].map(d=>d*Math.PI/360),cr=Math.cos(r),sr=Math.sin(r),cp=Math.cos(p),sp=Math.sin(p),cy=Math.cos(y),sy=Math.sin(y);return [sr*cp*cy-cr*sp*sy,cr*sp*cy+sr*cp*sy,cr*cp*sy-sr*sp*cy,cr*cp*cy+sr*sp*sy];};
+  let pos=[0,0,0],quat=[0,0,0,1];
+  const edges=path.map(c=>{const localQ=fromRpy(c.rpy),localP=[c.pos.x,c.pos.y,c.pos.z],rotated=rotate(quat,localP);pos=pos.map((n,i)=>n+rotated[i]);quat=mul(quat,localQ);return [c.parent,c.name,...localP,...localQ];});
+  return {frame:lidar.name,offset:pos,quat,edges};
+}
 function tfBuildOdomPy() {
   const o = tf.odom;
   const wheels = o.wheels;
   const baseName = tfPkgRootName();
+  const laser=tfLidarPoseInBase();
   const kin = tfKinematics(wheels, o.pattern);
   // IK matrix A (N×3): row = [cosβ, sinβ, x·sinβ − y·cosβ]
   const A = wheels.map(w => {
@@ -2666,6 +3174,10 @@ DT = 0.05
 PATTERN = '${o.pattern}'
 BASE_FRAME = '${baseName}'
 ODOM_FRAME = 'odom'
+LASER_FRAME = ${JSON.stringify(laser.frame)}
+LASER_OFFSET = ${JSON.stringify(laser.offset)}
+LASER_Q = ${JSON.stringify(laser.quat)}
+LASER_TF = ${JSON.stringify(laser.edges)}
 FK_MODE = '${fkMode}'
 TRACK = ${TRACK}
 # WHEELS: (name, type, x, y, radius, ppr, channels, invert, beta_deg)
@@ -2697,9 +3209,13 @@ try:
 except Exception:
     pass
 
-def rayCast(ox, oy, ang, maxR):
+def qrot(q, v):
+    x,y,z,w=q; vx,vy,vz=v
+    tx=2*(y*vz-z*vy); ty=2*(z*vx-x*vz); tz=2*(x*vy-y*vx)
+    return (vx+w*tx+y*tz-z*ty,vy+w*ty+z*tx-x*tz,vz+w*tz+x*ty-y*tx)
+
+def rayCast(ox, oy, dx, dy, maxR):
     best = maxR
-    dx, dy = math.cos(ang), math.sin(ang)
     for (x1, y1, x2, y2) in WALLS:
         sx, sy = x2 - x1, y2 - y1
         den = dx * sy - dy * sx
@@ -2723,10 +3239,14 @@ class WheelOdom(Node):
         self.wang = [0.0] * len(WHEELS)
         self.cmd_v = 0.0; self.cmd_vy = 0.0; self.cmd_w = 0.0; self.cmd_t = 0.0
         m = TransformStamped(); m.header.frame_id = 'map'; m.child_frame_id = ODOM_FRAME; m.transform.rotation.w = 1.0; self._mo = m
-        bl = TransformStamped(); bl.header.frame_id = BASE_FRAME; bl.child_frame_id = 'laser_frame'
-        bl.transform.translation.z = 0.1; bl.transform.rotation.w = 1.0; self._bl = bl
+        self._laser_tfs = []
+        for parent, child, x, y, z, qx, qy, qz, qw in LASER_TF:
+            edge = TransformStamped(); edge.header.frame_id = parent; edge.child_frame_id = child
+            edge.transform.translation.x = x; edge.transform.translation.y = y; edge.transform.translation.z = z
+            edge.transform.rotation.x = qx; edge.transform.rotation.y = qy; edge.transform.rotation.z = qz; edge.transform.rotation.w = qw
+            self._laser_tfs.append(edge)
         self.desc_pub.publish(String(data=URDF))
-        self.static_br.sendTransform([self._mo, self._bl])
+        self.static_br.sendTransform([self._mo] + self._laser_tfs)
         self.cmd_sub = self.create_subscription(Twist, '/cmd_vel', self.cb_cmd, BE)
         self.create_timer(DT, self.tick)
 
@@ -2796,11 +3316,19 @@ class WheelOdom(Node):
         o.pose.pose.orientation.z = qz; o.pose.pose.orientation.w = qw
         o.twist.twist.linear.x = vx2; o.twist.twist.linear.y = vy2; o.twist.twist.angular.z = w2
         self.odom_pub.publish(o)
-        s = LaserScan(); s.header.stamp = now; s.header.frame_id = 'laser_frame'
+        s = LaserScan(); s.header.stamp = now; s.header.frame_id = LASER_FRAME
         s.angle_min = -math.pi; s.angle_max = math.pi; s.angle_increment = 2.0 * math.pi / 360.0
         s.range_min = 0.1; s.range_max = 12.0
-        s.ranges = [float(rayCast(self.x, self.y, self.th + a, s.range_max)) for a in
-                    [s.angle_min + i * s.angle_increment for i in range(360)]]
+        origin=qrot((0,0,math.sin(self.th/2),math.cos(self.th/2)),LASER_OFFSET)
+        ox=self.x+origin[0]; oy=self.y+origin[1]
+        ranges=[]
+        for i in range(360):
+            a=s.angle_min+i*s.angle_increment
+            bx,by,_=qrot(LASER_Q,(math.cos(a),math.sin(a),0))
+            dx=math.cos(self.th)*bx-math.sin(self.th)*by
+            dy=math.sin(self.th)*bx+math.cos(self.th)*by
+            ranges.append(float(rayCast(ox,oy,dx,dy,s.range_max)))
+        s.ranges=ranges
         self.scan_pub.publish(s)
 
 def main(args=None):
@@ -2837,7 +3365,34 @@ async function tfOdomRun() {
   if (!tf.odom.wheels.length) { sbMsg('ยังไม่มีล้อ — เพิ่มล้อแล้วตั้งค่า Odometry ก่อน'); tfOpenOdom(); return; }
   await tfOdomGenerate();   // regenerate + save แพ็กเกจจากดีไซน์ปัจจุบัน (รันได้เลยแม้ยังไม่กด Save All)
   // ฆ่า generic box (SIM_STATE_PUB) + wheel_odom เก่า ก่อนรัน → ให้ wheel_odom เป็น node เดียวที่ publish /odom + /robot_description (กันซ้อน/ชน type)
-  const cmd = `bash -lc 'pkill -f "_sim_state_pub[.]py" 2>/dev/null; pkill -f "wheel_odom" 2>/dev/null; SRC=$(ls -1 /opt/ros 2>/dev/null | tail -1); [ -n "$SRC" ] && source /opt/ros/$SRC/setup.bash 2>/dev/null; setsid python3 ~/src/sim_robot_odom/scripts/wheel_odom > ~/tmp/wheel_odom.log 2>&1 < /dev/null & echo started; sleep 1.5; if pgrep -f "scripts/wheel_odom" >/dev/null 2>&1; then echo ODOM_OK; else echo ODOM_FAIL; echo "---- wheel_odom.log ----"; tail -n 25 ~/tmp/wheel_odom.log; fi'`;
+  // SIM หลาย workspace รันบน host เดียวกัน: pattern ต้องมี $HOME ของ workspace เสมอ
+  // และ PID file จะถูกใช้เมื่อ cmdline ตรงกับ process ใน workspace นี้เท่านั้น
+  const simCmd = `bash -lc '
+kill_scoped_pid() {
+  pid_file="$1"; expected="$2"; pid=$(cat "$pid_file" 2>/dev/null || true)
+  if echo "$pid" | grep -Eq "^[0-9]+$" && ps -p "$pid" -o args= 2>/dev/null | grep -Fq -- "$expected"; then kill "$pid" 2>/dev/null || true; fi
+  rm -f "$pid_file"
+}
+stop_scoped_pattern() {
+  pattern="$1"
+  for p in $(pgrep -f "$pattern" 2>/dev/null); do kill "$p" 2>/dev/null || true; done
+  for i in 1 2 3 4 5; do pgrep -f "$pattern" >/dev/null 2>&1 || return 0; sleep 0.1; done
+  for p in $(pgrep -f "$pattern" 2>/dev/null); do kill -9 "$p" 2>/dev/null || true; done
+}
+mkdir -p "$HOME/tmp"
+kill_scoped_pid "$HOME/tmp/_sim_state_pub.pid" "$HOME/tmp/_sim_state_pub.py"
+kill_scoped_pid "$HOME/tmp/wheel_odom.pid" "$HOME/src/sim_robot_odom/scripts/wheel_odom"
+stop_scoped_pattern "$HOME/tmp/[_]sim_state_pub.py"
+stop_scoped_pattern "$HOME/src/sim_robot_odom/scripts/[w]heel_odom"
+SRC=$(ls -1 /opt/ros 2>/dev/null | tail -1); [ -n "$SRC" ] && source "/opt/ros/$SRC/setup.bash" 2>/dev/null
+setsid python3 "$HOME/src/sim_robot_odom/scripts/wheel_odom" > "$HOME/tmp/wheel_odom.log" 2>&1 < /dev/null & ODOM_PID=$!
+sleep 0.1; FOUND_PID=$(pgrep -n -f "$HOME/src/sim_robot_odom/scripts/[w]heel_odom" 2>/dev/null || true); [ -n "$FOUND_PID" ] && ODOM_PID=$FOUND_PID
+printf "%s\\n" "$ODOM_PID" > "$HOME/tmp/wheel_odom.pid"; echo started
+sleep 1.4
+if echo "$ODOM_PID" | grep -Eq "^[0-9]+$" && ps -p "$ODOM_PID" -o args= 2>/dev/null | grep -Fq -- "$HOME/src/sim_robot_odom/scripts/wheel_odom"; then echo ODOM_OK; else echo ODOM_FAIL; echo "---- wheel_odom.log ----"; tail -n 25 "$HOME/tmp/wheel_odom.log"; fi
+'`;
+  const realCmd = `bash -lc 'pkill -f "_sim_state_pub[.]py" 2>/dev/null; pkill -f "wheel_odom" 2>/dev/null; SRC=$(ls -1 /opt/ros 2>/dev/null | tail -1); [ -n "$SRC" ] && source /opt/ros/$SRC/setup.bash 2>/dev/null; setsid python3 ~/src/sim_robot_odom/scripts/wheel_odom > ~/tmp/wheel_odom.log 2>&1 < /dev/null & echo started; sleep 1.5; if pgrep -f "scripts/wheel_odom" >/dev/null 2>&1; then echo ODOM_OK; else echo ODOM_FAIL; echo "---- wheel_odom.log ----"; tail -n 25 ~/tmp/wheel_odom.log; fi'`;
+  const cmd = (typeof isSimWorkspace !== 'undefined' && isSimWorkspace) ? simCmd : realCmd;
   try {
     const r = await API('/api/exec', { sessionId, command: cmd, timeout: 12000 });
     const out = (r && r.stdout) || '';
@@ -2852,12 +3407,26 @@ async function tfOdomRun() {
 }
 function tfOdomStopGeneric() {
   if (!sessionId) return;
-  API('/api/exec', { sessionId, command: `bash -lc "pkill -f '_sim_state_sub[.]py' 2>/dev/null; true"`, timeout: 5000 })
+  const simCommand=`bash -lc 'pattern="$HOME/tmp/[_]sim_state_sub.py"; for p in $(pgrep -f "$pattern" 2>/dev/null); do kill "$p" 2>/dev/null || true; done; true'`;
+  const realCommand=`bash -lc "pkill -f '_sim_state_sub[.]py' 2>/dev/null; true"`;
+  API('/api/exec', { sessionId, command:(typeof isSimWorkspace!=='undefined'&&isSimWorkspace)?simCommand:realCommand, timeout: 5000 })
     .then(() => sbMsg('⏹ หยุด generic state publisher แล้ว')).catch(e => sbMsg('error: ' + e.message));
 }
 function tfOdomStopOdom() {
   if (!sessionId) return;
-  API('/api/exec', { sessionId, command: `bash -lc "pkill -f 'scripts/wheel_odom' 2>/dev/null; true"`, timeout: 5000 })
+  const simCommand = `bash -lc '
+pid=$(cat "$HOME/tmp/wheel_odom.pid" 2>/dev/null || true)
+if echo "$pid" | grep -Eq "^[0-9]+$" && ps -p "$pid" -o args= 2>/dev/null | grep -Fq -- "$HOME/src/sim_robot_odom/scripts/wheel_odom"; then kill "$pid" 2>/dev/null || true; fi
+rm -f "$HOME/tmp/wheel_odom.pid"
+pattern="$HOME/src/sim_robot_odom/scripts/[w]heel_odom"
+for p in $(pgrep -f "$pattern" 2>/dev/null); do kill "$p" 2>/dev/null || true; done
+for i in 1 2 3 4 5; do pgrep -f "$pattern" >/dev/null 2>&1 || exit 0; sleep 0.1; done
+for p in $(pgrep -f "$pattern" 2>/dev/null); do kill -9 "$p" 2>/dev/null || true; done
+true
+'`;
+  const realCommand = `bash -lc "pkill -f 'scripts/wheel_odom' 2>/dev/null; true"`;
+  const command = (typeof isSimWorkspace !== 'undefined' && isSimWorkspace) ? simCommand : realCommand;
+  API('/api/exec', { sessionId, command, timeout: 5000 })
     .then(() => sbMsg('⏹ หยุด wheel_odom แล้ว')).catch(e => sbMsg('error: ' + e.message));
 }
 

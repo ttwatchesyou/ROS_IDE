@@ -12,5 +12,7 @@ install/
 log/
 sim_ws/
 tmp/
+releases/
+dist/
 __pycache__/
 *.pyc

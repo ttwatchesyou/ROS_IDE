@@ -556,6 +556,7 @@ function mapOpenLidarDriver() {
 // ── save / load ──
 function mapSaveLocal() {
   try { localStorage.setItem(mapStoreKey(), JSON.stringify(mapData)); } catch (e) {}
+  if (typeof map3dRecordHistory === 'function') map3dRecordHistory();
 }
 function mapLoadLocal() {
   try {

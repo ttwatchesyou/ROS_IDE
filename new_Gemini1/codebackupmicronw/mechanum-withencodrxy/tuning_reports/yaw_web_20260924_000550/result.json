@@ -1,0 +1,18 @@
+{
+  "parameters": {
+    "base": "http://127.0.0.1:8001",
+    "kp": 3.5,
+    "kd": 0.2,
+    "max_wz": 1.2,
+    "angle_deg": 90.0,
+    "return_to_zero": false,
+    "run": true
+  },
+  "outbound": {
+    "time_s": 9.430744597997545,
+    "overshoot_deg": 0.0,
+    "final_error_deg": 0.8305783437899796
+  },
+  "fault": null,
+  "samples": 130
+}

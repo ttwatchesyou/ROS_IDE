@@ -2,10 +2,10 @@
 <html lang="th">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Mecha Rayong Learing Workspace — ROS2</title>
+<title>Mecha Rayong v5.0.0 — ROS2</title>
 <script src="/theme.js"></script>
 <script src="/auth-storage.js"></script>
-<link href="/youtube-help.css?v=20260814-5" rel="stylesheet">
+<link href="/youtube-help.css?v=20260909-playground1" rel="stylesheet">
 <link href="/lidar.css?v=20260828-9" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
 <link   href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css" rel="stylesheet"/>
@@ -161,11 +161,13 @@ html,body{height:100%;background:var(--bg0);color:var(--txt);font-family:var(--f
 .top-icon-action svg{width:17px;height:17px;max-width:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .top-icon-action.robot-info{cursor:default;background:rgba(56,178,172,.09);border-color:rgba(56,178,172,.24)}
 .top-icon-action.robot-info:hover{transform:none}
+.robot-presence{width:auto;flex-basis:auto;min-width:70px;padding:0 9px;display:flex;align-items:center;gap:5px;color:var(--cyan);font:700 9px var(--mono);cursor:default}.robot-presence:hover{transform:none}.robot-presence.reconnecting{color:var(--amb)}
 .top-icon-action.connection-state{cursor:default;background:var(--bg1)}
 .top-icon-action.connection-state:hover{transform:none}
 .top-icon-action.connection-state .dot{width:9px;height:9px;box-shadow:0 0 0 5px rgba(240,103,103,.10)}
 .top-icon-action.connection-state.online{border-color:rgba(62,207,142,.3);background:var(--gdim)}
 .top-icon-action.connection-state.online .dot{box-shadow:0 0 0 5px rgba(62,207,142,.11)}
+.top-route-badge{display:inline-flex;align-items:center;justify-content:center;min-height:26px;padding:3px 9px;border:1px solid var(--abrd);border-radius:999px;background:var(--adim);color:var(--acc);font:800 10px var(--mono);white-space:nowrap}.top-route-badge[data-route="local"]{border-color:rgba(62,207,142,.4);background:var(--gdim);color:var(--grn)}.top-route-badge[hidden]{display:none}
 .top-icon-action.wizard-shortcut{color:var(--pur)}
 .top-icon-action.wizard-shortcut.active{border-color:rgba(159,122,234,.38);background:rgba(159,122,234,.13);box-shadow:inset 0 0 0 1px rgba(159,122,234,.08)}
 .top-icon-action.status-shortcut{color:var(--acc)}
@@ -175,6 +177,7 @@ html,body{height:100%;background:var(--bg0);color:var(--txt);font-family:var(--f
 .top-icon-action.profile-action{border-color:transparent;background:transparent;color:var(--acc)}
 .logo{font-size:14px;font-weight:700;letter-spacing:.02em;white-space:nowrap}
 .logo span{color:var(--acc)}
+.logo small{margin-left:7px;color:var(--muted);font:600 9px var(--mono);letter-spacing:0}
 .sep{width:1px;height:20px;background:var(--brd);flex-shrink:0}
 .ci{background:var(--bg2);border:1px solid var(--brd);color:var(--txt);
   font-family:var(--mono);font-size:12px;padding:3px 9px;border-radius:6px;
@@ -502,6 +505,16 @@ html,body{height:100%;background:var(--bg0);color:var(--txt);font-family:var(--f
 .agv-explanation-card>span{width:32px;height:32px;display:grid;place-items:center;flex:0 0 auto;border-radius:10px;background:var(--adim);font-size:17px}
 .agv-explanation-card strong{display:block;margin-bottom:3px;color:var(--txt);font-size:12px}
 .agv-explanation-card p{margin:0;color:var(--mt);font-size:11px;line-height:1.55}
+.agv-system-actions{display:grid;gap:8px;min-width:min(330px,100%)}
+.agv-system-actions .agv-action-btn{width:100%}
+.agv-system-actions .agv-action-btn.install{border-color:rgba(62,207,142,.45);background:linear-gradient(135deg,rgba(62,207,142,.14),var(--bg2))}
+.agv-system-actions .agv-action-btn:disabled{opacity:.55;cursor:wait}
+.agv-system-checks{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:15px}
+.agv-system-check{display:flex;align-items:center;gap:9px;padding:10px;border:1px solid var(--brd);border-radius:11px;background:var(--bg1)}
+.agv-system-check>span{width:28px;height:28px;display:grid;place-items:center;flex:0 0 28px;border-radius:9px;font-weight:900}
+.agv-system-check.ok>span{background:var(--gdim);color:var(--grn)}
+.agv-system-check.bad>span{background:rgba(240,103,103,.12);color:var(--red)}
+.agv-system-check strong,.agv-system-check small{display:block}.agv-system-check strong{font-size:10px}.agv-system-check small{margin-top:2px;color:var(--mt);font-size:9px;overflow-wrap:anywhere}
 #page-dashboard .agv-detail-list{list-style:none;margin-left:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 #page-dashboard .agv-detail-list li{position:relative;padding:10px 10px 10px 34px;border:1px solid var(--brd);border-radius:10px;background:var(--bg1);line-height:1.45}
 #page-dashboard .agv-detail-list li::before{content:'☆';position:absolute;left:11px;top:9px;color:var(--acc);font-size:15px}
@@ -522,6 +535,7 @@ html,body{height:100%;background:var(--bg0);color:var(--txt);font-family:var(--f
 .real-teleop-dialog{width:min(520px,96vw);padding-bottom:18px}.real-teleop-body{padding:16px 18px 0}.real-teleop-warning{padding:10px 12px;border:1px solid rgba(245,166,35,.35);border-radius:11px;background:rgba(245,166,35,.1);color:var(--amb);font-size:10px;line-height:1.55}.real-teleop-topic{display:flex;align-items:center;justify-content:space-between;margin:12px 0 10px;padding:9px 11px;border:1px solid var(--brd);border-radius:10px;background:var(--bg2);font-size:10px}.real-teleop-topic code{color:var(--grn);font:700 11px var(--mono)}.real-teleop-pad{width:min(330px,100%);display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 auto}.real-teleop-btn{position:relative;height:62px;border:1px solid var(--brd);border-radius:15px;background:linear-gradient(145deg,var(--bg2),var(--bg3));color:var(--txt);font:800 22px var(--fn);cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none;box-shadow:0 6px 16px rgba(0,0,0,.12)}.real-teleop-btn small{position:absolute;right:7px;top:5px;color:var(--dim);font:700 9px var(--mono)}.real-teleop-btn[data-dir=left]{grid-column:1;grid-row:1}.real-teleop-btn[data-dir=fwd]{grid-column:2;grid-row:1}.real-teleop-btn[data-dir=right]{grid-column:3;grid-row:1}.real-teleop-btn[data-dir="strafe-left"]{grid-column:1;grid-row:2}.real-teleop-btn.stop{grid-column:2;grid-row:2;border-color:rgba(240,103,103,.55);background:linear-gradient(145deg,#ef5c63,#c93648);color:#fff;font-size:12px}.real-teleop-btn[data-dir="strafe-right"]{grid-column:3;grid-row:2}.real-teleop-btn[data-dir=back]{grid-column:2;grid-row:3}.real-teleop-btn.on{border-color:#8eb8ff;background:linear-gradient(145deg,#367fea,#705ce4);color:#fff;transform:scale(.97);box-shadow:0 3px 10px rgba(54,127,234,.36)}.real-teleop-btn.on small{color:#dce8ff}.real-teleop-key-help{margin:9px 0 0;color:var(--dim);font-size:9px;line-height:1.5;text-align:center}.real-teleop-key-help kbd{display:inline-grid;min-width:20px;height:20px;place-items:center;margin:0 2px;padding:0 4px;border:1px solid var(--brdh);border-radius:5px;background:var(--bg2);color:var(--txt);font:700 9px var(--mono);box-shadow:0 2px 0 var(--brd)}.real-teleop-status{margin:10px 0;padding:9px;border-radius:10px;background:var(--bg2);color:var(--mt);font-size:10px;text-align:center}.real-teleop-status.live{background:rgba(62,207,142,.12);color:var(--grn)}.real-teleop-speed{display:grid;grid-template-columns:1fr 1fr;gap:10px}.real-teleop-speed label{display:grid;gap:5px;padding:9px;border:1px solid var(--brd);border-radius:10px;background:var(--bg2);color:var(--mt);font-size:9px}.real-teleop-speed span{display:flex;justify-content:space-between}.real-teleop-speed b{color:var(--txt)}.real-teleop-speed input{width:100%;accent-color:var(--acc)}
 .hardware-dialog{width:min(1100px,97vw);height:min(780px,94dvh)}.hardware-steps{display:flex;gap:6px;padding:10px 16px;border-bottom:1px solid var(--brd);background:var(--bg2)}.hardware-step{display:flex;align-items:center;gap:7px;flex:1;padding:8px 10px;border:1px solid transparent;border-radius:10px;color:var(--dim);font-size:10px}.hardware-step b{width:23px;height:23px;display:grid;place-items:center;border-radius:50%;background:var(--bg3);font:800 10px var(--mono)}.hardware-step.active{border-color:var(--abrd);background:var(--adim);color:var(--acc)}.hardware-step.active b{background:var(--acc);color:#fff}.hardware-body{flex:1;min-height:0;overflow-y:auto;padding:17px}.hardware-page{display:none}.hardware-page.active{display:block}.hardware-intro{margin-bottom:13px}.hardware-intro h3{margin:0 0 4px;font-size:17px}.hardware-intro p{margin:0;color:var(--mt);font-size:11px;line-height:1.55}.hardware-choice-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:11px}.hardware-choice{position:relative;min-height:140px;padding:14px;border:1px solid var(--brd);border-radius:15px;background:var(--bg2);color:var(--txt);text-align:left;cursor:pointer}.hardware-choice:hover{border-color:var(--brdh);transform:translateY(-1px)}.hardware-choice.selected{border-color:var(--acc);box-shadow:0 0 0 3px var(--adim);background:linear-gradient(145deg,var(--bg2),var(--adim))}.hardware-choice .choice-icon{display:block;margin-bottom:7px;font-size:30px}.hardware-choice strong{display:block;font-size:13px}.hardware-choice small{display:block;margin-top:5px;color:var(--mt);font-size:10px;line-height:1.5}.hardware-choice .choice-tag{display:inline-block;margin-top:9px;padding:3px 7px;border-radius:20px;background:var(--bg3);color:var(--acc);font-size:8px;font-weight:800}.hardware-config-row{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-top:12px}.hardware-field{display:grid;gap:5px;padding:11px;border:1px solid var(--brd);border-radius:12px;background:var(--bg2);font-size:10px;color:var(--mt)}.hardware-field input,.hardware-field select{height:34px;padding:0 9px;border:1px solid var(--brd);border-radius:8px;background:var(--bg1);color:var(--txt)}.hardware-connect-layout{display:grid;grid-template-columns:minmax(260px,.85fr) minmax(420px,1.5fr);gap:14px}.hardware-parts{display:grid;gap:9px;align-content:start}.hardware-board-card{padding:13px;border:1px solid var(--acc);border-radius:14px;background:var(--adim)}.hardware-board-card strong{display:block;font-size:13px}.hardware-board-card small{color:var(--mt);font-size:9px}.hardware-accessories{display:grid;gap:7px}.hardware-accessory{display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--brd);border-radius:11px;background:var(--bg2);cursor:pointer}.hardware-accessory:has(input:checked){border-color:var(--acc);background:var(--adim)}.hardware-accessory input{accent-color:var(--acc)}.hardware-accessory span{font-size:18px}.hardware-accessory strong{display:block;font-size:10px}.hardware-accessory small{display:block;color:var(--dim);font-size:8px}.wiring-panel{min-height:430px;padding:14px;border:1px solid var(--brd);border-radius:16px;background:linear-gradient(145deg,var(--bg2),var(--bg1))}.wiring-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:11px}.wiring-title strong{font-size:12px}.wiring-title span{color:var(--grn);font:700 9px var(--mono)}.wiring-canvas{display:grid;grid-template-columns:1fr 160px 1fr;gap:12px;align-items:center}.wiring-devices{display:grid;gap:7px}.wiring-device{padding:8px 9px;border-left:3px solid var(--wire,#4f8ef7);border-radius:8px;background:var(--bg3)}.wiring-device b{display:block;font-size:9px}.wiring-device code{display:block;margin-top:3px;color:var(--wire,#4f8ef7);font:700 8px var(--mono)}.stm32-board{position:relative;min-height:310px;padding:18px 12px;border:8px solid #1d2833;border-radius:9px;background:linear-gradient(90deg,#173e35,#1f6654 50%,#173e35);box-shadow:0 12px 28px rgba(0,0,0,.25);color:#fff;text-align:center}.stm32-board::before{content:'';display:block;width:70px;height:70px;margin:72px auto 8px;border:2px solid #829491;background:#26333a;box-shadow:inset 0 0 0 8px #172026}.stm32-board strong{font:800 10px var(--mono)}.stm32-board small{display:block;margin-top:5px;color:#a9ddc8;font:7px var(--mono)}.board-usb{position:absolute;left:50%;top:-8px;width:48px;height:34px;transform:translateX(-50%);border-radius:0 0 6px 6px;background:#aab4b8}.board-pin{position:absolute;padding:2px 4px;border-radius:4px;background:#111;color:#ffd86a;font:700 7px var(--mono)}.board-pin.left{left:-6px}.board-pin.right{right:-6px}.wiring-table{width:100%;margin-top:12px;border-collapse:collapse;font-size:9px}.wiring-table th,.wiring-table td{padding:6px 7px;border-bottom:1px solid var(--brd);text-align:left}.wiring-table th{color:var(--dim)}.wiring-table code{color:var(--acc)}.hardware-review{display:grid;grid-template-columns:1fr 1fr;gap:13px}.hardware-summary-card{padding:14px;border:1px solid var(--brd);border-radius:14px;background:var(--bg2)}.hardware-summary-card h4{margin:0 0 10px;font-size:12px}.hardware-summary-list{display:grid;gap:7px;font-size:10px}.hardware-summary-list div{display:flex;justify-content:space-between;gap:10px}.hardware-summary-list span{color:var(--mt)}.hardware-output{grid-column:1/-1;padding:12px;border:1px dashed var(--brdh);border-radius:12px;background:var(--bg1);font:9px/1.7 var(--mono);color:var(--mt)}.hardware-save-status{min-height:18px;margin-top:9px;color:var(--mt);font-size:10px}.hardware-save-status.ok{color:var(--grn)}.hardware-save-status.error{color:var(--red)}.hardware-footer{display:flex;align-items:center;justify-content:space-between;padding:11px 16px;border-top:1px solid var(--brd);background:var(--bg2)}.hardware-footer .right{display:flex;gap:8px}.hardware-footer button{min-height:35px}.hardware-primary{border:0!important;background:linear-gradient(135deg,#347bea,#7659df)!important;color:#fff!important}.hardware-note{margin-top:12px;padding:9px 11px;border-radius:10px;background:var(--adm2);color:var(--amb);font-size:9px;line-height:1.55}@media(max-width:780px){.hardware-dialog{height:calc(100dvh - 20px)}.hardware-choice-grid,.hardware-review,.hardware-config-row{grid-template-columns:1fr}.hardware-connect-layout{grid-template-columns:1fr}.wiring-canvas{grid-template-columns:1fr}.stm32-board{width:160px;margin:auto}.hardware-step span{display:none}}
 @media(prefers-reduced-motion:reduce){.agv-mascot,.agv-mascot-glow,.agv-star{animation:none}}
+@media(max-width:700px){.agv-system-checks{grid-template-columns:1fr 1fr}.agv-system-actions{min-width:0}.agv-detail-head{grid-template-columns:1fr!important}}
 
 /* ── STATUS PAGE — friendly, glanceable robot health ── */
 #page-status #status-dash{padding:24px 28px 32px;gap:18px;background:
@@ -1424,6 +1438,7 @@ canvas#mon-chart{width:100%;height:100%;display:block}
 /* Kid-friendly ROS simulation playground; it hosts the same RViz viewport. */
 #page-playground{display:none;flex-direction:column;overflow:hidden;background:linear-gradient(135deg,#eaf7ff,#f7f1ff);color:#19324a}
 #page-playground.show{display:flex}.pg-head{height:68px;padding:10px 18px;display:flex;align-items:center;gap:13px;background:rgba(255,255,255,.94);border-bottom:1px solid #cce2f2;box-shadow:0 3px 14px rgba(60,100,140,.1);flex-shrink:0}.pg-mascot{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;background:linear-gradient(145deg,#56c7ff,#766dff);font-size:25px;box-shadow:0 6px 14px rgba(79,142,247,.3)}.pg-title{font-size:19px;font-weight:800;color:#173858}.pg-sub{font-size:11px;color:#61809b;margin-top:2px}.pg-head-actions{margin-left:auto;display:flex;gap:7px}.pg-btn{border:0;border-radius:11px;padding:9px 13px;font:700 11px var(--fn);cursor:pointer;box-shadow:0 4px 10px rgba(35,75,115,.12)}.pg-btn.primary{background:linear-gradient(135deg,#36b96f,#66d887);color:#fff}.pg-btn.secondary{background:#fff;color:#326181;border:1px solid #cce0ed}.pg-body{min-height:0;flex:1;display:grid;grid-template-columns:238px minmax(0,1fr);gap:12px;padding:12px}.pg-side{min-height:0;overflow:auto;background:rgba(255,255,255,.92);border:1px solid #d5e8f4;border-radius:18px;padding:14px;box-shadow:0 9px 24px rgba(57,101,137,.1)}.pg-card{padding:11px;border-radius:13px;background:#f4faff;border:1px solid #dbeef8;margin-bottom:10px}.pg-card h3{font-size:12px;color:#285979;margin:0 0 7px}.pg-map-line{display:flex;align-items:center;gap:7px;font-size:11px;color:#59758c;margin:5px 0}.pg-map-line b{margin-left:auto;color:#224f6d}.pg-status{padding:8px 10px;border-radius:10px;background:#fff6d8;color:#7a5a13;font-size:10px;line-height:1.5}.pg-status.live{background:#e3f9e9;color:#267442}.pg-steps{display:grid;gap:6px}.pg-step{display:flex;align-items:center;gap:8px;font-size:10px;color:#58748b}.pg-step span{width:22px;height:22px;border-radius:8px;background:#e5f2ff;color:#3b76aa;display:grid;place-items:center;font-weight:800}.pg-speed{width:100%;accent-color:#6578f5}.pg-stage{min-width:0;min-height:0;position:relative;border-radius:20px;overflow:hidden;background:#1a1a1a;border:4px solid #fff;box-shadow:0 12px 30px rgba(40,75,110,.2)}#playground-view-host{position:absolute;inset:0}#playground-view-host #rviz-viewport{width:100%;height:100%;display:block;border:0}.playground-mode .rviz-teleop,.playground-mode .rviz-cam-hint{display:none!important}.pg-hud{position:absolute;left:13px;top:13px;z-index:20;display:flex;gap:7px;pointer-events:none}.pg-chip{padding:6px 10px;border-radius:12px;background:rgba(255,255,255,.92);color:#315a76;font-size:10px;font-weight:700;box-shadow:0 3px 9px rgba(0,0,0,.15)}.pg-drive{position:absolute;right:15px;bottom:15px;z-index:21;width:178px;padding:10px;background:rgba(255,255,255,.94);border-radius:18px;box-shadow:0 8px 25px rgba(0,0,0,.25)}.pg-drive-title{text-align:center;font-size:11px;font-weight:800;color:#355b76;margin-bottom:7px}.pg-drive-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}.pg-drive-btn{height:43px;border:0;border-radius:12px;background:linear-gradient(#edf6ff,#dcecff);color:#386a9b;font-size:18px;font-weight:800;cursor:pointer;touch-action:none}.pg-drive-btn:active,.pg-drive-btn.on{background:linear-gradient(#6c7cf7,#505fe4);color:#fff}.pg-drive-btn[data-dir="fwd"]{grid-column:2}.pg-drive-btn[data-dir="left"]{grid-column:1;grid-row:2}.pg-drive-btn[data-dir="back"]{grid-column:2;grid-row:2}.pg-drive-btn[data-dir="right"]{grid-column:3;grid-row:2}.pg-stop{grid-column:1/-1;height:30px;border:0;border-radius:10px;background:#ffe5e5;color:#b44444;font-size:11px;font-weight:800;cursor:pointer}
+.pg-drive-btn,.pg-stop,.rv-tp-btn,.real-teleop-btn{user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}.pg-drive-btn svg,.pg-stop svg,.rv-tp-btn svg,.real-teleop-btn svg{width:26px;height:26px;vertical-align:middle;pointer-events:none}.pg-stop svg{width:18px;height:18px}.pg-param-value{display:flex;align-items:center;gap:5px;font-size:10px;color:#355b76}.pg-param-value input{width:80px;border:1px solid #cce0ed;border-radius:6px;padding:3px}.pg-apply:disabled{opacity:.6;cursor:wait}
 .pg-slam-card h3{display:flex;align-items:center}.pg-slam-card h3 b{margin-left:auto;color:#5768e8}.pg-slam-card small{display:block;margin-top:6px;color:#71869a;font-size:9px;line-height:1.4}.pg-progress{height:10px;border-radius:99px;background:#dbe5ed;overflow:hidden;box-shadow:inset 0 1px 2px rgba(0,0,0,.1)}.pg-progress i{display:block;width:0;height:100%;border-radius:inherit;background:linear-gradient(90deg,#55c7ff,#6c78f5,#54d487);transition:width .35s ease}.pg-layers{display:grid;grid-template-columns:1fr 1fr;gap:6px}.pg-layers label{position:relative;cursor:pointer}.pg-layers input{position:absolute;opacity:0;pointer-events:none}.pg-layers span{display:block;padding:7px 5px;border:1px solid #d6e5ef;border-radius:9px;background:#fff;color:#71869a;font-size:9px;text-align:center;transition:.15s}.pg-layers input:checked+span{color:#355b8d;border-color:#8ab7ee;background:#e8f4ff;box-shadow:inset 0 0 0 1px #b8d9fa}.pg-map-name{box-sizing:border-box;width:100%;height:32px;border:1px solid #cbdfea;border-radius:9px;padding:0 9px;background:#fff;color:#28516d;font:600 10px var(--fn);outline:none}.pg-map-name:focus{border-color:#6c83ee;box-shadow:0 0 0 3px rgba(108,131,238,.13)}.pg-save-map{width:100%;min-height:34px;margin-top:7px;border:0;border-radius:10px;background:linear-gradient(135deg,#6576ef,#8a65e8);color:#fff;font:800 10px var(--fn);cursor:pointer}.pg-save-map:disabled{opacity:.48;cursor:not-allowed}.pg-save-result{margin-top:6px;color:#71869a;font-size:9px;line-height:1.5;overflow-wrap:anywhere}.pg-save-result code{font-size:8px;color:#4d5fb6}
 .pg-mode-switch{display:flex;gap:4px;padding:4px;background:#e8f2f9;border-radius:13px;margin-left:10px}.pg-mode-btn{border:0;border-radius:10px;padding:8px 12px;background:transparent;color:#668098;font:800 10px var(--fn);cursor:pointer;white-space:nowrap}.pg-mode-btn.active{background:#fff;color:#335f85;box-shadow:0 3px 9px rgba(50,89,120,.14)}.pg-mode-btn[data-mode="mapping"].active{color:#6556d9}.pg-mode-btn[data-mode="navigation"].active{color:#16835a}.pg-nav-tools{position:absolute;right:15px;bottom:15px;z-index:21;width:205px;padding:11px;background:rgba(255,255,255,.95);border-radius:18px;box-shadow:0 8px 25px rgba(0,0,0,.25)}.pg-nav-tools h3{margin:0 0 7px;text-align:center;color:#315a76;font-size:11px}.pg-nav-tool{width:100%;height:38px;margin-top:5px;border:0;border-radius:11px;color:#fff;font:800 10px var(--fn);cursor:pointer}.pg-nav-tool.pose{background:linear-gradient(135deg,#4aa7eb,#6578ef)}.pg-nav-tool.goal{background:linear-gradient(135deg,#20b879,#56d795)}.pg-nav-tool.cancel{height:30px;background:#ffe5e5;color:#b44444}.pg-nav-tip{font-size:9px;line-height:1.45;color:#70869a;margin-top:6px;text-align:center}.pg-preset-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}.pg-preset{border:1px solid #d2e2ec;border-radius:9px;padding:7px 2px;background:#fff;color:#637c91;font:700 8px var(--fn);cursor:pointer}.pg-preset.active{background:#e5f7ee;border-color:#68c99c;color:#18714c}.pg-tune{margin-top:8px;border-top:1px solid #dbe8f0;padding-top:7px}.pg-tune summary{cursor:pointer;color:#527089;font-size:9px;font-weight:800}.pg-param{margin-top:8px}.pg-param label{display:flex;justify-content:space-between;color:#627d92;font-size:9px}.pg-param input{width:100%;accent-color:#30b77a}.pg-apply{width:100%;height:30px;margin-top:8px;border:0;border-radius:9px;background:#e4f6ed;color:#19744f;font:800 9px var(--fn);cursor:pointer}.pg-nav-distance{font-size:22px;font-weight:900;color:#20a16d;text-align:center}.pg-nav-distance small{font-size:10px;color:#71889a}.pg-mode-hidden{display:none!important}
 .pg-mode-btn[data-mode="control"].active{color:#d36b18}
@@ -1469,6 +1484,17 @@ canvas#mon-chart{width:100%;height:100%;display:block}
 #page-playground .pg-chip,#page-playground .pg-drive,#page-playground .pg-nav-tools{background:color-mix(in srgb,var(--bg1) 92%,transparent);border:1px solid var(--brd);color:var(--txt);backdrop-filter:blur(12px)}
 #page-playground .pg-chip,#page-playground .pg-drive-title{color:var(--txt)}
 #page-playground .pg-drive-btn{background:var(--bg2);border:1px solid var(--brd);color:var(--acc)}
+.pg-camera-menu{position:absolute;right:13px;top:13px;z-index:24;font-family:var(--fn)}
+.pg-camera-menu summary{list-style:none;display:flex;align-items:center;gap:8px;min-height:38px;padding:0 12px;border:1px solid var(--brd);border-radius:12px;background:color-mix(in srgb,var(--bg1) 94%,transparent);color:var(--txt);font-size:11px;font-weight:700;cursor:pointer;user-select:none;backdrop-filter:blur(12px)}
+.pg-camera-menu summary::-webkit-details-marker{display:none}.pg-camera-chevron{margin-left:auto;color:var(--dim)}
+.pg-camera-menu[open] summary,.pg-camera-menu summary:hover{border-color:var(--acc)}
+.pg-camera-options{position:absolute;right:0;top:calc(100% + 7px);width:242px;max-width:calc(100vw - 42px);display:grid;gap:5px;padding:7px;border:1px solid var(--brd);border-radius:14px;background:var(--bg1);box-shadow:0 12px 36px rgba(0,0,0,.28)}
+.pg-camera-options button{display:flex;align-items:center;gap:12px;width:100%;padding:11px 10px;text-align:left;border:1px solid transparent;border-radius:9px;background:transparent;color:var(--txt);cursor:pointer;font-family:inherit}
+.pg-camera-options button>span:first-child{width:23px;font-size:21px;text-align:center;color:var(--acc)}.pg-camera-options strong{display:block;font-size:11px}.pg-camera-options small{display:block;font-size:9px;line-height:1.5;margin-top:4px;color:var(--dim)}
+.pg-camera-options button[aria-pressed="true"]{background:var(--adim);border-color:var(--abrd)}.pg-camera-options button:hover{background:var(--bg2)}
+.pg-camera-menu summary:focus-visible,.pg-camera-options button:focus-visible{outline:2px solid var(--acc);outline-offset:3px}
+#page-playground .pg-hud{max-width:calc(100% - 190px)}#page-playground .pg-hud .pg-chip{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+@media(max-width:760px){.pg-camera-menu{right:8px;top:8px}.pg-camera-menu summary{min-height:38px;padding:0 9px;font-size:10px}#page-playground .pg-hud{left:8px;top:8px;max-width:calc(100% - 175px)}#page-playground .pg-hud .pg-chip:first-child{display:none}}
 #page-playground .pg-drive-btn:hover{border-color:var(--abrd);background:var(--adim)}
 #page-playground .pg-drive-btn:active,#page-playground .pg-drive-btn.on{background:var(--acc);color:#fff}
 #page-playground .pg-stop,#page-playground .pg-nav-tool.cancel{background:color-mix(in srgb,var(--red) 14%,var(--bg1));color:var(--red)}
@@ -1482,14 +1508,17 @@ canvas#mon-chart{width:100%;height:100%;display:block}
 
 .real-teleop-dialog{width:min(1180px,98vw);height:min(820px,94dvh);padding:0}.real-teleop-body{min-height:0;flex:1;display:grid;grid-template-columns:390px minmax(0,1fr);gap:12px;padding:12px;overflow:hidden}.real-teleop-controls{min-height:0;overflow:auto;padding-right:3px}.real-teleop-panel{margin-bottom:9px;padding:10px;border:1px solid var(--brd);border-radius:12px;background:var(--bg2)}.real-teleop-panel h3{margin:0 0 7px;font-size:11px}.real-teleop-connect-grid{display:grid;grid-template-columns:minmax(0,1fr) 92px;gap:6px}.real-teleop-connect-grid select,.real-teleop-connect-grid input{min-width:0;height:34px;padding:0 8px;border:1px solid var(--brd);border-radius:8px;background:var(--bg1);color:var(--txt);font:700 9px var(--mono)}.real-teleop-connect-actions{display:flex;gap:6px;margin-top:7px}.real-teleop-connect-actions button{flex:1;min-height:34px;border:1px solid var(--brd);border-radius:8px;background:var(--bg1);color:var(--txt);font-size:9px;font-weight:800;cursor:pointer}.real-teleop-connect-actions button.primary{border:0;background:linear-gradient(135deg,var(--acc),#7659df);color:#fff}.real-teleop-connect-actions button.danger{color:var(--red)}.real-teleop-connection-state{margin-top:7px;color:var(--dim);font:700 8px var(--mono)}.real-teleop-connection-state.live{color:var(--grn)}.real-teleop-map-panel{position:relative;min-width:0;min-height:430px;overflow:hidden;border:1px solid var(--brd);border-radius:15px;background:#0b1220}.real-teleop-map-head{position:absolute;z-index:2;left:12px;right:12px;top:10px;display:flex;align-items:center;gap:7px;pointer-events:none}.real-teleop-map-head span{padding:5px 8px;border-radius:8px;background:rgba(11,18,32,.82);color:#b9c8dc;font:700 9px var(--mono);backdrop-filter:blur(5px)}#real-teleop-map{display:block;width:100%;height:100%}.real-teleop-odom{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px}.real-teleop-odom div{padding:7px;border-radius:8px;background:var(--bg1);text-align:center}.real-teleop-odom small{display:block;color:var(--dim);font-size:7px}.real-teleop-odom b{display:block;margin-top:2px;font:800 10px var(--mono)}.real-teleop-btn[data-dir=left]{grid-column:1;grid-row:2}.real-teleop-btn[data-dir=fwd]{grid-column:2;grid-row:1}.real-teleop-btn[data-dir=right]{grid-column:3;grid-row:2}.real-teleop-btn[data-dir=back]{grid-column:2;grid-row:3}.real-teleop-btn.stop{grid-column:2;grid-row:2}.real-teleop-key-help{line-height:1.8}.real-teleop-speed{margin-top:8px}@media(max-width:820px){.real-teleop-dialog{height:96dvh}.real-teleop-body{grid-template-columns:1fr;overflow:auto}.real-teleop-controls{overflow:visible}.real-teleop-map-panel{min-height:430px}}
 </style>
-</head>
+<style>
+.motor-control-tool-card[hidden]{display:none!important}.real-teleop-pad.mecanum .real-teleop-btn[data-dir=left]{grid-column:1;grid-row:1}.real-teleop-pad.mecanum .real-teleop-btn[data-dir=right]{grid-column:3;grid-row:1}.real-teleop-pad.mecanum .real-teleop-btn[data-dir="strafe-left"]{grid-column:1;grid-row:2}.real-teleop-pad.mecanum .real-teleop-btn[data-dir="strafe-right"]{grid-column:3;grid-row:2}.real-teleop-pad [hidden]{display:none!important}.real-drive-label{display:none}.real-teleop-pad.mecanum .real-drive-label{display:block;font-size:10px;line-height:1.3}.real-teleop-pad.mecanum .real-teleop-btn{height:76px}.real-teleop-pad.mecanum .real-teleop-btn svg{width:28px;height:28px}.real-drive-arrow{display:block;font-size:28px;line-height:1.1}.real-teleop-drive-mode{color:var(--acc);font-size:11px;margin:0 0 12px}.real-teleop-command{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;font-size:10px;color:var(--mt);padding:10px 0}.real-teleop-command code{color:var(--txt);font-family:var(--mono);overflow-wrap:anywhere}
+.motor-control-tool-card{display:flex;align-items:center;gap:14px;margin-top:18px;padding:18px;border:1px solid var(--brd);border-radius:16px;background:var(--bg2);color:var(--txt);text-decoration:none}.motor-tool-icon{font-size:28px}.motor-control-tool-card strong{display:block;font-size:14px}.motor-control-tool-card small{display:block;color:var(--mt);margin-top:5px;font-size:11px}.motor-control-tool-card b{margin-left:auto;white-space:nowrap;font-size:11px;color:var(--acc)}@media(max-width:600px){.motor-control-tool-card{flex-wrap:wrap}.motor-control-tool-card b{margin-left:42px}}
+</style></head>
 <body>
 
 <!-- TOP BAR -->
 <div id="topbar">
   <button id="btn-sidebar-toggle" class="btn" style="display:none; padding:4px 10px; font-size:16px; margin-right:4px;" onclick="document.getElementById('sidebar').classList.add('show'); document.getElementById('sidebar-backdrop').style.display='block';">☰</button>
   
-  <div class="logo" title="Mecha Rayong Learing Workspace">MECHA<span>RAYONG</span></div>
+  <div class="logo" title="Mecha Rayong v5.0.0 Learing Workspace">MECHA<span>RAYONG</span><small>v5.0.0</small></div>
 
   <div class="top-menus">
     
@@ -1548,7 +1577,9 @@ canvas#mon-chart{width:100%;height:100%;display:block}
 
   <div class="top-actions">
     <input id="disp-host" type="hidden" value=""/>
+    <span id="control-route" class="top-route-badge" data-route="cloud" data-real-only role="status" aria-live="polite" hidden>Cloud</span>
     <span class="top-icon-action robot-info" id="robot-info-icon" role="img" aria-label="ยังไม่ได้เชื่อมต่อหุ่นยนต์" title="ยังไม่ได้เชื่อมต่อหุ่นยนต์">🤖</span>
+    <span class="top-icon-action robot-presence" id="robot-presence" data-real-only role="status" aria-live="polite" title="จำนวนผู้ใช้ที่เปิดหุ่นยนต์ตัวนี้อยู่">👥 <span>0 ออนไลน์</span></span>
     <span id="badge-conn" class="top-icon-action connection-state" role="status" aria-label="ยังไม่ได้เชื่อมต่อ" title="ยังไม่ได้เชื่อมต่อ"><span class="dot dr"></span></span>
     <button class="top-icon-action wizard-shortcut active" id="btn-wizard" onclick="switchPage('dashboard');loadDashboard()" title="ROS Wizzard" aria-label="เปิด ROS Wizzard">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 1.4 4.1L17.5 8.5l-4.1 1.4L12 14l-1.4-4.1-4.1-1.4 4.1-1.4L12 3ZM18.5 14l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2ZM5 14l.7 1.8 1.8.7-1.8.7L5 19l-.7-1.8-1.8-.7 1.8-.7L5 14Z"/></svg>
@@ -1701,7 +1732,14 @@ canvas#mon-chart{width:100%;height:100%;display:block}
             </div>
             <div class="capability-grid" id="project-capabilities-grid">
               <div class="empty-state">🤖 เชื่อมต่อหุ่นยนต์เพื่อเปิดแผนที่ภารกิจ</div>
-            </div>
+              </div>
+          <a class="motor-control-tool-card" data-real-only href="/motor-control.html"><span class="motor-tool-icon">⚙️</span><span><strong>ควบคุมมอเตอร์ทีละตัว</strong><small>ทดสอบเดินหน้า–ถอยหลัง และตรวจว่าแต่ละช่องขับล้อใด · เครื่องมือเสริม</small></span><b>เปิดเครื่องมือ →</b></a>
+          <a class="motor-control-tool-card" data-real-only href="/image-tools.html" title="ติดตั้งใหม่จากโปรไฟล์ Ubuntu 24.04 + ROS 2 Jazzy · ดาวน์โหลดและ Flash บนคอม"><span class="motor-tool-icon"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2v8" />
+  <path d="m16 6-4 4-4-4" />
+  <rect width="20" height="8" x="2" y="14" rx="2" />
+  <path d="M6 18h.01" />
+  <path d="M10 18h.01" /></svg></span><span><strong>เตรียม SD · Ubuntu + ROS 2</strong><small>Ubuntu 24.04 + ROS 2 Jazzy พร้อมเครื่องมือพื้นฐาน · Flash บนคอมของคุณ</small></span><b>เปิดเครื่องมือ →</b></a>
+          <a class="motor-control-tool-card" data-real-only href="/navigation-sequence.html"><span class="motor-tool-icon">📍</span><span><strong>การเคลื่อนที่ตามลำดับ</strong><small>วางจุดหมาย Nav2 หลายจุด เรียงขั้นตอนและกำหนดเวลารอ</small></span><b>เปิดเครื่องมือ →</b></a>
           </div>
         </div>
       </div>
@@ -1724,11 +1762,11 @@ canvas#mon-chart{width:100%;height:100%;display:block}
           </div>
           <div class="real-teleop-body"><div class="real-teleop-controls">
             <div class="real-teleop-warning">⚠️ ตรวจพื้นที่รอบหุ่นให้โล่งก่อนเชื่อมต่อ และเตรียมกด Space หรือปุ่มหยุดฉุกเฉินได้ตลอดเวลา</div>
-            <section class="real-teleop-panel"><h3>🔌 Controller Serial</h3><div class="real-teleop-connect-grid"><select id="real-controller-port"><option value="">กำลังค้นหา COM port…</option></select><input id="real-controller-baud" type="number" value="115200" min="9600" aria-label="Controller baud rate"></div><div class="real-teleop-connect-actions"><button type="button" onclick="realTeleopRefreshPorts()">↻ ค้นหา</button><button type="button" onclick="realTeleopResetOdom()">⌖ Reset ODOM</button><button type="button" class="primary" id="real-controller-connect" onclick="realTeleopToggleController()">เชื่อมต่อ Controller</button></div><div class="real-teleop-connection-state" id="real-controller-state">ยังไม่เชื่อมต่อ</div></section>
+            <section class="real-teleop-panel"><h3>🔌 Controller USB / GPIO UART</h3><div class="real-teleop-connect-grid"><select id="real-controller-port"><option value="">กำลังค้นหา COM port…</option></select><input id="real-controller-baud" type="number" value="115200" min="9600" aria-label="Controller baud rate"></div><div class="real-teleop-connect-actions"><button type="button" onclick="realTeleopRefreshPorts()">↻ ค้นหา</button><button type="button" onclick="realTeleopResetOdom()">⌖ Reset ODOM</button><button type="button" class="primary" id="real-controller-connect" onclick="realTeleopToggleController()">เชื่อมต่อ Controller</button></div><div class="real-teleop-connection-state" id="real-controller-state">ยังไม่เชื่อมต่อ</div></section>
             <section class="real-teleop-panel"><h3>📡 LiDAR</h3><div class="real-teleop-connect-grid"><select id="real-lidar-model" onchange="realTeleopLidarModelChanged()"></select><select id="real-lidar-port" aria-label="LiDAR COM port"></select></div><div class="real-teleop-connect-actions"><button type="button" onclick="realTeleopRefreshPorts()">↻ COM port</button><button type="button" class="primary" id="real-lidar-connect" onclick="realTeleopToggleLidar()">เปิด LiDAR</button></div><div class="real-teleop-connection-state" id="real-lidar-state">ยังไม่เปิด /scan</div></section>
-            <section class="real-teleop-panel"><h3>🎮 บังคับหุ่นยนต์</h3><div class="real-teleop-pad" aria-label="ปุ่มทิศทางควบคุมหุ่นยนต์"><button type="button" class="real-teleop-btn" data-dir="fwd" aria-label="เดินหน้า"><small>W</small>▲</button><button type="button" class="real-teleop-btn" data-dir="left" aria-label="เลี้ยวซ้าย"><small>A</small>↶</button><button type="button" class="real-teleop-btn stop" id="real-teleop-stop" onclick="realTeleopStop('กดหยุดทันทีแล้ว — หุ่นยนต์หยุด')">■ หยุด<small>SPACE</small></button><button type="button" class="real-teleop-btn" data-dir="right" aria-label="เลี้ยวขวา"><small>D</small>↷</button><button type="button" class="real-teleop-btn" data-dir="back" aria-label="ถอยหลัง"><small>S</small>▼</button></div><div class="real-teleop-key-help"><kbd>W</kbd>/<kbd>↑</kbd> เดินหน้า · <kbd>S</kbd>/<kbd>↓</kbd> ถอย · <kbd>A</kbd>/<kbd>←</kbd> เลี้ยวซ้าย · <kbd>D</kbd>/<kbd>→</kbd> เลี้ยวขวา · <kbd>Space</kbd> หยุด</div><div class="real-teleop-status" id="real-teleop-status" role="status" aria-live="polite">เชื่อมต่อ Controller ก่อนเริ่มขับ</div><div class="real-teleop-speed"><label><span>ความเร็วเดินตรง <b id="real-teleop-linear-value">0.20 m/s</b></span><input id="real-teleop-linear" type="range" min="0.05" max="0.8" step="0.05" value="0.2" oninput="realTeleopApplySpeed()"></label><label><span>ความเร็วการเลี้ยว <b id="real-teleop-angular-value">0.80 rad/s</b></span><input id="real-teleop-angular" type="range" min="0.2" max="2" step="0.1" value="0.8" oninput="realTeleopApplySpeed()"></label></div></section>
+            <section class="real-teleop-panel"><h3>🎮 บังคับหุ่นยนต์</h3><p class="real-teleop-drive-mode" id="real-teleop-drive-mode">กำลังอ่านชนิดหุ่น…</p><div class="real-teleop-pad" aria-label="ปุ่มทิศทางควบคุมหุ่นยนต์"><button type="button" class="real-teleop-btn" data-dir="fwd" aria-label="เดินหน้า" title="เดินหน้า"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V4m-7 7 7-7 7 7"/></svg><span class="real-drive-label">เดินหน้า</span></button><button type="button" class="real-teleop-btn" data-dir="left" aria-label="หมุนซ้าย" title="หมุนซ้าย"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10a8 8 0 1 1 1 8M4 4v6h6"/></svg><span class="real-drive-label">หมุนซ้าย</span></button><button type="button" class="real-teleop-btn" data-dir="strafe-left" data-mecanum-only hidden aria-label="เลื่อนซ้าย" title="เลื่อนซ้าย"><span class="real-drive-arrow">⇤</span><span class="real-drive-label">เลื่อนซ้าย</span><small>A</small></button><button type="button" class="real-teleop-btn" data-dir="strafe-right" data-mecanum-only hidden aria-label="เลื่อนขวา" title="เลื่อนขวา"><span class="real-drive-arrow">⇥</span><span class="real-drive-label">เลื่อนขวา</span><small>D</small></button><button type="button" class="real-teleop-btn stop" id="real-teleop-stop" onclick="realTeleopStop('กดหยุดทันทีแล้ว — หุ่นยนต์หยุด')">■ หยุด<small>SPACE</small></button><button type="button" class="real-teleop-btn" data-dir="right" aria-label="หมุนขวา" title="หมุนขวา"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10a8 8 0 1 0-1 8m1-14v6h-6"/></svg><span class="real-drive-label">หมุนขวา</span></button><button type="button" class="real-teleop-btn" data-dir="back" aria-label="ถอยหลัง" title="ถอยหลัง"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v16m-7-7 7 7 7-7"/></svg><span class="real-drive-label">ถอยหลัง</span></button></div><div class="real-teleop-key-help" id="real-teleop-key-help">W / S เดินหน้า–ถอย · A / D หมุนซ้าย–ขวา · Space หยุด</div><div class="real-teleop-status" id="real-teleop-status" role="status" aria-live="polite">เชื่อมต่อ Controller ก่อนเริ่มขับ</div><div class="real-teleop-command">คำสั่งที่ส่งล่าสุด <code id="real-teleop-command">—</code></div><div class="real-teleop-speed"><label><span>ความเร็วเดินตรง <b id="real-teleop-linear-value">0.20 m/s</b></span><input id="real-teleop-linear" type="range" min="0.05" max="0.8" step="0.05" value="0.2" oninput="realTeleopApplySpeed()"></label><label><span>ความเร็วการเลี้ยว <b id="real-teleop-angular-value">0.80 rad/s</b></span><input id="real-teleop-angular" type="range" min="0.2" max="2" step="0.1" value="0.8" oninput="realTeleopApplySpeed()"></label></div></section>
             <div class="real-teleop-odom"><div><small>ODOM X</small><b id="real-odom-x">NO DATA</b></div><div><small>ODOM Y</small><b id="real-odom-y">NO DATA</b></div><div><small>YAW</small><b id="real-odom-yaw">NO DATA</b></div><div><small>LINEAR</small><b id="real-odom-vx">NO DATA</b></div><div><small>ANGULAR</small><b id="real-odom-wz">NO DATA</b></div><div><small>MOTOR RPM</small><b id="real-rpm-state">NO DATA</b></div></div>
-          </div><div class="real-teleop-map-panel"><div class="real-teleop-map-head"><span id="real-map-scale">ODOM path · Auto scale</span><span id="real-map-lidar">LiDAR: NO DATA</span></div><canvas id="real-teleop-map"></canvas></div></div>
+          </div><div class="real-teleop-map-panel"><div class="real-teleop-map-head"><span id="real-map-scale">ODOM path · ±9.0 m · ล้อเมาส์ซูม</span><span id="real-map-lidar">LiDAR: NO DATA</span></div><canvas id="real-teleop-map" aria-label="แผนที่ ODOM และ LiDAR ใช้ล้อเมาส์ซูมเข้าออก" title="ใช้ล้อเมาส์ซูมเข้าออก"></canvas></div></div>
         </div>
       </div>
     </div>
@@ -1771,6 +1809,7 @@ canvas#mon-chart{width:100%;height:100%;display:block}
               <div class="lidar-live"><span class="lidar-live-dot" id="lidar-live-dot"></span><span id="lidar-live-label">WAITING /scan</span></div>
               <label class="lidar-runtime-field"><span>COM PORT</span><div class="lidar-runtime-port"><select id="lidar-port-select" onchange="lidarPortChanged()"><option value="">กำลังตรวจสอบพอร์ต…</option></select><button type="button" onclick="lidarRefreshStatus()" title="ตรวจพอร์ตอีกครั้ง">↻</button></div></label>
               <label class="lidar-runtime-field lidar-runtime-baud"><span>BAUDRATE</span><input id="lidar-baud-input" type="number" min="1200" max="4000000" step="1" value="115200" onchange="lidarBaudChanged()"></label>
+              <label class="lidar-runtime-field"><span>LiDAR TF frame</span><select id="lidar-frame-select" onchange="lidarFrameChanged()"><option value="laser_frame">laser_frame</option></select></label>
               <span class="lidar-port-state disconnected" id="lidar-port-state"><i></i> Disconnected</span><code class="lidar-topic">/scan</code>
               <button type="button" class="lidar-scan-button" id="lidar-scan-button" onclick="lidarToggleScan()" hidden>▶ เชื่อมต่อและทดสอบ</button>
               <small class="lidar-runtime-help" id="lidar-port-help">ติดตั้ง LIDAR package ก่อน จึงจะแสดงปุ่มเชื่อมต่อ</small>
@@ -1780,7 +1819,7 @@ canvas#mon-chart{width:100%;height:100%;display:block}
               <div class="lidar-stat"><span>Valid points</span><b id="lidar-stat-points">0</b></div><div class="lidar-stat"><span>Nearest</span><b id="lidar-stat-nearest">—</b></div><div class="lidar-stat"><span>Scan rate</span><b id="lidar-stat-rate">—</b></div><div class="lidar-stat"><span>Interval</span><b id="lidar-stat-interval">—</b></div><div class="lidar-stat"><span>Max range</span><b id="lidar-stat-range">—</b></div>
             </div>
             <section class="lidar-diagnostics" aria-label="LIDAR Driver Console">
-              <div class="lidar-diagnostics-head"><div><b>Driver Console</b><small>ตรวจการเชื่อมต่อและดู command/log จากหุ่นยนต์จริง</small></div><div><button type="button" onclick="lidarRefreshDriverStatus()">↻ ตรวจใหม่</button><button type="button" onclick="lidarCopyDiagnostics()">⧉ คัดลอก Log</button></div></div>
+              <div class="lidar-diagnostics-head"><div><b>Driver Console</b><small>เปิด Driver หรืออ่านสถานะและ log จากหุ่นยนต์จริง</small></div><div><button type="button" onclick="startLidarScan()">▶ เปิด Driver + ทดสอบ</button><button type="button" onclick="lidarRefreshDriverStatus()">↻ ตรวจสถานะ</button><button type="button" onclick="lidarCopyDiagnostics()">⧉ คัดลอก Log</button></div></div>
               <div class="lidar-diagnostic-grid">
                 <div class="lidar-diagnostic-check checking" data-check="port"><i>1</i><span><b>USB / COM port</b><small>กำลังรอตรวจสอบ</small></span></div>
                 <div class="lidar-diagnostic-check checking" data-check="process"><i>2</i><span><b>Driver process</b><small>ยังไม่ได้เริ่ม driver</small></span></div>
@@ -2087,16 +2126,35 @@ canvas#mon-chart{width:100%;height:100%;display:block}
           <div class="pg-card pg-mode-hidden" data-pg-mode="navigation"><h3>🗺 เลือก Saved Map</h3><div class="pg-map-picker"><select id="pg-nav-map-select" onchange="playgroundSelectNavMap(this.value)" aria-label="เลือกแผนที่ Navigation"><option value="">— ยังไม่ได้เลือกแผนที่ —</option></select><button class="pg-map-refresh" onclick="playgroundLoadNavMaps()" title="ค้นหาแผนที่ใหม่">↻</button></div><div class="pg-ready-head"><span>ความพร้อมของระบบ</span><b id="pg-nav-ready-badge" class="pg-ready-badge">ยังไม่พร้อม</b></div><div id="pg-nav-checks" class="pg-checks"></div><div id="pg-nav-error" class="pg-nav-error">⚠️ กรุณาเลือก Saved Map ก่อนเริ่ม Navigation</div><details class="pg-tune"><summary>⌨️ ระบบต้องรันอะไรบ้าง?</summary><div class="pg-command-help">1. ros2 run sim_robot_mapsim mapsim<br>2. /map + /scan + /tf + /odom<br>3. ส่งเป้าหมายไปที่ /goal_pose<br><br>ปุ่ม “เริ่ม Navigation” จะทำข้อ 1–2 ให้อัตโนมัติ</div></details></div>
           <div class="pg-card pg-nav-card pg-mode-hidden" data-pg-mode="navigation"><h3>🚩 ภารกิจ Navigation</h3><div class="pg-nav-distance"><span id="pg-nav-distance">—</span> <small>เมตร</small></div><div class="pg-save-result" id="pg-nav-help">กด “ตั้งจุดหมาย” แล้วลากลูกศรบนแผนที่</div></div>
           <div class="pg-card pg-mode-hidden" data-pg-mode="navigation"><h3>📦 Navigation Package</h3><div id="pg-nav-package-status" class="pg-save-result">เมื่อเข้าโหมดนี้ ระบบจะสร้าง ~/src/mecha_rayong_nav อัตโนมัติ</div><button class="pg-export-nav" style="margin-top:8px" onclick="playgroundOpenNavExport()">⬇ ดาวน์โหลด ROS Project ทั้งหมด</button><div class="pg-save-result">รวม src ทุก package, Maps, Robot Config, Installer และคู่มือติดตั้งไว้ใน ZIP</div></div>
-          <div class="pg-card"><h3>🧩 Layers</h3><div class="pg-layers"><label><input type="checkbox" checked onchange="playgroundToggleLayer('Environment',this.checked)"><span>🏠 โลก 3D</span></label><label><input type="checkbox" checked onchange="playgroundToggleLayer('Map',this.checked)"><span id="pg-map-layer-label">🗺 SLAM Map</span></label><label><input type="checkbox" checked onchange="playgroundToggleLayer('RobotModel',this.checked)"><span>🤖 Robot</span></label><label><input type="checkbox" checked onchange="playgroundToggleLayer('LaserScan',this.checked)"><span>✨ Laser</span></label><label><input type="checkbox" checked onchange="playgroundToggleLayer('Odometry',this.checked)"><span>➰ Trail</span></label><label class="pg-mode-hidden" data-pg-mode="navigation"><input type="checkbox" checked onchange="playgroundToggleLayer('Path',this.checked)"><span>🟢 A* Path</span></label><label><input type="checkbox" onchange="playgroundToggleLayer('TF',this.checked)"><span>📐 TF Frames</span></label></div></div>
+          <div class="pg-card"><h3>🧩 Layers</h3><div class="pg-layers"><label><input type="checkbox" checked onchange="playgroundToggleLayer('Environment',this.checked)"><span>🏠 โลก 3D</span></label><label><input id="pg-layer-map" type="checkbox" onchange="playgroundToggleLayer('Map',this.checked)"><span id="pg-map-layer-label">🗺 SLAM Map</span></label><label><input type="checkbox" checked onchange="playgroundToggleLayer('RobotModel',this.checked)"><span>🤖 Robot</span></label><label><input type="checkbox" checked onchange="playgroundToggleLayer('LaserScan',this.checked)"><span>✨ Laser</span></label><label><input type="checkbox" checked onchange="playgroundToggleLayer('Odometry',this.checked)"><span>➰ Trail</span></label><label class="pg-mode-hidden" data-pg-mode="navigation"><input type="checkbox" checked onchange="playgroundToggleLayer('Path',this.checked)"><span>🟢 A* Path</span></label><label><input type="checkbox" onchange="playgroundToggleLayer('TF',this.checked)"><span>📐 TF Frames</span></label></div></div>
           <div class="pg-card" data-pg-mode="mapping"><h3>💾 บันทึกไปใช้กับ Navigation</h3><input id="pg-map-name" class="pg-map-name" value="my_slam_map" maxlength="40" aria-label="ชื่อแผนที่"><button id="pg-save-map-btn" class="pg-save-map" onclick="playgroundSaveSlamMap()" disabled>💾 Save Map สำหรับ Nav2</button><div id="pg-save-result" class="pg-save-result">ได้ไฟล์ PGM, YAML และ ROS 2 package</div></div>
           <div class="pg-card" data-pg-mode="mapping"><h3>✨ วิธีเก็บ Map</h3><div class="pg-steps"><div class="pg-step"><span>1</span>กดเริ่มเก็บ Map</div><div class="pg-step"><span>2</span>กดค้างเพื่อขับสำรวจทุกมุม</div><div class="pg-step"><span>3</span>ดูพื้นที่ค้นพบและ Layers</div><div class="pg-step"><span>4</span>Save Map เมื่องานเสร็จ</div></div></div>
           <div class="pg-card" data-pg-mode="mapping control"><h3>⚡ ความเร็วขับเอง</h3><input id="pg-speed" class="pg-speed" type="range" min="0.1" max="2" step="0.1" value="0.6" oninput="playgroundSetSpeed(this.value)"><div class="pg-map-line"><span>ความเร็ว</span><b><span id="pg-speed-value">0.6</span> m/s</b></div></div>
-          <div class="pg-card pg-mode-hidden" data-pg-mode="navigation"><h3>🎛 บุคลิกการขับ</h3><div class="pg-preset-grid"><button class="pg-preset" data-preset="safe" onclick="playgroundNavPreset('safe',this)">🐢 ปลอดภัย</button><button class="pg-preset active" data-preset="balanced" onclick="playgroundNavPreset('balanced',this)">🙂 สมดุล</button><button class="pg-preset" data-preset="sport" onclick="playgroundNavPreset('sport',this)">🚀 คล่องตัว</button></div><details class="pg-tune"><summary>⚙️ ตั้งค่าขั้นสูง</summary><div class="pg-param"><label>ความเร็วสูงสุด <b><span id="pg-nav-speed-value">0.55</span> m/s</b></label><input id="pg-nav-speed" type="range" min="0.15" max="1.2" step="0.05" value="0.55" oninput="playgroundTuneLabel()"></div><div class="pg-param"><label>ระยะหยุดหน้าอุปสรรค <b><span id="pg-nav-obstacle-value">0.48</span> m</b></label><input id="pg-nav-obstacle" type="range" min="0.3" max="1.0" step="0.02" value="0.48" oninput="playgroundTuneLabel()"></div><div class="pg-param"><label>ระยะเผื่อรอบกำแพง <b><span id="pg-nav-inflation-value">0.28</span> m</b></label><input id="pg-nav-inflation" type="range" min="0.10" max="0.60" step="0.02" value="0.28" oninput="playgroundTuneLabel()"></div><div class="pg-param"><label>มองไกลตามเส้นทาง <b><span id="pg-nav-lookahead-value">0.45</span> m</b></label><input id="pg-nav-lookahead" type="range" min="0.20" max="0.90" step="0.05" value="0.45" oninput="playgroundTuneLabel()"></div><div class="pg-param"><label>ความแม่นยำถึงเป้า <b><span id="pg-nav-tolerance-value">0.20</span> m</b></label><input id="pg-nav-tolerance" type="range" min="0.08" max="0.5" step="0.02" value="0.20" oninput="playgroundTuneLabel()"></div><button class="pg-apply" onclick="playgroundApplyNavParams()">✓ ใช้ค่าและวางแผนเส้นทางใหม่</button></details></div>
+          <div class="pg-card pg-mode-hidden" data-pg-mode="navigation"><h3>🎛 พารามิเตอร์ Navigation</h3><div class="pg-preset-grid"><button class="pg-preset" data-preset="safe" onclick="playgroundNavPreset('safe',this)">ปลอดภัย</button><button class="pg-preset active" data-preset="balanced" onclick="playgroundNavPreset('balanced',this)">สมดุล</button><button class="pg-preset" data-preset="sport" onclick="playgroundNavPreset('sport',this)">ทางแคบ</button></div><p id="pg-nav-clearance-note" class="pg-status" role="status">ศูนย์กลางหุ่นต้องห่างวัตถุอย่างน้อย 0.32 m และเผื่อความละเอียด Map เพิ่ม</p><details class="pg-tune"><summary>ตั้งค่าละเอียด (แนว Nav2)</summary><div class="pg-param"><label for="pg-nav-speed">ความเร็วเดินสูงสุด</label><div class="pg-param-value"><input aria-label="ความเร็วเดินสูงสุด" id="pg-nav-speed-value" type="number" min="0.05" max="1.2" step="0.05" value="0.45" onchange="playgroundNavNumber('speed',this.value)"> m/s</div><input id="pg-nav-speed" type="range" min="0.05" max="1.2" step="0.05" value="0.45" oninput="playgroundTuneLabel()"></div>
+<div class="pg-param"><label for="pg-nav-turn">ความเร็วหมุนสูงสุด</label><div class="pg-param-value"><input aria-label="ความเร็วหมุนสูงสุด" id="pg-nav-turn-value" type="number" min="0.2" max="2.5" step="0.1" value="1.2" onchange="playgroundNavNumber('turn',this.value)"> rad/s</div><input id="pg-nav-turn" type="range" min="0.2" max="2.5" step="0.1" value="1.2" oninput="playgroundTuneLabel()"></div>
+<div class="pg-param"><label for="pg-nav-radius">รัศมีหุ่น (อย่างน้อย 0.24 m)</label><div class="pg-param-value"><input aria-label="รัศมีหุ่น (อย่างน้อย 0.24 m)" id="pg-nav-radius-value" type="number" min="0.24" max="1" step="0.01" value="0.24" onchange="playgroundNavNumber('radius',this.value)"> m</div><input id="pg-nav-radius" type="range" min="0.24" max="1" step="0.01" value="0.24" oninput="playgroundTuneLabel()"></div>
+<div class="pg-param"><label for="pg-nav-clearance">ระยะปลอดภัยจากขอบหุ่น</label><div class="pg-param-value"><input aria-label="ระยะปลอดภัยจากขอบหุ่น" id="pg-nav-clearance-value" type="number" min="0.02" max="0.8" step="0.01" value="0.08" onchange="playgroundNavNumber('clearance',this.value)"> m</div><input id="pg-nav-clearance" type="range" min="0.02" max="0.8" step="0.01" value="0.08" oninput="playgroundTuneLabel()"></div>
+<div class="pg-param"><label for="pg-nav-inflation">รัศมีเขตหลีกเลี่ยง (cost)</label><div class="pg-param-value"><input aria-label="รัศมีเขตหลีกเลี่ยง (cost)" id="pg-nav-inflation-value" type="number" min="0.26" max="2" step="0.01" value="0.55" onchange="playgroundNavNumber('inflation',this.value)"> m</div><input id="pg-nav-inflation" type="range" min="0.26" max="2" step="0.01" value="0.55" oninput="playgroundTuneLabel()"></div>
+<div class="pg-param"><label for="pg-nav-cost">อัตราลด cost ตามระยะ</label><div class="pg-param-value"><input aria-label="อัตราลด cost ตามระยะ" id="pg-nav-cost-value" type="number" min="1" max="15" step="0.5" value="3" onchange="playgroundNavNumber('cost',this.value)"> 1/m</div><input id="pg-nav-cost" type="range" min="1" max="15" step="0.5" value="3" oninput="playgroundTuneLabel()"></div>
+<div class="pg-param"><label for="pg-nav-obstacle">ระยะชะลอจากขอบหุ่น</label><div class="pg-param-value"><input aria-label="ระยะชะลอจากขอบหุ่น" id="pg-nav-obstacle-value" type="number" min="0.1" max="1.5" step="0.05" value="0.48" onchange="playgroundNavNumber('obstacle',this.value)"> m</div><input id="pg-nav-obstacle" type="range" min="0.1" max="1.5" step="0.05" value="0.48" oninput="playgroundTuneLabel()"></div>
+<div class="pg-param"><label for="pg-nav-lookahead">ระยะมองตามเส้นทาง</label><div class="pg-param-value"><input aria-label="ระยะมองตามเส้นทาง" id="pg-nav-lookahead-value" type="number" min="0.15" max="1.5" step="0.05" value="0.45" onchange="playgroundNavNumber('lookahead',this.value)"> m</div><input id="pg-nav-lookahead" type="range" min="0.15" max="1.5" step="0.05" value="0.45" oninput="playgroundTuneLabel()"></div>
+<div class="pg-param"><label for="pg-nav-tolerance">ความคลาดเคลื่อนถึงเป้า</label><div class="pg-param-value"><input aria-label="ความคลาดเคลื่อนถึงเป้า" id="pg-nav-tolerance-value" type="number" min="0.05" max="0.5" step="0.01" value="0.15" onchange="playgroundNavNumber('tolerance',this.value)"> m</div><input id="pg-nav-tolerance" type="range" min="0.05" max="0.5" step="0.01" value="0.15" oninput="playgroundTuneLabel()"></div>
+<div class="pg-param"><label for="pg-nav-yaw">ความคลาดเคลื่อนมุมปลายทาง</label><div class="pg-param-value"><input aria-label="ความคลาดเคลื่อนมุมปลายทาง" id="pg-nav-yaw-value" type="number" min="0.05" max="0.5" step="0.01" value="0.15" onchange="playgroundNavNumber('yaw',this.value)"> rad</div><input id="pg-nav-yaw" type="range" min="0.05" max="0.5" step="0.01" value="0.15" oninput="playgroundTuneLabel()"></div>
+<div class="pg-param"><label for="pg-nav-replan">ช่วงพักก่อนวางแผนซ้ำ</label><div class="pg-param-value"><input aria-label="ช่วงพักก่อนวางแผนซ้ำ" id="pg-nav-replan-value" type="number" min="1" max="10" step="0.5" value="3" onchange="playgroundNavNumber('replan',this.value)"> s</div><input id="pg-nav-replan" type="range" min="1" max="10" step="0.5" value="3" oninput="playgroundTuneLabel()"></div>
+<div class="pg-param"><label for="pg-nav-budget">งบ CPU ต่อการหาเส้นทาง</label><div class="pg-param-value"><input aria-label="งบ CPU ต่อการหาเส้นทาง" id="pg-nav-budget-value" type="number" min="20" max="150" step="10" value="60" onchange="playgroundNavNumber('budget',this.value)"> ms</div><input id="pg-nav-budget" type="range" min="20" max="150" step="10" value="60" oninput="playgroundTuneLabel()"></div><p class="pg-status">Simulation ใช้ footprint วงกลม ไม่ใช่ Nav2 เต็มระบบ: เขต cost ช่วยเลือกทางห่างวัตถุ แต่ระยะห้ามผ่าน = รัศมีหุ่น + ระยะปลอดภัย ปรับแล้วกดใช้ค่า</p></details><button id="pg-nav-apply" class="pg-apply" onclick="playgroundApplyNavParams()">ใช้ค่าและตรวจเส้นทางใหม่</button></div>
         </aside>
         <main class="pg-stage">
           <div id="playground-view-host"></div>
+          <details class="pg-camera-menu" id="pg-camera-menu">
+            <summary aria-label="เลือกมุมกล้อง"><span aria-hidden="true">◉</span> <span id="pg-camera-label">อิสระ · Free hand</span><span class="pg-camera-chevron" aria-hidden="true">⌄</span></summary>
+            <div class="pg-camera-options" role="group" aria-label="มุมกล้อง Playground">
+              <button type="button" data-pg-camera="free" aria-pressed="true" onclick="playgroundSetCameraView('free')"><span aria-hidden="true">◇</span><span><strong>อิสระ · Free hand</strong><small>หมุน เลื่อน และซูมได้เอง</small></span></button>
+              <button type="button" data-pg-camera="first" aria-pressed="false" onclick="playgroundSetCameraView('first')"><span aria-hidden="true">◉</span><span><strong>บุคคลที่ 1</strong><small>มองจากหุ่นยนต์ไปข้างหน้า</small></span></button>
+              <button type="button" data-pg-camera="third" aria-pressed="false" onclick="playgroundSetCameraView('third')"><span aria-hidden="true">↗</span><span><strong>บุคคลที่ 3</strong><small>ตามหลังหุ่น · เลื่อนล้อเมาส์ปรับระยะ</small></span></button>
+            </div>
+          </details>
           <div class="pg-hud"><span class="pg-chip">🟢 Fixed Frame: map</span><span class="pg-chip" id="pg-live-chip">กำลังรอเริ่ม</span></div>
-          <div class="pg-drive" data-pg-mode="mapping control"><div class="pg-drive-title">🎮 กดค้างเพื่อขับ • ปล่อยเพื่อหยุด</div><div class="pg-drive-grid"><button class="pg-drive-btn" data-dir="fwd">▲</button><button class="pg-drive-btn" data-dir="left">↺</button><button class="pg-drive-btn" data-dir="back">▼</button><button class="pg-drive-btn" data-dir="right">↻</button><button class="pg-stop" onclick="playgroundStopRobot()">■ หยุด</button></div></div>
+          <div class="pg-drive" data-pg-mode="mapping control"><div class="pg-drive-title">🎮 กดค้างเพื่อขับ • ปล่อยเพื่อหยุด</div><div class="pg-drive-grid"><button class="pg-drive-btn" data-dir="fwd" aria-label="เดินหน้า" title="เดินหน้า"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V4m-7 7 7-7 7 7"/></svg></button><button class="pg-drive-btn" data-dir="left" aria-label="หมุนซ้าย" title="หมุนซ้าย"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10a8 8 0 1 1 1 8M4 4v6h6"/></svg></button><button class="pg-drive-btn" data-dir="back" aria-label="ถอยหลัง" title="ถอยหลัง"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v16m-7-7 7 7 7-7"/></svg></button><button class="pg-drive-btn" data-dir="right" aria-label="หมุนขวา" title="หมุนขวา"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10a8 8 0 1 0-1 8m1-14v6h-6"/></svg></button><button class="pg-stop" onclick="playgroundStopRobot()" aria-label="หยุด" title="หยุด"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" fill="currentColor" stroke="none"/></svg></button></div></div>
           <div class="pg-nav-tools pg-mode-hidden" data-pg-mode="navigation"><h3>🧭 สั่งหุ่นยนต์ไปไหนดี?</h3><button class="pg-nav-tool pose" onclick="playgroundPickPose('initialpose')">📍 ตั้งตำแหน่งเริ่มต้น</button><button class="pg-nav-tool goal" onclick="playgroundPickPose('goal')">🚩 ตั้งจุดหมาย</button><button class="pg-nav-tool cancel" onclick="playgroundCancelNavigation()">■ ยกเลิกภารกิจ</button><div class="pg-nav-tip">คลิกค้างแล้วลากลูกศร<br>เพื่อเลือกตำแหน่งและทิศทาง</div></div>
         </main>
       </div>
@@ -2203,10 +2261,10 @@ canvas#mon-chart{width:100%;height:100%;display:block}
                 <input id="rviz-teleop-topic" class="rviz-teleop-in" value="/cmd_vel" spellcheck="false" />
               </div>
               <div class="rviz-teleop-grid">
-                <button class="rv-tp-btn" data-dir="left"  title="เลี้ยวซ้าย (↺)">↺</button>
-                <button class="rv-tp-btn" data-dir="fwd"   title="เดินหน้า (▲)">▲</button>
-                <button class="rv-tp-btn" data-dir="right" title="เลี้ยวขวา (↻)">↻</button>
-                <button class="rv-tp-btn" data-dir="back"  title="ถอยหลัง (▼)">▼</button>
+                <button class="rv-tp-btn" data-dir="left"  aria-label="หมุนซ้าย" title="หมุนซ้าย"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10a8 8 0 1 1 1 8M4 4v6h6"/></svg></button>
+                <button class="rv-tp-btn" data-dir="fwd"   aria-label="เดินหน้า" title="เดินหน้า"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V4m-7 7 7-7 7 7"/></svg></button>
+                <button class="rv-tp-btn" data-dir="right" aria-label="หมุนขวา" title="หมุนขวา"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10a8 8 0 1 0-1 8m1-14v6h-6"/></svg></button>
+                <button class="rv-tp-btn" data-dir="back"  aria-label="ถอยหลัง" title="ถอยหลัง"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v16m-7-7 7 7 7-7"/></svg></button>
               </div>
               <div class="rviz-teleop-row">
                 <label>ความเร็วเชิงเส้น <span id="rviz-teleop-linval">1.00</span> m/s</label>
@@ -2361,11 +2419,11 @@ canvas#mon-chart{width:100%;height:100%;display:block}
       .tf-view-sep{width:100%;height:1px;background:var(--brd);margin:2px 0}
 
       /* ── axis colors (RViz: X=Red, Y=Blue, Z=Green) ── */
-      .tf-axis-x{color:#ff4444}.tf-axis-y{color:#4488ff}.tf-axis-z{color:#44ff66}
+      .tf-axis-x{color:#ff4444}.tf-axis-y{color:#44bb66}.tf-axis-z{color:#4488ff}
       /* higher-specificity so per-field labels inside the grids keep their axis color */
       .tf-grid3 label.tf-axis-x,.tf-grid2 label.tf-axis-x{color:#ff4444}
-      .tf-grid3 label.tf-axis-y,.tf-grid2 label.tf-axis-y{color:#4488ff}
-      .tf-grid3 label.tf-axis-z,.tf-grid2 label.tf-axis-z{color:#44ff66}
+      .tf-grid3 label.tf-axis-y,.tf-grid2 label.tf-axis-y{color:#44bb66}
+      .tf-grid3 label.tf-axis-z,.tf-grid2 label.tf-axis-z{color:#4488ff}
       .tf-axis-ico{width:17px;height:17px;display:inline-flex;margin-right:7px;vertical-align:middle;flex-shrink:0}
       .tf-axis-ico svg{width:17px;height:17px}
       .tf-sec .lnk{opacity:.65;font-size:9px;text-transform:none;letter-spacing:0}
@@ -2565,6 +2623,17 @@ canvas#mon-chart{width:100%;height:100%;display:block}
       html[data-theme] #tf-odom-modal .tf-wheel-tbl :is(th,td){border-color:var(--brd)}
     </style>
 
+    <style>
+      .editor-history-toolbar{position:absolute;top:64px;left:12px;z-index:5;display:flex;gap:5px;max-width:calc(100% - 24px);padding:5px;border:1px solid var(--brd);border-radius:12px;background:color-mix(in srgb,var(--bg1) 92%,transparent);box-shadow:0 6px 18px rgba(0,0,0,.1);backdrop-filter:blur(8px)}
+      .editor-history-toolbar button{display:flex;align-items:center;justify-content:center;gap:6px;min-height:36px;padding:6px 12px;border:1px solid var(--brd);border-radius:8px;background:var(--bg2);color:var(--txt);font:600 11px var(--fn);white-space:nowrap;cursor:pointer}
+      .editor-history-toolbar button span{font-size:20px;line-height:1}.editor-history-toolbar button:hover:enabled{border-color:var(--acc);background:var(--adim)}.editor-history-toolbar button:focus-visible{outline:2px solid var(--acc);outline-offset:2px}.editor-history-toolbar button:disabled{opacity:.4;cursor:default}
+      .editor-clipboard-toolbar{top:116px;overflow-x:auto}.editor-clipboard-toolbar button{padding:6px 9px;flex-shrink:0}
+      #page-transformation .tf-gizmo-bar{top:168px;max-width:calc(100% - 24px);flex-wrap:wrap}
+      .editor-color-field{display:grid;gap:7px;margin-bottom:14px}.editor-color-field label{font-size:12px;color:var(--mt)}.editor-color-field input[type="color"]{width:100%;height:40px;min-height:40px;padding:3px;border:1px solid var(--brd);border-radius:9px;background:var(--bg2);cursor:pointer}
+      .editor-object-lock{display:grid;gap:7px;margin:12px 0;padding:10px;border:1px solid var(--brd);border-radius:10px;background:var(--bg2)}#tf-props .editor-object-lock{margin:12px}
+      .editor-lock-button{width:100%;min-height:38px;padding:8px 12px;border:1px solid var(--brd);border-radius:8px;background:var(--bg1);color:var(--txt);font:700 11px var(--fn);cursor:pointer}.editor-lock-button[aria-pressed="true"]{border-color:var(--acc);background:var(--adim);color:var(--acc)}.editor-lock-button:hover{border-color:var(--acc)}.editor-lock-button:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+      .editor-object-lock small{color:var(--mt);font-size:10px;line-height:1.5}.editor-object-fields{min-width:0;margin:0;padding:0;border:0}.editor-object-fields:disabled{opacity:.55}.editor-object-fields:disabled :is(input,select,button){cursor:not-allowed}
+    </style>
     <div class="page" id="page-transformation">
 
 	      <div class="tf-work">
@@ -2602,19 +2671,30 @@ canvas#mon-chart{width:100%;height:100%;display:block}
 	        <!-- Center: 3D viewport -->
 	        <div id="tf-viewport">
 	          <div id="tf-3d-container" style="position:absolute;inset:0"></div>
-	          <div class="tf-stage-top">
+	          <div class="tf-editor-dock" aria-label="เครื่องมือประกอบหุ่นยนต์"><div class="tf-stage-top">
 	            <div class="tf-stage-badge"><span>🤖</span><div><strong>Robot Config</strong><small>พื้นที่ประกอบหุ่นยนต์ 3D</small></div></div>
 	          </div>
+              <div class="editor-history-toolbar" role="group" aria-label="ประวัติการแก้ไขหุ่นยนต์">
+                <button type="button" id="tf-undo" onclick="tfUndo()" title="ย้อนกลับการแก้ไข (Ctrl+Z / ⌘Z)" aria-keyshortcuts="Control+Z Meta+Z" disabled aria-label="ย้อนกลับการแก้ไข (Ctrl+Z / ⌘Z)"><span aria-hidden="true">↶</span></button>
+                <button type="button" id="tf-redo" onclick="tfRedo()" title="เดินหน้า / ทำซ้ำ (Ctrl+Shift+Z / Ctrl+Y / ⌘⇧Z)" aria-keyshortcuts="Control+Shift+Z Control+Y Meta+Shift+Z" disabled aria-label="เดินหน้า / ทำซ้ำ (Ctrl+Shift+Z / Ctrl+Y / ⌘⇧Z)"><span aria-hidden="true">↷</span></button>
+              </div>
+
+              <div class="editor-history-toolbar editor-clipboard-toolbar" role="group" aria-label="คัดลอกและวางชิ้นส่วนหุ่นยนต์">
+                <button type="button" id="tf-copy" onclick="tfCopy()" title="คัดลอกชิ้นส่วนที่เลือก (Ctrl+C / ⌘C)" aria-keyshortcuts="Control+C Meta+C" disabled aria-label="คัดลอกชิ้นส่วนที่เลือก (Ctrl+C / ⌘C)"><span aria-hidden="true">⧉</span></button>
+                <button type="button" id="tf-paste" onclick="tfPaste()" title="วางซ้ำได้โดยไม่ต้องเลือกต้นฉบับ (Ctrl+V / ⌘V)" aria-keyshortcuts="Control+V Meta+V" disabled aria-label="วางซ้ำได้โดยไม่ต้องเลือกต้นฉบับ (Ctrl+V / ⌘V)"><span aria-hidden="true">📋</span></button>
+                <button type="button" id="tf-duplicate" onclick="tfDuplicate()" title="สร้างสำเนาทันที (Ctrl+D / ⌘D)" aria-keyshortcuts="Control+D Meta+D" disabled aria-label="สร้างสำเนาทันที (Ctrl+D / ⌘D)"><span aria-hidden="true">＋</span></button>
+              </div>
 	          <div class="tf-gizmo-bar" id="tf-gizmo-bar">
-	            <button data-mode="translate" class="active" title="ย้ายชิ้นส่วน (W)">✥ ย้าย</button>
-	            <button data-mode="rotate" title="หมุนชิ้นส่วน (E)">⟳ หมุน</button>
-	            <button data-mode="scale" title="ปรับขนาด (R)">⤢ ขนาด</button>
+	            <button data-mode="translate" class="active" title="ย้ายชิ้นส่วน (W)" aria-label="ย้ายชิ้นส่วน (W)"><span aria-hidden="true">✥</span></button>
+	            <button data-mode="rotate" title="หมุนชิ้นส่วน (E)" aria-label="หมุนชิ้นส่วน (E)"><span aria-hidden="true">⟳</span></button>
+	            <button data-mode="scale" title="ปรับขนาด (R)" aria-label="ปรับขนาด (R)"><span aria-hidden="true">⤢</span></button>
 	            <span class="tf-gizmo-sep"></span>
-	            <button id="tf-snap-btn" title="ล็อกจังหวะขยับทีละ 0.1 / หมุนทีละ 15°">⊞ Snap</button>
+	            <button id="tf-snap-btn" title="ล็อกจังหวะขยับทีละ 0.1 / หมุนทีละ 15°" aria-label="ล็อกจังหวะขยับทีละ 0.1 / หมุนทีละ 15°"><span aria-hidden="true">⊞</span></button>
 	          </div>
 
+          </div>
           <!-- View controls (จัดกลุ่ม: Projection + View presets) -->
-          <div class="tf-view-bar">
+          <details class="tf-camera-menu"><summary title="มุมมองและกล้อง">◈ <span>มุมมอง</span></summary><div class="tf-view-bar">
 	            <div class="tf-view-grp">
 	              <div class="tf-view-grp-hd">มุมมอง</div>
 	              <button class="tf-view-btn tf-proj-btn active" data-proj="perspective" onclick="tfSetProjection('perspective')" title="มุมมองปกติ">🔆 3D</button>
@@ -2632,12 +2712,16 @@ canvas#mon-chart{width:100%;height:100%;display:block}
 	              <button class="tf-view-btn" data-view="iso" onclick="tfSetView('iso')" title="มุม 3D">⬚ รวม</button>
 	            </div>
 	            <div class="tf-view-sep"></div>
-	            <button class="tf-view-btn" onclick="tfResetView()" title="จัดกล้องใหม่">⟲ ตั้งกล้อง</button>
+	            <button class="tf-view-btn" onclick="tfFocusSelection()" title="จัดกล้องตรงชิ้นส่วนที่เลือก (F)">⌖ โฟกัสชิ้นส่วน · F</button>
+	            <button class="tf-view-btn" onclick="tfFitView()" title="ซูมให้เห็นหุ่นทั้งตัว โดยเก็บมุมกล้องเดิม">⤢ ดูทั้งหุ่น</button>
+	            <button class="tf-view-btn" onclick="tfResetView()" title="คืนมุม 3D และจัดหุ่นให้อยู่กลางจอ (Home)">⟲ คืนมุมมอง · Home</button>
 	            <button class="tf-view-btn" id="tf-label-toggle" onclick="tfToggleLabels()" title="แสดง/ซ่อนชื่อเฟรม">🏷 ชื่อ</button>
+                <div class="tf-axis-legend" title="ลูกศรชี้ทิศบวกตามแกนชิ้นส่วน ไม่กลับด้านตามกล้อง"><b>แกนชิ้นส่วน</b><span class="tf-axis-x">+X</span><span class="tf-axis-y">+Y</span><span class="tf-axis-z">+Z</span></div>
 	          </div>
+          </details>
 
 	          <div class="rviz-cam-hint">
-	            คลิกเลือกชิ้นส่วน · ลากเมาส์เพื่อหมุนกล้อง · Scroll เพื่อซูม
+	            ลากซ้าย: หมุน · ลากขวา/กลาง หรือ Shift+ลาก: เลื่อน · Scroll: ซูม · F: โฟกัส<br>Tablet: 1 นิ้วหมุน · 2 นิ้วเลื่อน/ซูม · กดค้าง: เมนู
 	          </div>
         </div>
 
@@ -2736,7 +2820,7 @@ canvas#mon-chart{width:100%;height:100%;display:block}
       .map3d-title{display:flex;align-items:center;gap:10px;margin-right:8px}.map3d-title-icon{width:40px;height:40px;display:grid;place-items:center;border-radius:13px;background:linear-gradient(135deg,var(--acc),var(--pur));font-size:21px}.map3d-title strong{display:block;font-size:13px}.map3d-title small{display:block;color:var(--dim);font-size:9px;margin-top:2px}
       .map3d-toolbar{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.map3d-btn{min-height:38px;padding:7px 12px;border:1px solid var(--brd);border-radius:11px;background:var(--bg2);color:var(--mt);font:700 11px var(--fn);cursor:pointer}.map3d-btn:hover,.map3d-btn.active{border-color:var(--acc);color:var(--txt);background:var(--adim)}.map3d-btn.primary{border:0;color:#fff;background:linear-gradient(135deg,var(--acc),var(--pur))}.map3d-btn.lidar{color:var(--tel);border-color:color-mix(in srgb,var(--tel) 38%,var(--brd))}.map3d-spacer{flex:1}.map3d-unit{display:flex;align-items:center;gap:6px;padding:5px 7px 5px 10px;border:1px solid var(--brd);border-radius:11px;color:var(--dim);font-size:10px;background:var(--bg2)}.map3d-unit select{border:0;outline:0;background:transparent;color:var(--txt);font:700 11px var(--fn)}
       .map3d-work{display:flex;flex:1;min-height:0}.map3d-viewport{position:relative;flex:1;min-width:0;overflow:hidden;background:radial-gradient(circle at 50% 35%,#26304a,#0d1019 70%)}#map3d-container{position:absolute;inset:0}.map3d-viewbar{position:absolute;left:12px;top:12px;z-index:4;display:flex;gap:5px;padding:5px;border:1px solid var(--brd);border-radius:12px;background:rgba(15,18,29,.76);backdrop-filter:blur(10px)}.map3d-viewbar button{width:38px;height:34px;border:0;border-radius:8px;background:transparent;color:#c8cce0;cursor:pointer}.map3d-viewbar button:hover{background:rgba(108,99,255,.28);color:#fff}.map3d-help{position:absolute;left:50%;bottom:13px;z-index:4;transform:translateX(-50%);padding:7px 12px;border:1px solid var(--brd);border-radius:999px;background:rgba(15,18,29,.78);color:#aeb4cc;font-size:9px;white-space:nowrap;pointer-events:none;backdrop-filter:blur(8px)}.map3d-status{position:absolute;right:12px;bottom:13px;z-index:4;max-width:42%;padding:7px 10px;border-radius:9px;background:rgba(15,18,29,.78);color:#75ddb4;font-size:9px;pointer-events:none}
-      .map3d-props{width:285px;flex-shrink:0;overflow-y:auto;border-left:1px solid var(--brd);background:var(--bg1)}.map3d-props-head{padding:15px;border-bottom:1px solid var(--brd);background:linear-gradient(135deg,var(--adim),transparent)}.map3d-props-head strong{display:block;font-size:13px}.map3d-props-head small{color:var(--dim);font-size:9px}.map3d-empty{padding:24px 18px;text-align:center;color:var(--dim);font-size:11px;line-height:1.7}.map3d-empty span{display:block;font-size:36px;margin-bottom:7px}.map3d-form{padding:13px}.map3d-section{margin-bottom:15px}.map3d-section-title{margin-bottom:8px;color:var(--acc);font-size:9px;font-weight:800;letter-spacing:.6px;text-transform:uppercase}.map3d-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:7px}.map3d-field{min-width:0}.map3d-field.wide{grid-column:1/-1}.map3d-field label{display:flex;justify-content:space-between;margin-bottom:4px;color:var(--dim);font-size:9px}.map3d-field input{width:100%;height:34px;padding:5px 8px;border:1px solid var(--brd);border-radius:8px;outline:0;background:var(--bg2);color:var(--txt);font:600 10px var(--mono)}.map3d-field input:focus{border-color:var(--acc)}.map3d-danger{width:100%;margin-top:5px;color:var(--red);border-color:color-mix(in srgb,var(--red) 35%,var(--brd));background:color-mix(in srgb,var(--red) 8%,var(--bg2))}.map3d-room{padding:13px;border-top:1px solid var(--brd)}
+      .map3d-props{width:285px;flex-shrink:0;overflow-y:auto;border-left:1px solid var(--brd);background:var(--bg1)}.map3d-props-head{padding:15px;border-bottom:1px solid var(--brd);background:linear-gradient(135deg,var(--adim),transparent)}.map3d-props-head strong{display:block;font-size:13px}.map3d-props-head small{color:var(--dim);font-size:9px}.map3d-empty{padding:24px 18px;text-align:center;color:var(--dim);font-size:11px;line-height:1.7}.map3d-empty span{display:block;font-size:36px;margin-bottom:7px}.map3d-form{padding:13px}.map3d-section{margin-bottom:15px}.map3d-section-title{margin-bottom:8px;color:var(--acc);font-size:9px;font-weight:800;letter-spacing:.6px;text-transform:uppercase}.map3d-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:7px}.map3d-field{min-width:0}.map3d-field.wide{grid-column:1/-1}.map3d-field label{display:flex;justify-content:space-between;margin-bottom:4px;color:var(--dim);font-size:9px}.map3d-field input,.map3d-field select{width:100%;height:34px;padding:5px 8px;border:1px solid var(--brd);border-radius:8px;outline:0;background:var(--bg2);color:var(--txt);font:600 10px var(--mono)}.map3d-field input:focus,.map3d-field select:focus{border-color:var(--acc)}.map3d-field input[type="range"]{padding:0;accent-color:var(--acc)}#map3d-grid-toggle.active{color:var(--acc);border-color:var(--acc)}.map3d-danger{width:100%;margin-top:5px;color:var(--red);border-color:color-mix(in srgb,var(--red) 35%,var(--brd));background:color-mix(in srgb,var(--red) 8%,var(--bg2))}.map3d-room{padding:13px;border-top:1px solid var(--brd)}
       .map3-modal{position:fixed;inset:0;z-index:10000;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(5,7,22,.76);backdrop-filter:blur(7px)}.map3-modal.open{display:flex}.map3-dialog{width:min(720px,96vw);max-height:88vh;overflow:auto;border:1px solid var(--brd);border-radius:22px;background:var(--bg1);box-shadow:0 28px 80px rgba(0,0,0,.38)}.map3-dialog-head{display:flex;align-items:center;justify-content:space-between;padding:17px 20px;border-bottom:1px solid var(--brd)}.map3-dialog-head h3{font-size:15px}.map3-close{width:34px;height:34px;border:0;border-radius:10px;background:var(--bg2);color:var(--mt);cursor:pointer}.map3-cats{display:flex;gap:6px;padding:13px 18px 0;overflow-x:auto}.map3-cat{flex-shrink:0;padding:7px 10px;border:1px solid var(--brd);border-radius:999px;background:var(--bg2);color:var(--mt);font-size:9px;font-weight:800;cursor:pointer}.map3-cat.active,.map3-cat:hover{border-color:var(--acc);background:var(--adim);color:var(--txt)}.map3-palette{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;padding:14px 18px 18px}.map3-object{padding:13px 8px;border:1px solid var(--brd);border-radius:15px;background:var(--bg2);color:var(--txt);text-align:center;cursor:pointer}.map3-object:hover{border-color:var(--acc);transform:translateY(-2px)}.map3-object span{display:block;font-size:29px;margin-bottom:6px}.map3-object strong{display:block;font-size:10px}.map3-object small{display:block;color:var(--dim);font-size:8px;margin-top:3px}.map3-template-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:11px;padding:18px}.map3-template{display:grid;grid-template-columns:58px 1fr auto;align-items:center;gap:12px;padding:14px;border:1px solid var(--brd);border-radius:16px;background:var(--bg2);color:var(--txt);text-align:left;cursor:pointer}.map3-template:hover{border-color:var(--acc);transform:translateY(-2px)}.map3-template>span{width:54px;height:54px;display:grid;place-items:center;border-radius:15px;background:var(--adim);font-size:28px}.map3-template strong{display:block;font-size:11px}.map3-template small{display:block;margin-top:4px;color:var(--dim);font-size:8px;line-height:1.45}.map3-template b{color:var(--acc);font-size:18px}.map3-lidar-body{padding:18px}.map3-lidar-body .map-lidar-card{max-width:none}
       @media(max-width:900px){.map3d-title small{display:none}.map3d-props{width:250px}.map3d-btn span{display:none}.map3-palette{grid-template-columns:repeat(3,1fr)}}@media(max-width:680px){.map3d-top{align-items:flex-start;flex-wrap:wrap}.map3d-title{width:100%}.map3d-work{flex-direction:column}.map3d-viewport{min-height:52vh}.map3d-props{width:100%;max-height:38vh;border-left:0;border-top:1px solid var(--brd)}.map3-palette{grid-template-columns:repeat(2,1fr)}.map3-template-grid{grid-template-columns:1fr}.map3d-help{display:none}}
     </style>
@@ -2811,16 +2895,31 @@ canvas#mon-chart{width:100%;height:100%;display:block}
           <div class="map3d-viewport" id="map3d-viewport">
             <div id="map3d-container"></div>
             <div class="map3d-stage-badge"><span>🗺️</span><div><strong>Map Editor</strong><small>พื้นที่ออกแบบสนาม 3D</small></div></div>
-            <div class="map3d-viewbar"><button onclick="map3dView('iso')" title="มุมมอง 3D">◇</button><button onclick="map3dView('top')" title="มองจากด้านบน">⬆</button><button onclick="map3dView('front')" title="มองด้านหน้า">▣</button><button onclick="map3dFocus()" title="จัดมุมมองให้พอดี">⌂</button></div>
-            <div class="map3d-help">เมาส์ซ้าย: เลือก · เมาส์ขวา: หมุนกล้อง · ล้อเมาส์: ซูม</div>
+            <div class="editor-history-toolbar" role="group" aria-label="ประวัติการแก้ไขห้อง">
+              <button type="button" id="map3d-undo" onclick="map3dUndo()" title="ย้อนกลับการแก้ไข (Ctrl+Z / ⌘Z)" aria-keyshortcuts="Control+Z Meta+Z" disabled><span aria-hidden="true">↶</span> ย้อนกลับ</button>
+              <button type="button" id="map3d-redo" onclick="map3dRedo()" title="เดินหน้า / ทำซ้ำ (Ctrl+Shift+Z / Ctrl+Y / ⌘⇧Z)" aria-keyshortcuts="Control+Shift+Z Control+Y Meta+Shift+Z" disabled><span aria-hidden="true">↷</span> เดินหน้า</button>
+            </div>
+            <div class="editor-history-toolbar editor-clipboard-toolbar" role="group" aria-label="คัดลอกและวางวัตถุในห้อง">
+              <button type="button" id="map3d-copy" onclick="map3dCopy()" title="คัดลอกวัตถุที่เลือก (Ctrl+C / ⌘C)" aria-keyshortcuts="Control+C Meta+C" disabled><span aria-hidden="true">⧉</span> คัดลอก</button>
+              <button type="button" id="map3d-paste" onclick="map3dPaste()" title="วางซ้ำได้โดยไม่ต้องเลือกต้นฉบับ (Ctrl+V / ⌘V)" aria-keyshortcuts="Control+V Meta+V" disabled><span aria-hidden="true">📋</span> วาง</button>
+              <button type="button" id="map3d-duplicate" onclick="map3dDuplicate()" title="สร้างสำเนาทันที (Ctrl+D / ⌘D)" aria-keyshortcuts="Control+D Meta+D" disabled><span aria-hidden="true">＋</span> ทำสำเนา</button>
+            </div>
+            <div class="map3d-viewbar"><button id="map3d-grid-toggle" onclick="map3dToggleGrid()" title="แสดง / ซ่อนตารางระยะ 0.5 เมตร" aria-label="แสดงหรือซ่อนตาราง">▦</button><button onclick="map3dView('iso')" title="มุมมอง 3D">◇</button><button onclick="map3dView('top')" title="มองจากด้านบน">⬆</button><button onclick="map3dView('front')" title="มองด้านหน้า">▣</button><button onclick="map3dFocus()" title="จัดมุมมองให้พอดี">⌂</button></div>
+            <div class="map3d-help">ลากวัตถุ: ย้าย · ลากประตูเข้าผนัง: เจาะช่อง · เมาส์ขวา: หมุนกล้อง</div>
             <div class="map3d-status" id="map3d-status">กำลังเตรียมห้องสร้างแผนที่...</div>
           </div>
           <aside class="map3d-props">
             <div class="map3d-save-top"><div class="map3d-save-label"><strong>Property</strong><small>ตั้งค่าและบันทึกสนาม</small></div><button type="button" class="map3d-btn" id="map3d-save" onclick="map3dSave()">💾 <span>บันทึกแผนที่ simulation</span></button></div>
             <div class="map3d-props-scroll">
               <div class="map3d-props-head"><strong id="map3d-selected-title">คุณสมบัติวัตถุ</strong><small>ค่าที่บันทึกจริงจะเป็นเมตรเสมอ</small></div>
-              <div class="map3d-empty" id="map3d-empty"><span>👆</span>เลือกวัตถุในห้อง<br>เพื่อแก้ไขตำแหน่งและขนาด</div>
+              <div class="map3d-empty" id="map3d-empty"><span>👆</span>เลือกวัตถุในห้องเพื่อเปลี่ยนสี ตำแหน่ง และขนาด<br>วัตถุที่เลือกจะมีออร่าสีฟ้า</div>
               <div class="map3d-form" id="map3d-form" style="display:none">
+                <div class="editor-object-lock">
+                  <button type="button" id="map3d-lock" class="editor-lock-button" aria-pressed="false" onclick="map3dToggleLock()">🔓 ล็อกวัตถุ</button>
+                  <small id="map3d-lock-hint">ปลดล็อกอยู่ — แก้ไขวัตถุได้</small>
+                </div>
+                <fieldset id="map3d-object-fields" class="editor-object-fields">
+                <div class="editor-color-field"><label for="map3d-color">สีของวัตถุ</label><input id="map3d-color" type="color" value="#b49870" oninput="map3dChangeColor(this.value)"></div>
                 <div class="map3d-section"><div class="map3d-section-title">ตำแหน่ง</div><div class="map3d-grid">
                   <div class="map3d-field"><label>X <b class="map3d-unit-label">m</b></label><input id="map3d-x" type="number" step="0.1" onchange="map3dApplyProps()"></div>
                   <div class="map3d-field"><label>Y <b class="map3d-unit-label">m</b></label><input id="map3d-y" type="number" step="0.1" onchange="map3dApplyProps()"></div>
@@ -2832,9 +2931,19 @@ canvas#mon-chart{width:100%;height:100%;display:block}
                   <div class="map3d-field"><label>ยาว <b class="map3d-unit-label">m</b></label><input id="map3d-d" type="number" min="0.001" step="0.1" onchange="map3dApplyProps()"></div>
                   <div class="map3d-field wide"><label>สูง <b class="map3d-unit-label">m</b></label><input id="map3d-h" type="number" min="0.001" step="0.1" onchange="map3dApplyProps()"></div>
                 </div></div>
+                <div class="map3d-section" id="map3d-opening-props" style="display:none">
+                  <div class="map3d-section-title">ช่องเปิดในผนัง</div>
+                  <p id="map3d-opening-status" style="font-size:12px;color:var(--dim);line-height:1.6"></p>
+                  <div id="map3d-door-controls">
+                    <div class="map3d-field"><label for="map3d-door-angle">มุมเปิดประตู <b id="map3d-door-angle-label">90°</b></label><input id="map3d-door-angle" type="range" min="0" max="170" step="5" value="90" oninput="map3dApplyDoor()" style="width:100%"></div>
+                    <div class="map3d-field"><label for="map3d-door-hinge">ด้านบานพับ</label><select id="map3d-door-hinge" onchange="map3dApplyDoor()"><option value="left">ซ้าย</option><option value="right">ขวา</option></select></div>
+                    <small style="color:var(--dim);line-height:1.6">0° = ปิด · 90° = เปิด<br>บานประตูและวงกบเป็นสิ่งกีดขวางใน Sim</small>
+                  </div>
+                </div>
                 <button type="button" class="map3d-btn map3d-danger" onclick="map3dDeleteSelected()">🗑 ลบวัตถุนี้</button>
+                </fieldset>
               </div>
-              <div class="map3d-room"><div class="map3d-section-title">ขนาดพื้นที่</div><div class="map3d-grid">
+              <div class="map3d-room"><div class="map3d-field" style="margin-bottom:14px"><label for="map3d-floor-style">วัสดุพื้นห้อง</label><select id="map3d-floor-style" onchange="map3dChangeFloor(this.value)"><option value="oak">พื้นไม้โอ๊ก</option><option value="tile">กระเบื้องหิน</option><option value="concrete">คอนกรีต</option></select></div><div class="map3d-section-title">ขนาดพื้นที่</div><div class="map3d-grid">
                 <div class="map3d-field"><label>กว้าง <b class="map3d-unit-label">m</b></label><input id="map3d-room-w" type="number" value="8" onchange="map3dApplyRoom()"></div>
                 <div class="map3d-field"><label>ยาว <b class="map3d-unit-label">m</b></label><input id="map3d-room-d" type="number" value="8" onchange="map3dApplyRoom()"></div>
               </div></div>
@@ -2918,11 +3027,12 @@ canvas#mon-chart{width:100%;height:100%;display:block}
     </div>
 
     <div class="page" id="page-3dcomp">
+      <div class="dc-builder-header"><div><strong>🧩 ออกแบบชิ้นส่วนของฉัน</strong><small>เพิ่มรูปทรง → ปรับขนาด ตำแหน่ง และสี → บันทึกเข้าคลัง</small></div><button type="button" class="btn" onclick="switchPage('transformation')">← Robot Config</button></div>
       <div style="flex:1;display:flex;overflow:hidden">
 
         <!-- Left: primitives + parts + library -->
         <div id="dc-left">
-          <div class="dc-hd"><span>🧊</span><span>PRIMITIVES</span></div>
+          <div class="dc-hd"><span>🧊</span><span>เพิ่มรูปทรงพื้นฐาน</span></div>
           <div id="dc-palette" class="dc-palette"></div>
           <div class="dc-sub">ชิ้นส่วนในชิ้นงาน (Parts)</div>
           <div id="dc-parts"></div>
@@ -2933,6 +3043,8 @@ canvas#mon-chart{width:100%;height:100%;display:block}
           <div style="padding:8px 12px;border-top:1px solid var(--brd);display:flex;gap:6px">
             <button class="btn" style="flex:1;background:var(--pur);color:#fff" onclick="dcOpenHoleModal()">✂ เจาะรู (Hole)</button>
           </div>
+          <div class="dc-sub">คลังชิ้นส่วนของฉัน · เปิดแก้ไขได้</div>
+          <div id="dc-library"></div>
         </div>
 
         <!-- Center: 3D viewport -->
@@ -3104,6 +3216,7 @@ canvas#mon-chart{width:100%;height:100%;display:block}
           <span>➕ สร้าง Custom Component</span>
           <button class="btn" style="padding:2px 9px" onclick="tfCloseCustom()">✕</button>
         </div>
+        <div class="tf-compose-entry"><div><strong>ประกอบเซนเซอร์หรืออุปกรณ์จากหลายรูปทรง</strong><p>ใช้กล่อง ทรงกระบอก ทรงกลม และรูปทรงอื่น ๆ จัดวางในพื้นที่ 3D พร้อมปรับสีแต่ละชิ้น</p></div><button type="button" class="btn btn-g" onclick="tfOpenComponentDesigner()">🧩 เปิดหน้าออกแบบ 3D →</button></div>
         <div class="tf-custom-body">
           <div class="tf-custom-form">
             <div class="tf-prop"><label>ชื่อ (เช่น RPLidar C1)</label><input id="tf-c-name" placeholder="RPLidar C1"></div>
@@ -3743,23 +3856,100 @@ canvas#mon-chart{width:100%;height:100%;display:block}
   </aside>
 </div>
 
+<style>
+/* Compact Robot Config tools; room editor and simulation controls keep their layout. */
+.tf-compose-entry{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:14px 16px 0;padding:14px;border:1px solid var(--abrd);border-radius:12px;background:var(--adim);color:var(--txt)}
+.tf-compose-entry strong{font-size:13px}.tf-compose-entry p{font-size:11px;line-height:1.6;color:var(--mt);margin:5px 0}.tf-compose-entry .btn{min-height:40px}
+#page-3dcomp .dc-builder-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;background:var(--bg1);border-bottom:1px solid var(--brd);color:var(--txt)}
+#page-3dcomp .dc-builder-header strong{font-size:13px}#page-3dcomp .dc-builder-header small{display:block;font-size:10px;color:var(--mt);margin-top:4px}
+#page-3dcomp #dc-left{overflow-y:auto}#page-3dcomp #dc-viewport{background:var(--bg0)}
+#page-transformation #tf-add-grid .tf-device-group{margin-bottom:6px;border:0;border-bottom:1px solid var(--brd);border-radius:0;background:transparent}
+#page-transformation #tf-add-grid .tf-device-group>summary{min-height:32px;padding:5px 3px;gap:6px;background:transparent;font-size:10px;font-weight:600;color:var(--mt)}
+#page-transformation #tf-add-grid .tf-device-group>summary::after{transform:none;font-size:10px}
+#page-transformation #tf-add-grid .tf-device-group[open]>summary::after{transform:rotate(180deg)}
+#page-transformation #tf-add-grid .tf-device-count{padding:1px 5px;font-size:9px;font-weight:500}
+#page-transformation #tf-add-grid .tf-device-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;padding:3px 0 8px}
+#page-transformation #tf-add-grid .tf-comp-btn{display:flex;flex-direction:column;justify-content:center;align-items:center;gap:4px;min-width:0;min-height:58px;padding:6px 3px;text-align:center;border-radius:8px;box-shadow:none;font-size:10px;background:var(--bg1);border:1px solid var(--brd);color:var(--txt)}
+#page-transformation #tf-add-grid .tf-comp-btn>span:last-child{min-width:0;max-width:100%}
+#page-transformation #tf-add-grid .tf-comp-btn b{display:block;font-size:10px;font-weight:500;line-height:1.3;overflow-wrap:anywhere}
+#page-transformation #tf-add-grid .tf-comp-btn small{display:none}
+#page-transformation #tf-add-grid .tf-comp-ico{width:22px;height:22px;border-radius:5px;background:transparent;font-size:19px;color:var(--acc)}
+#page-transformation #tf-add-grid .tf-comp-ico svg{width:20px;height:20px}
+#page-transformation #tf-add-grid .tf-accessory{min-height:68px;gap:2px;padding:4px 2px 6px;background:linear-gradient(155deg,var(--bg1),var(--bg2))}
+#page-transformation #tf-add-grid .tf-accessory .tf-comp-ico{width:100%;height:42px}
+#page-transformation #tf-add-grid .tf-accessory .tf-comp-ico img{width:100%;height:42px;object-fit:contain;pointer-events:none;user-select:none;filter:drop-shadow(0 2px 2px #14223522)}
+#page-transformation #tf-add-grid .tf-comp-btn:hover{background:var(--adim);border-color:var(--acc);color:var(--acc)}
+#page-transformation #tf-add-grid .tf-comp-btn:focus-visible{outline:2px solid var(--acc);outline-offset:1px;background:var(--adim)}
+#page-transformation #tf-add-grid .tf-comp-create{border-style:dashed}
+#tf-viewport .tf-context-menu{position:fixed;z-index:15000;width:208px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);overflow:auto;padding:6px;border:1px solid var(--brd);border-radius:13px;background:var(--bg1);color:var(--txt);box-shadow:0 12px 40px #0003;touch-action:pan-y}
+#tf-viewport .tf-context-title{padding:7px 10px;color:var(--mt);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-bottom:1px solid var(--brd);margin-bottom:4px}
+#tf-viewport .tf-context-menu button{display:flex;align-items:center;gap:12px;width:100%;min-height:38px;padding:7px 10px;border:0;border-radius:7px;background:transparent;color:var(--txt);font:500 12px var(--fn);text-align:left;cursor:pointer}
+#tf-viewport .tf-context-menu button span{width:22px;font-size:20px;text-align:center}
+#tf-viewport .tf-context-menu button:hover:enabled,#tf-viewport .tf-context-menu button:focus-visible{background:var(--adim);color:var(--acc);outline:1px solid var(--acc)}
+#tf-viewport .tf-context-menu button:disabled{opacity:.35;cursor:default}
+@media(pointer:coarse){#tf-viewport .tf-context-menu button{min-height:44px}}
+#page-transformation #tf-viewport .tf-editor-dock{position:absolute;top:12px;left:12px;right:118px;z-index:6;display:flex;align-items:center;gap:6px;flex-wrap:wrap;width:fit-content;max-width:calc(100% - 130px);padding:6px;border:1px solid var(--brd);border-radius:14px;background:color-mix(in srgb,var(--bg1) 94%,transparent);backdrop-filter:blur(12px);box-shadow:0 5px 18px #00000012}
+#page-transformation #tf-viewport .tf-editor-dock .tf-stage-top{position:static;display:flex;pointer-events:auto}
+#page-transformation #tf-viewport .tf-editor-dock .tf-stage-badge{min-height:34px;padding:0 8px 0 2px;border:0;background:transparent;box-shadow:none;gap:6px}
+#page-transformation #tf-viewport .tf-editor-dock .tf-stage-badge small{display:none}
+#page-transformation #tf-viewport .tf-editor-dock .tf-stage-badge strong{font-size:11px}
+#page-transformation #tf-viewport .tf-editor-dock .editor-history-toolbar,
+#page-transformation #tf-viewport .tf-editor-dock .tf-gizmo-bar{position:static;display:flex;align-items:center;flex-wrap:nowrap;gap:3px;max-width:none;padding:0 0 0 6px;border:0;border-left:1px solid var(--brd);border-radius:0;background:transparent;box-shadow:none;backdrop-filter:none;overflow:visible}
+#page-transformation #tf-viewport .tf-editor-dock button{display:grid;place-items:center;width:34px;min-width:34px;height:34px;min-height:34px;padding:0;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--mt);cursor:pointer}
+#page-transformation #tf-viewport .tf-editor-dock button span{font:500 21px/1 var(--fn)}
+#page-transformation #tf-viewport .tf-editor-dock button:hover:enabled{background:var(--adim);border-color:var(--abrd);color:var(--acc)}
+#page-transformation #tf-viewport .tf-editor-dock button.active{background:var(--acc);border-color:var(--acc);color:#fff}
+#page-transformation #tf-viewport .tf-editor-dock button.on{background:var(--adim);border-color:var(--acc);color:var(--acc)}
+#page-transformation #tf-viewport .tf-editor-dock button:focus-visible,
+#page-transformation #tf-viewport .tf-camera-menu summary:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+#page-transformation #tf-viewport .tf-camera-menu{position:absolute;right:12px;top:12px;z-index:7}
+#page-transformation #tf-viewport .tf-camera-menu summary{list-style:none;display:flex;align-items:center;justify-content:center;gap:6px;height:46px;padding:0 12px;border:1px solid var(--brd);border-radius:14px;background:var(--bg1);color:var(--txt);font:600 12px var(--fn);cursor:pointer;box-shadow:0 5px 18px #00000012}
+#page-transformation #tf-viewport .tf-camera-menu summary::-webkit-details-marker{display:none}
+#page-transformation #tf-viewport .tf-camera-menu[open] summary{color:var(--acc);border-color:var(--acc)}
+#page-transformation #tf-viewport .tf-camera-menu .tf-view-bar{position:static;margin-top:6px;width:172px;max-height:calc(100vh - 250px);overflow-y:auto;transform:none;padding:8px}
+#page-transformation #tf-viewport .tf-camera-menu .tf-view-grp{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+#page-transformation #tf-viewport .tf-camera-menu .tf-view-grp-hd{grid-column:1/-1;padding:3px}
+#page-transformation #tf-viewport .tf-camera-menu .tf-view-btn{min-height:34px;padding:5px 8px}
+#page-transformation #tf-viewport .tf-axis-legend{display:flex;align-items:center;gap:9px;font-size:11px;padding:7px 2px 2px}
+#page-transformation #tf-viewport .tf-axis-legend b{font-size:10px;font-weight:500;color:var(--mt)}
+#page-transformation #tf-viewport .rviz-cam-hint{pointer-events:none;max-width:calc(100% - 20px);line-height:1.5}
+#page-transformation #tf-3d-container canvas{touch-action:none;user-select:none;-webkit-user-select:none}
+@media(max-width:1100px){#page-transformation #tf-viewport .tf-editor-dock .tf-stage-badge div{display:none}}
+@media(max-width:600px){#page-transformation #tf-viewport .tf-editor-dock{top:8px;left:8px;right:58px;max-width:calc(100% - 70px);gap:4px}#page-transformation #tf-viewport .tf-editor-dock .tf-stage-top{display:none}#page-transformation #tf-viewport .tf-camera-menu{top:8px;right:8px}#page-transformation #tf-viewport .tf-camera-menu summary{padding:0;width:42px}#page-transformation #tf-viewport .tf-camera-menu summary span{display:none}#page-transformation #tf-viewport .tf-camera-menu .tf-view-bar{position:absolute;right:0;top:46px}}
+</style>
 <script src="common.js"></script>
-<script src="app.js?v=20260812-wizard-return4"></script>
-<script src="guide.js?v=20260812-guide1"></script>
-<script src="dashboard.js?v=20260828-real-slam1"></script>
-<script src="lidar.js?v=20260828-10"></script>
+<script src="app.js?v=20260901-presence1"></script>
+<script src="guide.js?v=20260912-real-ros-distros"></script>
+<script src="real-scan-transform.js?v=20261016-tf2"></script>
+<script src="/real-drive-motion.js?v=20261114-channel-order"></script>
+<script src="dashboard.js?v=20261114-channel-order"></script>
+<script src="lidar.js?v=20261016-tf2"></script>
 <script src="editor.js"></script>
 <script src="terminal.js?v=20260812-terminal-fix2"></script>
 <script src="monitor.js"></script>
 <script src="flow.js?v=20260813-quick-package4"></script>
 <script src="run.js"></script>
-  <script src="rviz.js?v=20260812-theme1"></script>
-  <script src="playground.js?v=20260812-wizard-actions4"></script>
+  <script src="robot-wheel-motion.js?v=20260908-wheels1"></script>
+  <script src="rviz.js?v=20261015-tf-frame1"></script>
+  <script src="playground-camera.js?v=20260908-camera1"></script>
+  <script src="navigation-settings.js?v=20260909-nav1"></script>
+  <script src="playground.js?v=20260909-nav1"></script>
 <script src="csg.js"></script>
-<script src="transformation.js?v=20260813-all-encoders3"></script>
-<script src="3dcomponent.js"></script>
-<script src="map.js"></script>
-<script src="map3d.js"></script>
+<script src="robot-visuals.js?v=20261015-tf-frame1"></script>
+<script src="robot-accessories.js?v=20260916-accessory2"></script>
+<script src="robot-accessory-previews.js?v=20260916-accessory2"></script>
+<script src="robot-model-assets.js?v=20260915-real-model1"></script>
+<script src="editor-history.js?v=20260909-objects1"></script>
+<script src="editor-selection.js?v=20260909-objects1"></script>
+<script src="robot-editor-view.js?v=20260916-view1"></script>
+<script src="transformation.js?v=20261015-mecanum-xy2"></script>
+<script src="3dcomponent.js?v=20260912-designer1"></script>
+<script src="real-agent.js?v=20261016-update-route1"></script>
+<script src="task-studio-entry.js?v=20260913-special-card1"></script>
+<script src="map.js?v=20260909-history1"></script>
+<script src="map-geometry.js?v=20260909-lock1"></script>
+<script src="map-scene-assets.js?v=20260909-objects1"></script>
+<script src="map3d.js?v=20260909-save2"></script>
 <script src="error-handler.js"></script>
 <script>
 if (typeof initTerm === 'function') initTerm();

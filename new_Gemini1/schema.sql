@@ -17,16 +17,65 @@ CREATE TABLE IF NOT EXISTS users (
 -- ── Robots ─────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS robots (
   id            INT AUTO_INCREMENT PRIMARY KEY,
-  robot_key     VARCHAR(40) NOT NULL UNIQUE,   -- UUID gen'd by install script
+  robot_key     VARCHAR(80) NOT NULL UNIQUE,   -- physical identity / agent key
   name          VARCHAR(128) NOT NULL,
   ssh_user      VARCHAR(64) DEFAULT 'ubuntu',
   ssh_pass      VARCHAR(255),               -- encrypted
   workspace     VARCHAR(255) DEFAULT '~/ros2_ws',
   description   VARCHAR(512),
+  agent_version VARCHAR(32),             -- last version reported by a physical Agent
+  cluster_id    INT NULL,                 -- Sim placement; NULL for physical robots
   added_by      INT,
   created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (added_by) REFERENCES users(id) ON DELETE SET NULL
+);
+
+-- A real robot stays canonical in `robots`, while more than one account can
+-- add it to their own team. Simulation keys remain private at API level.
+CREATE TABLE IF NOT EXISTS robot_user_access (
+  robot_id    INT NOT NULL,
+  user_id     INT NOT NULL,
+  alias       VARCHAR(128),
+  created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (robot_id, user_id),
+  INDEX idx_robot_access_user_created (user_id, created_at, robot_id),
+  FOREIGN KEY (robot_id) REFERENCES robots(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- The Master remains a Sim host (id=1). Worker keys identify a registered
+-- host; user authorization is always checked against cluster_user_access.
+CREATE TABLE IF NOT EXISTS clusters (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  cluster_key VARCHAR(80) NOT NULL UNIQUE,
+  name VARCHAR(100) NOT NULL,
+  kind ENUM('master','worker') NOT NULL DEFAULT 'worker',
+  enabled TINYINT(1) NOT NULL DEFAULT 1,
+  max_users INT NOT NULL DEFAULT 20,
+  max_sims INT NOT NULL DEFAULT 2,
+  secret_hash CHAR(64),
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS cluster_user_access (
+  cluster_id INT NOT NULL,
+  user_id INT NOT NULL,
+  role ENUM('admin','user') NOT NULL DEFAULT 'user',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY(cluster_id,user_id),
+  INDEX idx_cluster_user(user_id,cluster_id),
+  FOREIGN KEY(cluster_id) REFERENCES clusters(id) ON DELETE CASCADE,
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS cluster_sim_leases (
+  robot_id INT NOT NULL PRIMARY KEY,
+  cluster_id INT NOT NULL,
+  lease_token CHAR(48) NOT NULL,
+  expires_at DATETIME NOT NULL,
+  INDEX idx_cluster_sim_capacity(cluster_id,expires_at),
+  FOREIGN KEY(robot_id) REFERENCES robots(id) ON DELETE CASCADE,
+  FOREIGN KEY(cluster_id) REFERENCES clusters(id) ON DELETE CASCADE
 );
 
 -- ── Sessions ───────────────────────────────────────────────────
@@ -100,6 +149,8 @@ CREATE TABLE IF NOT EXISTS robot_connections (
   user_id     INT,
   connected_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   disconnected_at DATETIME,
+  INDEX idx_robot_connections_robot_id (robot_id, id),
+  INDEX idx_robot_connections_user_open (user_id, disconnected_at, id),
   FOREIGN KEY (robot_id) REFERENCES robots(id) ON DELETE CASCADE,
   FOREIGN KEY (user_id)  REFERENCES users(id)  ON DELETE SET NULL
 );

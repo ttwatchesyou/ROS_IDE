@@ -4,13 +4,93 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const { spawnSync } = require('node:child_process');
-const { genMapsimFiles, SIM_STATE_PUB, SimEngine, wsRoot, toAbs, writeTfPackage, writeOdomPackage, robotCollides, motionIsClear } = require('../sim');
+const { spawn, spawnSync } = require('node:child_process');
+const { genMapsimFiles, SIM_STATE_PUB, SimEngine, wsRoot, toAbs, writeTfPackage, writeOdomPackage, robotCollides, motionIsClear, domainFor, reserveDomain, releaseDomain, buildSimProcessEnvironment } = require('../sim');
 const { buildProjectScanScript, parseProjectScanOutput, inspectSimulationMissionArtifacts, completeSimulationWizardMapping, completeSimulationWizardNavigation, resetSimulationWizardAfterFieldChange, readSimulationWizardProgress } = require('../project-scanner');
 const { writeNavigationPackage, writeProjectInstaller } = require('../navigation-export');
 
 const root = path.resolve(__dirname, '..');
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
+
+function runIsolatedServerScenario(scenario,{timeout=6000,report=false}={}){
+  const bootstrap=`
+'use strict';
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
+const Module=require('node:module');
+const serverPath=${JSON.stringify(path.join(root,'server.js'))};
+const routes=new Map();
+const route=(method)=>(pathname,...handlers)=>{routes.set(method+' '+pathname,handlers);return app;};
+const app={set(){return app;},use(){return app;},get:route('GET'),post:route('POST'),put:route('PUT'),patch:route('PATCH'),delete:route('DELETE')};
+function express(){return app;}
+const middleware=()=> (_req,_res,next)=>{if(next)next();};
+express.raw=middleware;express.json=middleware;express.static=middleware;
+const httpServer={on(){return httpServer;},listen(){return httpServer;},close(done){if(done)done();}};
+class FakeWebSocketServer{
+  constructor(){this.clients=new Set();this.handlers=new Map();}
+  on(event,handler){const list=this.handlers.get(event)||[];list.push(handler);this.handlers.set(event,list);return this;}
+  emit(event,...args){for(const handler of this.handlers.get(event)||[])handler(...args);}
+  handleUpgrade(_req,_socket,_head,done){done(makeSocket(null));}
+}
+const WebSocket={OPEN:1,CLOSED:3,Server:FakeWebSocketServer};
+const pool={
+  query(sql,params=[]){if(!globalThis.__query)throw new Error('No fake DB query handler for '+sql);return globalThis.__query(sql,params);},
+  async getConnection(){return{query:(sql,params=[])=>pool.query(sql,params),async beginTransaction(){},async commit(){},async rollback(){},release(){}};},
+  async end(){},
+};
+const scannerStub={
+  buildProjectScanScript(){return 'slow project scan';},
+  parseProjectScanOutput(){return{capabilities:[{id:'urdf',detected:true},{id:'tf',detected:true},{id:'odom',detected:true}]};},
+  scanLocalProject(){return{capabilities:[]};},inspectSimulationMissionArtifacts(){return[];},
+  readSimulationWizardProgress(){return{completed:{}};},resetSimulationWizardAfterFieldChange(){},
+  completeSimulationWizardMapping(){},completeSimulationWizardNavigation(){},
+};
+const originalLoad=Module._load;
+Module._load=function(request,parent,isMain){
+  if(parent&&parent.filename===serverPath){
+    if(request==='express')return express;
+    if(request==='http')return{createServer(){return httpServer;}};
+    if(request==='ws')return WebSocket;
+    if(request==='cors')return middleware;
+    if(request==='mysql2/promise')return{createPool(){return pool;}};
+    if(request==='./project-scanner')return scannerStub;
+    if(request==='./mapsim-host-lock'&&process.env.ROSIDE_TEST_ROS!=='1')return {acquireMapsimHostLock:async()=>async()=>{}};
+  }
+  return originalLoad.call(this,request,parent,isMain);
+};
+let serverSource=fs.readFileSync(serverPath,'utf8');
+const startMarker='\\nstart();',startAt=serverSource.lastIndexOf(startMarker);
+assert.ok(startAt>=0&&serverSource.slice(startAt+startMarker.length).trim()==='', 'server bootstrap changed; update the isolated regression harness');
+serverSource=serverSource.slice(0,startAt)+'\\nmodule.exports.__regressionHooks={sessions,agents,pendingReqs,webSockets,monSockets,robotPresenceSockets,robotProgressCache,dashboardRuntimeCache,authSessionCache,membershipCache,applicationCatalogCache,simRvizStreams,simRvizStreamsByTerm,robotControlLeases,robotRuntimeOperations,robotOnlineUserCount,getDashboardRuntime,getMembership,tokenUser,getApplicationCatalog,agentReq,routeAgentPtyMessage,validateSimMapData,wss,WebSocket};\\n';
+const compiled=new Module(serverPath,module);compiled.filename=serverPath;compiled.paths=Module._nodeModulePaths(path.dirname(serverPath));
+try{compiled._compile(serverSource,serverPath);}finally{Module._load=originalLoad;}
+const hooks=compiled.exports.__regressionHooks;
+function makeSocket(user){
+  const handlers=new Map();
+  return{user,readyState:WebSocket.OPEN,bufferedAmount:0,sent:[],
+    on(event,handler){const list=handlers.get(event)||[];list.push(handler);handlers.set(event,list);return this;},
+    emit(event,...args){for(const handler of handlers.get(event)||[])handler(...args);},
+    send(payload){this.sent.push(JSON.parse(String(payload)));},
+    close(code,reason){if(this.readyState===WebSocket.CLOSED)return;this.closeCode=code;this.closeReason=reason;this.readyState=WebSocket.CLOSED;this.emit('close');},
+  };
+}
+function invoke(method,pathname,request={}){
+  const handlers=routes.get(method+' '+pathname);assert.ok(handlers,'missing route '+method+' '+pathname);
+  const handler=handlers[handlers.length-1];request.body=request.body||{};request.params=request.params||{};request.query=request.query||{};
+  return new Promise((resolve,reject)=>{
+    let settled=false;const finish=value=>{if(settled)return;settled=true;clearTimeout(timer);resolve(value);};
+    const timer=setTimeout(()=>{if(!settled){settled=true;reject(new Error('route timeout '+method+' '+pathname));}},globalThis.__routeTimeout||1500);
+    const response={statusCode:200,headers:{},status(code){this.statusCode=code;return this;},setHeader(key,value){this.headers[key]=value;return this;},json(body){finish({status:this.statusCode,body});return this;},send(body){finish({status:this.statusCode,body});return this;}};
+    try{Promise.resolve(handler(request,response)).catch(reject);}catch(error){reject(error);}
+  });
+}
+const tick=()=>new Promise(resolve=>setImmediate(resolve));
+`;
+  const result=spawnSync(process.execPath,['-e',bootstrap+`\n(async()=>{${scenario}\n})().then(()=>process.exit(0)).catch(error=>{console.error(error&&error.stack||error);process.exit(1);});`],{cwd:root,encoding:'utf8',timeout});
+  assert.equal(result.status,0,[result.error?.message,result.stdout,result.stderr].filter(Boolean).join('\n'));
+  if(report)console.log(result.stdout);
+}
 
 test('generated mapsim Python compiles and contains initialized runtime state', () => {
   const source = genMapsimFiles()['sim_robot_mapsim/mapsim.py'];
@@ -30,10 +110,24 @@ test('generated state publisher Python compiles', () => {
   assert.equal(result.status, 0, result.stderr);
 });
 
+test('simulation uses modern localhost discovery without inheriting the deprecated ROS setting', () => {
+  const environment=buildSimProcessEnvironment({
+    ROS_DOMAIN_ID:'42',
+    ROS_AUTOMATIC_DISCOVERY_RANGE:'LOCALHOST',
+  },{
+    PATH:'/usr/bin',
+    ROS_LOCALHOST_ONLY:'1',
+  });
+  assert.equal(environment.ROS_DOMAIN_ID,'42');
+  assert.equal(environment.ROS_AUTOMATIC_DISCOVERY_RANGE,'LOCALHOST');
+  assert.equal(environment.ROS_LOCALHOST_ONLY,undefined);
+});
+
 test('simulation lifecycle never leaves MapSim and fallback publishers running together', () => {
   const sim=read('sim.js'),server=read('server.js');
   assert.match(sim,/PID=\$\(cat '\$\{root\}\/tmp\/_mapsim\.pid'/);
-  assert.ok((sim.match(/install\/\.\*\/\[m\]apsim/g)||[]).length>=3);
+  assert.match(sim,/resetBackend=\(\)=>remote\?remoteRequest\('exec'/);
+  assert.match(sim,/const backendReady=resetBackend\(\)\.then\(\(\)=>startBackend\(\)\)/);
   assert.match(sim,/fss\.writeFileSync\(simPubPidFile, String\(simPubChild\.pid\)\)/);
   assert.match(server,/_sim_state_pub\[\.\]py/);
 });
@@ -47,6 +141,50 @@ test('sim file paths cannot traverse outside their workspace', () => {
   const workspace=path.join(root,'sim_ws','SIM-test');
   assert.equal(toAbs(workspace,'','../../etc/passwd'),workspace);
   assert.equal(toAbs(workspace,'src','../../../outside'),workspace);
+});
+
+test('active simulations reserve unique ROS domains and release capacity', () => {
+  // Capacity tests need an empty lease pool, not the live users' 230 domains.
+  const fixture=fs.mkdtempSync(path.join(require('node:os').tmpdir(),'sim-domain-capacity-'));
+  const Module=require('node:module'),filename=path.join(root,'sim.js'),isolated=new Module(filename,module);
+  isolated.filename=filename;isolated.paths=Module._nodeModulePaths(root);
+  isolated._compile(read('sim.js').replace("const SIM_WS_ROOT = path.join(__dirname, 'sim_ws');",`const SIM_WS_ROOT = ${JSON.stringify(fixture)};`),filename);
+  const {reserveDomain,releaseDomain,domainFor}=isolated.exports;
+  const prefix=`SIM-domain-regression-${process.pid}-${Date.now()}`;
+  const keys=Array.from({length:230},(_,index)=>`${prefix}-${index}`);
+  const overflow=`${prefix}-overflow`;
+  try{
+    const domains=keys.map(key=>reserveDomain(key));
+    assert.equal(new Set(domains).size,230,'every active simulation must have a distinct ROS domain');
+    assert.ok(domains.every(domain=>Number.isInteger(domain)&&domain>=1&&domain<=230));
+    assert.equal(reserveDomain(keys[0]),domains[0],'reserving the same simulation must be idempotent');
+    assert.equal(domainFor(keys[0]),domains[0]);
+    assert.throws(()=>reserveDomain(overflow),error=>error?.code==='SIM_DOMAIN_CAPACITY_REACHED');
+
+    const releasedIndex=73,releasedDomain=domains[releasedIndex];
+    releaseDomain(keys[releasedIndex],releasedDomain);
+    assert.equal(reserveDomain(overflow),releasedDomain,'a closed simulation must return its domain to the pool');
+    assert.equal(domainFor(overflow),releasedDomain);
+  }finally{
+    keys.forEach(key=>releaseDomain(key));
+    releaseDomain(overflow);
+    fs.rmSync(fixture,{recursive:true,force:true});
+  }
+});
+
+test('SIM runtime leases isolate separate server processes and recover after a crash', async () => {
+  const key=`SIM-cross-process-${process.pid}-${Date.now()}`,simPath=path.join(root,'sim.js');
+  const child=spawn(process.execPath,['-e',`const sim=require(${JSON.stringify(simPath)});const domain=sim.reserveDomain(${JSON.stringify(key)});if(process.send)process.send({domain});setInterval(()=>{},1000);`],{stdio:['ignore','ignore','inherit','ipc']});
+  try{
+    const ready=await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('child lease timeout')),3000);child.once('message',message=>{clearTimeout(timer);resolve(message);});child.once('error',reject);});
+    assert.ok(Number.isInteger(ready.domain));
+    assert.throws(()=>reserveDomain(key),error=>error?.code==='SIM_RUNTIME_ALREADY_ACTIVE');
+  }finally{
+    if(child.exitCode===null&&child.signalCode===null){const exited=new Promise(resolve=>child.once('exit',resolve));child.kill('SIGKILL');await exited;}
+  }
+  const recovered=reserveDomain(key);
+  assert.ok(Number.isInteger(recovered),'a dead process lease must be reclaimed');
+  releaseDomain(key,recovered);
 });
 
 test('sim engine applies map walls and start pose consistently', () => {
@@ -69,7 +207,7 @@ test('simulation physics stops the robot body at walls and furniture outlines',(
   const mapsim=genMapsimFiles()['sim_robot_mapsim/mapsim.py'];
   assert.match(mapsim,/ROBOT_RADIUS = 0\.24/);
   assert.match(mapsim,/def motion_is_clear/);
-  assert.match(mapsim,/if motion_is_clear\(self\.x,self\.y,next_x,next_y\)/);
+  assert.match(mapsim,/if v==0\.0 or motion_is_clear\(self\.x,self\.y,next_x,next_y\)/);
   assert.match(mapsim,/ชนสิ่งกีดขวาง หุ่นหยุดแล้ว/);
 });
 
@@ -81,20 +219,809 @@ test('privileged HTTP APIs require authentication', () => {
   }
 });
 
+test('real-robot mapping save and Nav2 checks are bounded and exposed by the backend', () => {
+  const server=read('server.js'),mapping=read('public/mapping.js');
+  assert.match(server,/app\.post\('\/api\/mapping\/check',auth/);
+  assert.match(server,/timeout --signal=TERM 18s ros2 run nav2_map_server map_saver_cli/);
+  assert.match(mapping,/api\('\/api\/mapping\/save',[\s\S]*?,25000\)/);
+  assert.match(mapping,/finally\{button\.disabled=!mapData;\}/);
+  assert.match(mapping,/Server ยังไม่ได้โหลด API ตรวจแผนที่ กรุณารีสตาร์ต backend/);
+});
+
+test('real-robot Nav2 installation never builds an ros-unknown package name', () => {
+  const server=read('server.js');
+  assert.match(server,/function rosDistroForSession\(s,setupPath=''/);
+  assert.match(server,/\['unknown','undefined','null','none'\]\.includes\(value\)/);
+  assert.match(server,/distro=rosDistroForSession\(s,p\.setup\)/);
+  assert.doesNotMatch(server,/distro=\(String\(s\.rosInfo\?\.distro/);
+  assert.match(server,/source "\$setup"[\s\S]+ROS_DISTRO=/);
+  assert.match(server,/dpkg --configure -a/);
+  assert.match(server,/Acquire::Retries=3/);
+  assert.match(server,/error\.commandTimedOut=timedOut/);
+  assert.match(server,/const NAV2_INSTALL_JOB=/);
+  assert.match(server,/async function startNavigationInstall/);
+  assert.match(server,/roside-nav2-install[\s\S]+nohup bash/);
+  assert.match(server,/res\.status\(202\)\.json\(\{ok:true,[^}]+installing:true/);
+  assert.match(server,/ROSIDE_NAV2_PACKAGES=ready/);
+  assert.match(server,/--no-install-recommends/);
+  assert.match(server,/3600s apt-get/);
+  assert.match(server,/status==='FAILED:124'/);
+  assert.match(server,/holder_age[\s\S]+-ge 120/);
+  assert.match(server,/install -y ros-\$\{distro\}-nav2-bringup ros-\$\{distro\}-nav2-amcl/);
+  const navigation=read('public/navigation.js');
+  assert.match(navigation,/action:'install-status'/);
+  assert.match(navigation,/watchNavInstall\(\)/);
+  assert.match(navigation,/function installProgressLine/);
+  assert.match(navigation,/คุณไม่ต้องกดปุ่มซ้ำ/);
+});
+
+test('dashboard does not block system status on the source-code scan', () => {
+  const server=read('server.js'),dashboard=read('public/dashboard.js');
+  assert.match(server,/projectViewPromise=Promise\.race/);
+  assert.match(server,/pending:true,workspace/);
+  assert.match(server,/getDashboardRuntime\(s\),projectViewPromise/);
+  assert.match(server,/expiresAt:Number\.POSITIVE_INFINITY/);
+  assert.match(server,/timeout 3 ros2 node list/);
+  assert.match(dashboard,/project\?\.pending/);
+  assert.match(dashboard,/ผลภารกิจจะอัปเดตอัตโนมัติ/);
+  assert.match(server,/app\.post\('\/api\/dashboard\/project'/);
+  assert.match(dashboard,/void finishProjectScan\(\)/);
+  assert.match(dashboard,/progressPercent\.textContent='…'/);
+});
+
 test('robots are listed newest first for admins and regular users', () => {
   const source = read('server.js');
-  assert.equal((source.match(/ORDER BY r\.created_at DESC, r\.id DESC/g) || []).length, 2);
+  assert.match(source,/LEFT JOIN users u ON r\.added_by=u\.id ORDER BY r\.created_at DESC, r\.id DESC/);
+  assert.match(source,/WHERE rua\.user_id=\? AND \(r\.robot_key NOT LIKE 'SIM-%' OR \(cua\.user_id IS NOT NULL AND c\.enabled=1\)\) ORDER BY rua\.created_at DESC, r\.id DESC/);
+});
+
+test('real robots are canonical while access is unique per user and SIM keys stay exclusive', () => {
+  const schema=read('schema.sql'),server=read('server.js');
+  assert.match(schema,/CREATE TABLE IF NOT EXISTS robot_user_access/);
+  assert.match(schema,/(?:PRIMARY KEY|UNIQUE KEY[^\n(]*)\s*\(\s*robot_id\s*,\s*user_id\s*\)/);
+  assert.match(schema,/FOREIGN KEY\s*\(robot_id\)\s*REFERENCES robots\s*\(id\)/);
+  assert.match(server,/CREATE TABLE IF NOT EXISTS robot_user_access/);
+  assert.match(server,/SIMULATION_KEY_EXISTS/);
+  assert.match(server,/ROBOT_ALREADY_ADDED/);
+
+  runIsolatedServerScenario(`
+    const state={robots:[],access:[],nextRobotId:1};
+    const normalized=sql=>String(sql).replace(/\\s+/g,' ').trim().toLowerCase();
+    globalThis.__query=async(sql,params=[])=>{
+      const text=normalized(sql);
+      if(text.includes('get_lock('))return[[{acquired:1}],[]];
+      if(text.includes('release_lock('))return[[{released:1}],[]];
+      if(text.startsWith('select plan_code,status,starts_at'))return[[],[]];
+      if(text.startsWith('select c.id from clusters c join cluster_user_access'))return[[{id:1}],[]];
+      if(text.startsWith('select * from robots where robot_key='))return[[...state.robots.filter(robot=>robot.robot_key===params[0])],[]];
+      if(text.startsWith('select 1 from robot_user_access'))return[[...state.access.filter(item=>item.robot_id===Number(params[0])&&item.user_id===Number(params[1])).map(()=>({'1':1}))],[]];
+      if(text.startsWith('insert into robots(')){
+        const id=state.nextRobotId++;state.robots.push({id,robot_key:params[0],name:params[1],ssh_user:params[2],ssh_pass:params[3],workspace:params[4],description:params[5],added_by:Number(params[6])});
+        return[{insertId:id,affectedRows:1},[]];
+      }
+      if(text.startsWith('insert into robot_user_access')){
+        const robot_id=Number(params[0]),user_id=Number(params[1]);
+        if(state.access.some(item=>item.robot_id===robot_id&&item.user_id===user_id))throw Object.assign(new Error('duplicate access'),{code:'ER_DUP_ENTRY'});
+        state.access.push({robot_id,user_id,alias:params.length>2?params[2]:null});return[{affectedRows:1},[]];
+      }
+      if(text.includes('sum(r.robot_key like')&&text.includes('from robot_user_access')){
+        const userId=Number(params[0]),owned=state.access.filter(item=>item.user_id===userId).map(item=>state.robots.find(robot=>robot.id===item.robot_id)).filter(Boolean);
+        return[[{simulation_count:owned.filter(robot=>robot.robot_key.startsWith('SIM-')).length,real_count:owned.filter(robot=>!robot.robot_key.startsWith('SIM-')).length}],[]];
+      }
+      throw new Error('Unhandled fake DB query: '+sql+' params='+JSON.stringify(params));
+    };
+    const user1={id:11,username:'one',role:'user'},user2={id:22,username:'two',role:'user'};
+    const add=(user,robot_key,name)=>invoke('POST','/api/robots',{user,body:{robot_key,name,ssh_user:'ubuntu',ssh_pass:'secret',workspace:'~/ros2_ws',description:''}});
+    const sharedKey='REAL-shared-robot-0001';
+    const first=await add(user1,sharedKey,'Owner robot');
+    assert.equal(first.status,200);assert.equal(first.body.ok,true);assert.equal(first.body.attached,false);
+    const attached=await add(user2,sharedKey,'Team alias');
+    assert.equal(attached.status,200);assert.equal(attached.body.ok,true);assert.equal(attached.body.attached,true);assert.equal(attached.body.id,first.body.id);
+    const duplicate=await add(user1,sharedKey,'Duplicate');
+    assert.equal(duplicate.status,409);assert.equal(duplicate.body.ok,false);assert.equal(duplicate.body.code,'ROBOT_ALREADY_ADDED');
+
+    const simKey='SIM-exclusive-domain-0001';
+    const simOwner=await add(user1,simKey,'Private simulation');
+    assert.equal(simOwner.body.ok,true);
+    const simDuplicate=await add(user2,simKey,'Must not attach');
+    assert.equal(simDuplicate.status,409);assert.equal(simDuplicate.body.code,'SIMULATION_KEY_EXISTS');
+    const lowercaseSim=await add(user2,'sim-prefix-bypass-00001','Invalid lowercase SIM');
+    assert.equal(lowercaseSim.status,400);assert.equal(lowercaseSim.body.error,'Invalid robot key');
+    const mixedCaseSim=await add(user2,'Sim-prefix-bypass-00002','Invalid mixed-case SIM');
+    assert.equal(mixedCaseSim.status,400);assert.equal(mixedCaseSim.body.error,'Invalid robot key');
+    assert.equal(state.robots.length,2,'shared real robot must keep one canonical robots row');
+    assert.deepEqual(state.access.map(item=>[item.robot_id,item.user_id]),[[1,11],[1,22],[2,11]]);
+  `);
+});
+
+test('robot presence is authorized, counts distinct live users, and robot lists never await project scans', () => {
+  const server=read('server.js');
+  assert.match(server,/function robotOnlineUserCount\(robotKey\)/);
+  assert.match(server,/SELECT r\.robot_key FROM robot_user_access rua JOIN robots r ON r\.id=rua\.robot_id LEFT JOIN cluster_user_access cua/);
+  assert.match(server,/app\.post\('\/api\/robots\/progress',auth/);
+
+  runIsolatedServerScenario(`
+    const shared={id:7,robot_key:'REAL-presence-robot-0001',name:'Shared',ssh_user:'ubuntu',ssh_pass:'',workspace:'~/ros2_ws',description:'',added_by:101};
+    const hidden={id:8,robot_key:'REAL-hidden-robot-00001',name:'Hidden',ssh_user:'ubuntu',ssh_pass:'',workspace:'~/ros2_ws',description:'',added_by:303};
+    const robots=[shared,hidden],access=[{robot_id:7,user_id:101,alias:null},{robot_id:7,user_id:202,alias:'Team Shared'},{robot_id:8,user_id:303,alias:null}];
+    const normalized=sql=>String(sql).replace(/\\s+/g,' ').trim().toLowerCase();
+    const rowsFor=userId=>access.filter(item=>item.user_id===Number(userId)).map(item=>({...robots.find(robot=>robot.id===item.robot_id),access_alias:item.alias,added_by_name:'owner'}));
+    globalThis.__query=async(sql,params=[])=>{
+      const text=normalized(sql);
+      if(text.startsWith('select plan_code,status,starts_at'))return[[],[]];
+      if(text.includes('sum(r.robot_key like')&&text.includes('from robot_user_access')){
+        const owned=rowsFor(params[0]);return[[{simulation_count:0,real_count:owned.length}],[]];
+      }
+      if(text.includes('select r.*,rua.alias access_alias')&&text.includes('where rua.user_id=?'))return[rowsFor(params[0]),[]];
+      if(text.startsWith('select r.robot_key from robot_user_access')&&text.includes('where rua.user_id=?'))return[rowsFor(params[0]).map(robot=>({robot_key:robot.robot_key})),[]];
+      if(text.startsWith('select r.* from robot_user_access')&&text.includes('r.id in')){
+        const userId=Number(params[0]),ids=params.slice(1).map(Number);return[rowsFor(userId).filter(robot=>ids.includes(robot.id)),[]];
+      }
+      throw new Error('Unhandled fake DB query: '+sql+' params='+JSON.stringify(params));
+    };
+
+    hooks.agents.set(shared.robot_key,{ws:{readyState:WebSocket.OPEN,send(raw){
+      const request=JSON.parse(String(raw));
+      if(request.type==='request')setTimeout(()=>hooks.pendingReqs.get(request.reqId)?.({ok:true,data:{stdout:'delayed scan'}}),350);
+    }}});
+    const user1={id:101,username:'owner',role:'user'},user2={id:202,username:'team',role:'user'},outsider={id:404,username:'outsider',role:'user'};
+    const expiresAt=Date.now()+60000;
+    hooks.sessions.set('owner-session',{userId:101,robotKey:shared.robot_key,robotDbId:shared.id,expiresAt});
+    hooks.sessions.set('team-session',{userId:202,robotKey:shared.robot_key,robotDbId:shared.id,expiresAt});
+    const openStatus=async user=>{const socket=makeSocket(user);hooks.wss.emit('connection',socket,'/ws/robot-status');await tick();await tick();return socket;};
+    const ownerSocket1=await openStatus(user1),ownerSocket2=await openStatus(user1),teamSocket=await openStatus(user2),outsiderSocket=await openStatus(outsider);
+    ownerSocket1.emit('message',JSON.stringify({type:'watch',sessionId:'owner-session'}));
+    ownerSocket2.emit('message',JSON.stringify({type:'watch',sessionId:'owner-session'}));
+    teamSocket.emit('message',JSON.stringify({type:'watch',sessionId:'team-session'}));
+    outsiderSocket.emit('message',JSON.stringify({type:'watch',sessionId:'owner-session'}));
+    assert.equal(hooks.robotOnlineUserCount(shared.robot_key),2,'two sockets from one user must still count as one user');
+    assert.equal(hooks.robotOnlineUserCount(hidden.robot_key),0,'a socket without access must not create presence');
+    assert.ok(outsiderSocket.sent.some(message=>message.type==='presence_error'),'a user must not watch another user session');
+
+    const started=performance.now();
+    const listed=await invoke('GET','/api/robots',{user:user1});
+    const elapsed=performance.now()-started;
+    assert.equal(listed.body.ok,true);assert.equal(listed.body.robots.length,1);
+    assert.equal(listed.body.robots[0].onlineUsers,2);
+    assert.equal(listed.body.robots[0].wizardProgress.pending,true);
+    assert.ok(elapsed<180,'robot list waited '+elapsed.toFixed(1)+'ms for a 350ms project scan');
+
+    const authorized=await invoke('POST','/api/robots/progress',{user:user1,body:{robotIds:[7,8]}});
+    assert.deepEqual(authorized.body.robots.map(robot=>robot.id),[7],'progress polling must filter inaccessible robot ids');
+    const forbidden=await invoke('POST','/api/robots/progress',{user:outsider,body:{robotIds:[7]}});
+    assert.deepEqual(forbidden.body.robots,[]);
+
+    ownerSocket1.close();assert.equal(hooks.robotOnlineUserCount(shared.robot_key),2);
+    ownerSocket2.close();assert.equal(hooks.robotOnlineUserCount(shared.robot_key),1);
+    teamSocket.close();assert.equal(hooks.robotOnlineUserCount(shared.robot_key),0);
+    outsiderSocket.close();
+  `);
+});
+
+test('revoked sessions reject operational websocket input and disconnect closes their streams', () => {
+  runIsolatedServerScenario(`
+    globalThis.__query=async(sql)=>String(sql).startsWith('UPDATE robot_connections')?[{affectedRows:1},[]]:(()=>{throw new Error('Unhandled fake DB query: '+sql);})();
+    const robotKey='REAL-operational-0001',user={id:51,username:'operator',role:'user'},agentMessages=[];
+    hooks.agents.set(robotKey,{ws:{readyState:WebSocket.OPEN,send(raw){agentMessages.push(JSON.parse(String(raw)));}}});
+    const session={userId:user.id,robotKey,robotDbId:9,rosInfo:{setupBash:'/opt/ros/humble/setup.bash'},workspace:'~/ros2_ws',expiresAt:Date.now()+60000};
+
+    hooks.sessions.set('revoked-session',session);
+    const revokedSocket=makeSocket(user);hooks.wss.emit('connection',revokedSocket,'/ws/terminal');
+    revokedSocket.emit('message',JSON.stringify({type:'init',sessionId:'revoked-session',cols:100,rows:30}));
+    assert.ok(revokedSocket.termId);assert.equal(hooks.webSockets.get(revokedSocket.termId),revokedSocket);
+    hooks.sessions.delete('revoked-session');
+    revokedSocket.emit('message',JSON.stringify({type:'data',data:'DANGEROUS_COMMAND\\n'}));
+    assert.equal(revokedSocket.readyState,WebSocket.CLOSED);assert.equal(revokedSocket.closeCode,1008);
+    assert.ok(revokedSocket.sent.some(message=>message.type==='error'&&message.message==='Session expired or revoked'));
+    assert.equal(agentMessages.some(message=>message.type==='pty_input'&&message.data==='DANGEROUS_COMMAND\\n'),false,'revoked input reached the robot agent');
+
+    hooks.sessions.set('disconnect-session',{...session,expiresAt:Date.now()+60000});
+    const disconnectedSocket=makeSocket(user);hooks.wss.emit('connection',disconnectedSocket,'/ws/terminal');
+    disconnectedSocket.emit('message',JSON.stringify({type:'init',sessionId:'disconnect-session'}));
+    assert.ok(disconnectedSocket.termId);
+    const response=await invoke('POST','/api/disconnect',{user,body:{sessionId:'disconnect-session'}});
+    assert.equal(response.status,200);assert.equal(response.body.ok,true);
+    assert.equal(hooks.sessions.has('disconnect-session'),false);
+    assert.equal(disconnectedSocket.readyState,WebSocket.CLOSED);assert.equal(disconnectedSocket.closeCode,1008);
+    assert.ok(disconnectedSocket.sent.some(message=>message.type==='error'&&message.message==='Session disconnected'));
+  `);
+});
+
+test('dashboard runtime coalesces concurrent and short-lived cached agent requests', () => {
+  runIsolatedServerScenario(`
+    const robotKey='REAL-dashboard-cache-0001',requests=[];
+    hooks.agents.set(robotKey,{ws:{readyState:WebSocket.OPEN,send(raw){requests.push(JSON.parse(String(raw)));}}});
+    const session={robotKey,workspace:'~/ros2_ws',rosInfo:{setupBash:'/opt/ros/humble/setup.bash'}};
+    const first=hooks.getDashboardRuntime(session),concurrent=hooks.getDashboardRuntime({...session});
+    assert.equal(first,concurrent,'concurrent callers must share the same in-flight promise');
+    assert.equal(requests.length,2,'one dashboard refresh should issue only metrics and process RPCs');
+    for(const request of requests){
+      const callback=hooks.pendingReqs.get(request.reqId);assert.ok(callback,'missing pending dashboard RPC');
+      hooks.pendingReqs.delete(request.reqId);callback({ok:true,data:{stdout:''}});
+    }
+    const [firstValue,concurrentValue]=await Promise.all([first,concurrent]);
+    assert.equal(firstValue,concurrentValue);
+    const cached=hooks.getDashboardRuntime({...session});
+    assert.equal(cached,first,'the fulfilled short-lived cache must retain the original promise');
+    assert.equal(requests.length,2,'a cache hit must not issue new robot RPCs');
+    assert.equal(await cached,firstValue);
+  `);
+});
+
+test('account and application lookups coalesce safe non-realtime database reads', () => {
+  runIsolatedServerScenario(`
+    const calls={membership:0,session:0,applications:0};
+    globalThis.__query=async(sql,params=[])=>{
+      sql=String(sql);
+      if(sql.includes('FROM user_subscriptions WHERE user_id=')){calls.membership++;return[[{plan_code:'pro_monthly',status:'active',starts_at:new Date(),expires_at:null,provider:'stripe'}],[]];}
+      if(sql.includes('FROM sessions s JOIN users u')){calls.session++;return[[{user_id:71,username:'cached-user',role:'user'}],[]];}
+      if(sql.includes('FROM applications')){calls.applications++;return[[{id:1,name:'Cached app',enabled:1}],[]];}
+      if(sql.startsWith('INSERT INTO applications'))return[{insertId:2,affectedRows:1},[]];
+      if(sql.startsWith('DELETE FROM sessions'))return[{affectedRows:1},[]];
+      throw new Error('Unhandled fake DB query: '+sql+' '+JSON.stringify(params));
+    };
+    const user={id:71,username:'cached-user',role:'user'};
+    const memberships=await Promise.all([hooks.getMembership(user),hooks.getMembership({...user}),hooks.getMembership(user)]);
+    assert.equal(calls.membership,1,'concurrent membership reads must share one query');
+    assert.ok(memberships.every(value=>value.isPro));
+    const sessions=await Promise.all([hooks.tokenUser('legacy-session-token'),hooks.tokenUser('legacy-session-token')]);
+    assert.equal(calls.session,1,'concurrent auth reads must share one query');
+    assert.ok(sessions.every(value=>value?.id===user.id));
+    const catalogs=await Promise.all([hooks.getApplicationCatalog(false),hooks.getApplicationCatalog(false)]);
+    assert.equal(calls.applications,1,'concurrent catalog reads must share one query');
+    assert.equal(catalogs[0][0].name,'Cached app');
+    const created=await invoke('POST','/api/applications',{user:{...user,role:'admin'},body:{name:'New app',redirect_url:'/new-app'}});assert.equal(created.status,201);
+    await hooks.getApplicationCatalog(false);assert.equal(calls.applications,2,'catalog mutation must invalidate cached rows');
+    const loggedOut=await invoke('POST','/api/auth/logout',{user,authSessionId:'legacy-session-token'});assert.equal(loggedOut.body.ok,true);
+    assert.equal(hooks.authSessionCache.has('legacy-session-token'),false,'logout must invalidate the auth cache immediately');
+  `);
+});
+
+test('simulation RViz viewers share one bridge and late viewers receive the latest snapshot', () => {
+  runIsolatedServerScenario(`
+    const robotKey='SIM-shared-rviz-cache-0001',sessionId='shared-rviz-session',user={id:72,username:'sim-user',role:'user'},agentMessages=[];
+    const agentSocket={readyState:WebSocket.OPEN,send(raw){agentMessages.push(JSON.parse(String(raw)));}};
+    hooks.agents.set(robotKey,{ws:agentSocket});
+    hooks.sessions.set(sessionId,{userId:user.id,robotKey,robotDbId:72,rosInfo:{setupBash:'/opt/ros/jazzy/setup.bash'},expiresAt:Date.now()+60000});
+    const start={type:'start',sessionId,odom:'/odom',laser:'/scan',map:'/slam_map',path:'/plan'};
+    const first=makeSocket(user),second=makeSocket(user);
+    hooks.wss.emit('connection',first,'/ws/rviz');hooks.wss.emit('connection',second,'/ws/rviz');
+    first.emit('message',JSON.stringify(start));second.emit('message',JSON.stringify(start));
+    assert.equal(hooks.simRvizStreams.size,1);
+    assert.equal(agentMessages.filter(message=>message.type==='pty_init').length,1,'two viewers created duplicate PTYs');
+    const writeRequest=agentMessages.find(message=>message.type==='request'&&message.action==='fs_write');assert.ok(writeRequest);
+    hooks.pendingReqs.get(writeRequest.reqId)({ok:true,data:{}});await tick();await tick();
+    const compileRequest=agentMessages.find(message=>message.type==='request'&&message.action==='exec');assert.ok(compileRequest);
+    hooks.pendingReqs.get(compileRequest.reqId)({ok:true,data:{code:0,stdout:'',stderr:''}});await tick();await tick();
+    assert.ok(first.sent.some(message=>message.type==='ready'));assert.ok(second.sent.some(message=>message.type==='ready'));
+    const stream=[...hooks.simRvizStreams.values()][0],state={stream:'ready',odom:{x:1.25,y:-2},scan:{ranges:[1,2,3]}};
+    hooks.routeAgentPtyMessage({type:'pty_output',termId:stream.termId,data:Buffer.from(JSON.stringify(state)+'\\n').toString('base64')});
+    assert.ok(first.sent.some(message=>message.type==='data'&&message.data?.odom?.x===1.25));
+    assert.ok(second.sent.some(message=>message.type==='data'&&message.data?.scan?.ranges?.length===3));
+    const late=makeSocket(user);hooks.wss.emit('connection',late,'/ws/rviz');late.emit('message',JSON.stringify(start));
+    assert.ok(late.sent.some(message=>message.type==='ready'));
+    assert.ok(late.sent.some(message=>message.type==='data'&&message.data?.odom?.x===1.25),'late viewer did not receive cached state');
+    assert.equal(agentMessages.filter(message=>message.type==='pty_init').length,1,'late viewer created another PTY');
+    first.close();second.close();late.close();
+  `);
+});
+
+test('agent disconnect immediately rejects its pending RPC work', () => {
+  runIsolatedServerScenario(`
+    const robot={id:17,robot_key:'REAL-agent-drop-000001',name:'Drop test'},requests=[];
+    globalThis.__query=async(sql,params=[])=>{
+      if(String(sql).startsWith('SELECT * FROM robots WHERE robot_key='))return[params[0]===robot.robot_key?[robot]:[],[]];
+      throw new Error('Unhandled fake DB query: '+sql);
+    };
+    const agentSocket=makeSocket(null);agentSocket.send=function(raw){this.sent.push(JSON.parse(String(raw)));requests.push(this.sent.at(-1));};
+    hooks.wss.emit('connection',agentSocket,'/ws/agent');
+    agentSocket.emit('message',JSON.stringify({type:'auth',robotKey:robot.robot_key}));
+    await tick();await tick();
+    assert.equal(hooks.agents.get(robot.robot_key)?.ws,agentSocket);
+
+    const pending=assert.rejects(hooks.agentReq(robot.robot_key,'exec',{command:'never finishes'},5000),/Robot disconnected/);
+    assert.ok(requests.some(message=>message.type==='request'&&message.payload?.command==='never finishes'));
+    agentSocket.close(1006,'network lost');
+    assert.equal([...hooks.pendingReqs.values()].some(callback=>callback.robotKey===robot.robot_key),false,'disconnect must synchronously drain pending work');
+    await pending;
+    assert.equal(hooks.agents.has(robot.robot_key),false);
+  `);
+});
+
+test('legacy Agents need no version fields and every new management operation rejects Sim',()=>{
+  runIsolatedServerScenario(`
+    const robot={id:19,robot_key:'REAL-legacy-local-test-00001',name:'Legacy'},user={id:7};
+    globalThis.__query=async(sql)=>{if(sql.startsWith('SELECT * FROM robots WHERE robot_key='))return[[robot],[]];throw new Error(sql);};
+    const agent=makeSocket(null);hooks.wss.emit('connection',agent,'/ws/agent');
+    agent.emit('message',JSON.stringify({type:'auth',robotKey:robot.robot_key,username:'ubuntu'}));await tick();await tick();
+    assert.ok(agent.sent.some(packet=>packet.type==='auth_ok'));
+    const probe=agent.sent.find(packet=>packet.type==='request');assert.ok(probe);assert.equal(probe.epoch,undefined);
+    agent.emit('message',JSON.stringify({type:'response',reqId:probe.reqId,ok:true,data:{stdout:'ROS_DISTRO=humble\\nSETUP=/opt/ros/humble/setup.bash',stderr:'',code:0}}));
+    hooks.sessions.set('legacy',{robotKey:robot.robot_key,robotDbId:19,userId:7});
+    const status=await invoke('POST','/api/real/agent/status',{user,body:{sessionId:'legacy'}});assert.equal(status.body.ok,true);assert.equal(status.body.legacy,true);
+    const mode=await invoke('POST','/api/real/agent/mode',{user,body:{sessionId:'legacy',confirm:true}});assert.equal(mode.status,409);
+    const notConfirmed=await invoke('POST','/api/real/agent/update',{user,body:{sessionId:'legacy'}});assert.equal(notConfirmed.status,400);
+    hooks.sessions.set('sim-unchanged',{robotKey:'SIM-no-agent-update',userId:7});
+    for(const endpoint of ['agent/status','agent/mode','agent/update','library/read','library/write']){
+      const result=await invoke('POST','/api/real/'+endpoint,{user,body:{sessionId:'sim-unchanged',confirm:true}});assert.equal(result.status,400,endpoint);
+    }
+    assert.equal(hooks.agents.has('SIM-no-agent-update'),false);
+    agent.close(1000,'done');
+  `);
+});
+
+test('a control lease rejects a second user until the active controller disconnects', () => {
+  runIsolatedServerScenario(`
+    const robotKey='REAL-control-lease-0001',agentMessages=[];
+    hooks.agents.set(robotKey,{ws:{readyState:WebSocket.OPEN,send(raw){
+      const message=JSON.parse(String(raw));agentMessages.push(message);
+      if(message.type==='request')queueMicrotask(()=>{const callback=hooks.pendingReqs.get(message.reqId);if(callback){hooks.pendingReqs.delete(message.reqId);callback({ok:true,data:{}});}});
+    }}});
+    const expiresAt=Date.now()+60000,user1={id:61,username:'one'},user2={id:62,username:'two'};
+    hooks.sessions.set('control-one',{userId:user1.id,robotKey,robotDbId:21,workspace:'~/ros2_ws',rosInfo:{setupBash:'/opt/ros/humble/setup.bash'},expiresAt});
+    hooks.sessions.set('control-two',{userId:user2.id,robotKey,robotDbId:21,workspace:'~/ros2_ws',rosInfo:{setupBash:'/opt/ros/humble/setup.bash'},expiresAt});
+
+    const first=makeSocket(user1);hooks.wss.emit('connection',first,'/ws/lidar');
+    first.emit('message',JSON.stringify({type:'start',sessionId:'control-one'}));
+    assert.equal(hooks.robotControlLeases.get(robotKey)?.ws,first);
+
+    const blocked=makeSocket(user2);hooks.wss.emit('connection',blocked,'/ws/lidar');
+    blocked.emit('message',JSON.stringify({type:'start',sessionId:'control-two'}));
+    assert.equal(blocked.readyState,WebSocket.CLOSED);assert.equal(blocked.closeCode,1008);
+    assert.ok(blocked.sent.some(message=>message.type==='error'&&message.code==='ROBOT_BUSY'));
+    assert.equal(hooks.robotControlLeases.get(robotKey)?.ws,first,'a rejected controller must not steal the lease');
+
+    first.close();assert.equal(hooks.robotControlLeases.has(robotKey),false);
+    const replacement=makeSocket(user2);hooks.wss.emit('connection',replacement,'/ws/lidar');
+    replacement.emit('message',JSON.stringify({type:'start',sessionId:'control-two'}));
+    assert.equal(replacement.readyState,WebSocket.OPEN);
+    assert.equal(hooks.robotControlLeases.get(robotKey)?.ws,replacement);
+    replacement.close();await tick();
+    assert.equal(hooks.robotControlLeases.has(robotKey),false);
+  `);
+});
+
+test('LiDAR and controller share one session without releasing or duplicating motor control', () => {
+  runIsolatedServerScenario(`
+    const robotKey='REAL-teleop-pair-0001',user={id:61},expiresAt=Date.now()+60000;
+    hooks.agents.set(robotKey,{ws:{readyState:WebSocket.OPEN,send(raw){
+      const message=JSON.parse(String(raw));
+      if(message.type==='request')queueMicrotask(()=>{const callback=hooks.pendingReqs.get(message.reqId);if(callback){hooks.pendingReqs.delete(message.reqId);callback({ok:true,data:{}});}});
+    }}});
+    for(const id of ['paired','another-tab'])hooks.sessions.set(id,{userId:user.id,robotKey,workspace:'~/ros2_ws',rosInfo:{setupBash:'/dev/null'},expiresAt});
+    const open=(pathname,sessionId='paired')=>{const ws=makeSocket(user);hooks.wss.emit('connection',ws,pathname);ws.emit('message',JSON.stringify({type:'start',sessionId,port:'/dev/ttyUSB1',baud:115200,motorCount:2}));return ws;};
+    for(const order of [['/ws/lidar','/ws/controller-tune'],['/ws/controller-tune','/ws/lidar']]){
+      const first=open(order[0]),second=open(order[1]);
+      assert.equal(first.readyState,WebSocket.OPEN);assert.equal(second.readyState,WebSocket.OPEN);
+      assert.equal(hooks.robotControlLeases.get(robotKey).streams.size,2);
+      for(const endpoint of ['/api/mapping/runtime','/api/navigation/runtime']){
+        const result=await invoke('POST',endpoint,{user,body:{sessionId:'paired',action:'start'}});
+        assert.equal(result.status,409,'a new mission must not clean up devices belonging to active teleop');
+        assert.equal(result.body.code,'ROBOT_BUSY');
+      }
+      const otherLidar=await invoke('POST','/api/lidar/driver',{user,body:{sessionId:'another-tab',modelId:'rplidar_c1',action:'start'}});
+      assert.equal(otherLidar.status,409,'another session must not restart the active LiDAR driver');
+      for(const route of ['/ws/controller-tune','/ws/mapping','/ws/navigation','/ws/lidar']){
+        const duplicate=open(route);assert.equal(duplicate.readyState,WebSocket.CLOSED,route);
+        assert.ok(duplicate.sent.some(message=>message.code==='ROBOT_BUSY'));
+      }
+      first.close();assert.equal(hooks.robotControlLeases.get(robotKey).ws,second,'closing one stream must keep the companion lease');
+      const otherTab=open(order[0],'another-tab');assert.equal(otherTab.readyState,WebSocket.CLOSED);
+      const replacement=open(order[0]);assert.equal(replacement.readyState,WebSocket.OPEN);
+      second.close();assert.equal(hooks.robotControlLeases.get(robotKey).ws,replacement);
+      replacement.close();assert.equal(hooks.robotControlLeases.has(robotKey),false);
+    }
+    await tick();
+  `);
+});
+
+test('runtime start/stop is exclusive per robot before any control websocket exists', () => {
+  runIsolatedServerScenario(`
+    const user={id:61},held=[],messages=[];
+    for(const robotKey of ['REAL-start-lock-0001','REAL-start-lock-0002']){
+      hooks.sessions.set(robotKey,{userId:user.id,robotKey,workspace:'~/ros2_ws',rosInfo:{setupBash:'/dev/null'},expiresAt:Date.now()+60000});
+      hooks.agents.set(robotKey,{ws:{readyState:WebSocket.OPEN,send(raw){const message=JSON.parse(String(raw));messages.push(message);if(message.type==='request')held.push(message);}}});
+    }
+    const sessionId='REAL-start-lock-0001',request={user,body:{sessionId,action:'start',controllerPort:'/dev/ttyAMA0',lidarPort:'/dev/ttyUSB0',lidarModelId:'rplidar_c1'}};
+    const first=invoke('POST','/api/mapping/runtime',request);assert.equal(held.length,1);
+    for(const endpoint of ['/api/mapping/runtime','/api/navigation/runtime','/api/lidar/driver'])for(const action of ['start','stop']){
+      const result=await invoke('POST',endpoint,{user,body:{sessionId,action,modelId:'rplidar_c1'}});
+      assert.equal(result.status,409,endpoint+' '+action);assert.equal(result.body.code,'ROBOT_BUSY');
+    }
+    assert.equal(held.length,1,'blocked requests must never reach the robot');
+    for(const route of ['/ws/mapping','/ws/navigation','/ws/controller-tune','/ws/lidar']){
+      const ws=makeSocket(user);hooks.wss.emit('connection',ws,route);ws.emit('message',JSON.stringify({type:'start',sessionId,port:'/dev/ttyAMA0',baud:115200}));
+      assert.equal(ws.readyState,WebSocket.CLOSED);assert.ok(ws.sent.some(m=>m.code==='ROBOT_BUSY'));
+      assert.equal(ws.sent.find(m=>m.code==='ROBOT_BUSY').retryable,route==='/ws/mapping','only the matching mission may retry its pending operation');
+    }
+    assert.equal(messages.some(m=>m.type==='pty_init'),false);
+    const status=await invoke('POST','/api/mapping/runtime',{user,body:{sessionId,action:'status'}});assert.equal(held.length,1,'busy status is immediate and must not probe half-started processes');
+    assert.equal(status.body.ok,true);assert.equal(status.body.runtimeBusy,true);assert.equal(status.body.runtimeRetryable,true);assert.equal(status.body.runtimeAction,'start');
+    hooks.sessions.set('another-mapping-tab',{...hooks.sessions.get(sessionId)});
+    const foreignStatus=await invoke('POST','/api/mapping/runtime',{user,body:{sessionId:'another-mapping-tab',action:'status'}});
+    assert.equal(foreignStatus.body.runtimeRetryable,false,'another session must not auto-attach when the operation completes');
+    const reply=(message,data)=>{const callback=hooks.pendingReqs.get(message.reqId);hooks.pendingReqs.delete(message.reqId);callback(data);};
+    assert.equal(hooks.robotRuntimeOperations.has(sessionId),true,'status must not release the running operation');
+    const other=invoke('POST','/api/mapping/runtime',{user,body:{...request.body,sessionId:'REAL-start-lock-0002'}});assert.equal(held.length,2,'different robots remain independent');
+    reply(held[0],{ok:false,error:'fixture failure'});await first;
+    assert.equal(hooks.robotRuntimeOperations.has(sessionId),false,'failure releases its reservation');
+    assert.equal(hooks.robotRuntimeOperations.has('REAL-start-lock-0002'),true);
+    reply(held[1],{ok:false,error:'fixture failure'});await other;
+    const retry=invoke('POST','/api/mapping/runtime',request);assert.equal(held.length,3);
+    reply(held[2],{ok:false,error:'fixture failure'});await retry;assert.equal(hooks.robotRuntimeOperations.size,0);
+  `);
+});
+
+test('Nav2 busy status is read-only and a dead bridge closes the browser lease with diagnostics',()=>{
+  runIsolatedServerScenario(`
+    const {spawnSync}=require('node:child_process'),user={id:61},robotKey='REAL-navigation-exit-0001',sessionId='nav-session',messages=[],writes=[];
+    hooks.sessions.set(sessionId,{userId:user.id,robotKey,workspace:'~/ros2_ws',rosInfo:{setupBash:'/opt/ros/jazzy/setup.bash'},expiresAt:Date.now()+60000});
+    hooks.agents.set(robotKey,{ws:{readyState:WebSocket.OPEN,send(raw){const message=JSON.parse(raw);messages.push(message);if(message.type==='request')queueMicrotask(()=>{
+      const callback=hooks.pendingReqs.get(message.reqId);hooks.pendingReqs.delete(message.reqId);
+      if(message.action==='fs_write'){writes.push(message.payload);callback({ok:true,data:{}});}else callback({ok:true,data:{code:0,stdout:'',stderr:''}});
+    });}}});
+    hooks.robotRuntimeOperations.set(robotKey,{sessionId,userId:user.id,pathname:'/ws/navigation',action:'start'});
+    const status=await invoke('POST','/api/navigation/runtime',{user,body:{sessionId,action:'status'}});
+    assert.equal(status.body.runtimeBusy,true);assert.equal(status.body.runtimeRetryable,true);assert.equal(messages.length,0);
+    const blocked=makeSocket(user);hooks.wss.emit('connection',blocked,'/ws/navigation');blocked.emit('message',JSON.stringify({type:'start',sessionId}));
+    assert.equal(blocked.sent.find(m=>m.code==='ROBOT_BUSY').retryable,true);
+    hooks.robotRuntimeOperations.delete(robotKey);
+    const ws=makeSocket(user);hooks.wss.emit('connection',ws,'/ws/navigation');
+    ws.emit('message',JSON.stringify({type:'start',sessionId,controllerPort:'/dev/ttyAMA0',controllerBaud:115200,maxSpeed:.2,maxTurn:.6,minSpeed:.05,minTurn:.1}));
+    await tick();await tick();assert.equal(writes.length,1);
+    const python=spawnSync('python3',['-c','import sys; compile(sys.stdin.read(),"nav.py","exec")'],{input:writes[0].content,encoding:'utf8'});assert.equal(python.status,0,python.stderr);
+    const setup=messages.find(m=>m.type==='pty_input');assert.ok(setup);assert.match(setup.data,/exec python3 -u/);assert.match(setup.data,/bridge[.]log/);
+    assert.equal(spawnSync('bash',['-n'],{input:setup.data,encoding:'utf8'}).status,0);
+    const termId=ws.termId;assert.equal(hooks.robotControlLeases.has(robotKey),true);
+    hooks.routeAgentPtyMessage({type:'pty_closed',termId});
+    assert.equal(ws.readyState,WebSocket.CLOSED);assert.ok(ws.sent.some(m=>m.code==='NAV_BRIDGE_EXIT'));
+    assert.equal(hooks.robotControlLeases.has(robotKey),false);assert.equal(hooks.webSockets.has(termId),false);
+  `);
+});
+
+test('pending LiDAR startup still allows its separate UART controller but not a competing mission', () => {
+  runIsolatedServerScenario(`
+    const user={id:61},robotKey='REAL-lidar-lock-0001';let build;
+    hooks.sessions.set('paired',{userId:user.id,robotKey,workspace:'~/ros2_ws',rosInfo:{setupBash:'/dev/null'},expiresAt:Date.now()+60000});
+    hooks.sessions.set('other-tab',{userId:user.id,robotKey,workspace:'~/ros2_ws',rosInfo:{setupBash:'/dev/null'},expiresAt:Date.now()+60000});
+    hooks.agents.set(robotKey,{ws:{readyState:WebSocket.OPEN,send(raw){const message=JSON.parse(String(raw));if(message.type!=='request')return;
+      if(message.payload?.command?.includes('needs_build=0')){build=message;return;}
+      queueMicrotask(()=>{const callback=hooks.pendingReqs.get(message.reqId);if(callback){hooks.pendingReqs.delete(message.reqId);callback({ok:true,data:{code:0,stdout:'',stderr:''}});}});
+    }}});
+    const start=invoke('POST','/api/lidar/driver',{user,body:{sessionId:'paired',action:'start',modelId:'rplidar_c1',port:'/dev/ttyUSB0'}});
+    await tick();assert.ok(build);assert.equal(hooks.robotRuntimeOperations.size,1);
+    const open=(sessionId,port,route='/ws/controller-tune')=>{const ws=makeSocket(user);hooks.wss.emit('connection',ws,route);ws.emit('message',JSON.stringify({type:'start',sessionId,port,baud:115200,motorCount:2}));return ws;};
+    assert.equal(open('paired','/dev/ttyUSB0').readyState,WebSocket.CLOSED,'same serial port must not be claimed while LiDAR starts');
+    assert.equal(open('other-tab','/dev/ttyAMA0').readyState,WebSocket.CLOSED);
+    assert.equal(open('paired','/dev/ttyAMA0','/ws/mapping').readyState,WebSocket.CLOSED);
+    const controller=open('paired','/dev/ttyAMA0');assert.equal(controller.readyState,WebSocket.OPEN);
+    const callback=hooks.pendingReqs.get(build.reqId);hooks.pendingReqs.delete(build.reqId);callback({ok:true,data:{code:2,stdout:'',stderr:'fixture build failed'}});
+    assert.equal((await start).body.ok,false);assert.equal(hooks.robotRuntimeOperations.size,0);controller.close();await tick();
+  `);
+});
+
+test('RViz websocket builds a scoped Python stream for map, path, TF, odom, and scan', () => {
+  runIsolatedServerScenario(`
+    const {spawnSync}=require('node:child_process'),robotKey='REAL-rviz-stream-00001',user={id:71,username:'viewer'},writes=[],compileRequests=[],agentMessages=[];
+    hooks.agents.set(robotKey,{ws:{readyState:WebSocket.OPEN,send(raw){
+      const message=JSON.parse(String(raw));agentMessages.push(message);
+      if(message.type!=='request')return;
+      queueMicrotask(()=>{
+        const callback=hooks.pendingReqs.get(message.reqId);if(!callback)return;
+        hooks.pendingReqs.delete(message.reqId);
+        if(message.action==='fs_write'){writes.push(message.payload);callback({ok:true,data:{}});return;}
+        if(message.action==='exec'){compileRequests.push(message.payload);callback({ok:true,data:{stdout:'',stderr:'',code:0}});return;}
+        callback({ok:false,error:'Unexpected fake-agent action: '+message.action});
+      });
+    }}});
+    hooks.sessions.set('rviz-session',{userId:user.id,robotKey,robotDbId:31,workspace:'~/ros2_ws',rosInfo:{setupBash:'/opt/ros/humble/setup.bash'},expiresAt:Date.now()+60000});
+    const socket=makeSocket(user);hooks.wss.emit('connection',socket,'/ws/rviz');
+    socket.emit('message',JSON.stringify({type:'start',sessionId:'rviz-session',odom:'/odom',laser:'/scan',map:'/map',path:'/plan'}));
+    await tick();await tick();await tick();await tick();
+    assert.equal(writes.length,1);assert.ok(writes[0].path.startsWith('/tmp/_rviz_rt_'));assert.ok(writes[0].path.endsWith('.py'));
+    assert.match(writes[0].content,/def cb_map/);assert.match(writes[0].content,/def cb_path/);assert.match(writes[0].content,/^  with lk:$/m);
+    assert.match(writes[0].content,/out=\{'stream':'ready'\}/,'bridge readiness must be repeated with telemetry');
+    const compiled=spawnSync('python3',['-c',"import sys; compile(sys.stdin.read(), 'rviz_stream.py', 'exec')"],{input:writes[0].content,encoding:'utf8'});
+    assert.equal(compiled.status,0,compiled.stderr);
+    assert.equal(compileRequests.length,1);assert.ok(compileRequests[0].command.startsWith("python3 -m py_compile '/tmp/_rviz_rt_"));
+    const launch=agentMessages.find(message=>message.type==='pty_input');assert.ok(launch);assert.ok(launch.data.includes("python3 -u '/tmp/_rviz_rt_"));assert.doesNotMatch(launch.data,/pkill/);
+    assert.ok(socket.sent.some(message=>message.type==='ready'));socket.close();
+  `);
+});
+
+test('fake SIM RViz PTY telemetry is parsed across chunks and routed as browser data', () => {
+  assert.match(read('server.js'),/createSimAgent\(k,\s*\{[^}]+forwardPtyMessage:routeAgentPtyMessage/);
+  runIsolatedServerScenario(`
+    const termId='rviz_sim_telemetry_0001',browser=makeSocket({id:72,username:'sim-viewer'});
+    hooks.webSockets.set(termId,browser);
+    const telemetry={
+      tf:[{frame:'base_link',parent:'odom',x:1.25,y:-0.5,z:0,qx:0,qy:0,qz:0,qw:1}],
+      odom:{x:1.25,y:-0.5,qz:0,qw:1},
+      desc:'<robot name="sim">{nested-json-text}</robot>'
+    };
+    const serialized=JSON.stringify(telemetry),split=Math.floor(serialized.length/2);
+    const emit=chunk=>hooks.routeAgentPtyMessage({type:'pty_output',termId,data:Buffer.from(chunk).toString('base64')});
+    emit('sim-shell-prompt$ '+serialized.slice(0,split));
+    assert.equal(browser.sent.length,0,'an incomplete PTY JSON object must stay buffered');
+    emit(serialized.slice(split)+'\\r\\n');
+    assert.equal(browser.sent.length,1);
+    assert.deepEqual(browser.sent[0],{type:'data',data:telemetry});
+    hooks.webSockets.delete(termId);
+  `);
+});
+
+test('SIM map validation rejects oversized maps, excessive walls, and a start pose on a wall', () => {
+  runIsolatedServerScenario(`
+    const valid={bounds:[-5,-5,5,5],start:[0,0],walls:[[2,-1,2,1]],objects:[]};
+    assert.equal(hooks.validateSimMapData(valid),null);
+
+    const oversized={bounds:[0,0,70,70],start:[1,1],walls:[],objects:[]};
+    assert.match(hooks.validateSimMapData(oversized),/ใหญ่เกิน/);
+
+    const detailedMap={...valid,walls:Array.from({length:644},(_,index)=>[-4,index/1000-2,-3,index/1000-2])};
+    assert.equal(hooks.validateSimMapData(detailedMap),null,'furniture can produce more than 512 collision edges');
+    const excessiveWalls={...valid,walls:Array.from({length:16385},()=>[-4,-2,-3,-2])};
+    assert.match(hooks.validateSimMapData(excessiveWalls),/เส้นขอบ.*มากเกิน/);
+    assert.match(hooks.validateSimMapData({...valid,objects:Array.from({length:513},()=>({}))}),/วัตถุ.*มากเกิน/);
+
+    const collidingStart={bounds:[-5,-5,5,5],start:[0,0],walls:[[0,-2,0,2]],objects:[]};
+    assert.match(hooks.validateSimMapData(collidingStart),/จุดเริ่มหุ่นทับกำแพง/);
+    assert.match(hooks.validateSimMapData({...valid,walls:[[9000,9000,9001,9000]]}),/พื้นที่จริง/);
+    assert.match(hooks.validateSimMapData({...valid,startPose:{yaw:NaN}}),/มุมเริ่ม/);
+  `);
+});
+
+test('map apply waits for backend replacement and reports write/restart errors', () => {
+  runIsolatedServerScenario(`
+    const key='SIM-map-apply-'+process.pid,sessionId='map-apply',user={id:301};
+    hooks.sessions.set(sessionId,{robotKey:key,userId:user.id});
+    let finish,settled=false;
+    hooks.agents.set(key,{respawnBackend:()=>new Promise(resolve=>{finish=resolve;})});
+    const body={sessionId,map:{bounds:[-5,-5,5,5],start:[0,0],walls:[],objects:[]}};
+    const response=invoke('POST','/api/sim/apply-map',{user,body}).then(result=>{settled=true;return result;});
+    await tick();assert.equal(settled,false,'do not launch MapSim before fallback cleanup finishes');
+    finish();assert.equal((await response).body.ok,true);
+    hooks.agents.get(key).respawnBackend=()=>Promise.reject(new Error('map write failed'));
+    const failed=await invoke('POST','/api/sim/apply-map',{user,body});
+    assert.equal(failed.body.ok,false);assert.match(failed.body.error,/map write failed/);
+  `);
+});
+
+test('MapSim save reuses its build and verifies with one bounded DDS probe', () => {
+  runIsolatedServerScenario(`
+    const {wsRoot}=require(${JSON.stringify(path.join(root,'sim.js'))});
+    const key='SIM-map-save-'+process.pid,workspace=wsRoot(key),sessionId='map-save',user={id:302},requests=[];
+    fs.mkdirSync(workspace,{recursive:true});
+    fs.writeFileSync(path.join(workspace,'map.json'),JSON.stringify({bounds:[-5,-5,5,5],start:[0,0],walls:[],objects:[]}));
+    const installed=path.join(workspace,'install/sim_robot_mapsim/lib/sim_robot_mapsim/mapsim');
+    fs.mkdirSync(path.dirname(installed),{recursive:true});fs.writeFileSync(installed,'test executable');
+    hooks.sessions.set(sessionId,{robotKey:key,userId:user.id,rosInfo:{setupBash:'/opt/ros/jazzy/setup.bash'}});
+    let failBuild=true;
+    hooks.agents.set(key,{ws:{readyState:1,send(raw){
+      const message=JSON.parse(raw),payload=message.payload;requests.push(payload);
+      const callback=hooks.pendingReqs.get(message.reqId);hooks.pendingReqs.delete(message.reqId);
+      if(failBuild&&payload.command.includes('colcon build'))return callback({ok:false,error:'Timeout'});
+      callback({ok:true,data:{code:0,stdout:payload.command.includes('roside_mapsim_readiness')?'/sim_robot_mapsim':'',stderr:''}});
+    }}});
+    try{
+      const failed=await invoke('POST','/api/sim/run-mapsim',{user,body:{sessionId}});
+      assert.equal(failed.body.phase,'build');assert.match(failed.body.error,/Build MapSim.*ไฟล์แผนที่ยังบันทึกอยู่/);
+      assert.ok(fs.existsSync(path.join(workspace,'map.json')));
+      failBuild=false;requests.length=0;
+      const started=await invoke('POST','/api/sim/run-mapsim',{user,body:{sessionId}});
+      assert.equal(started.body.ok,true);assert.equal(started.body.running,true);
+      const probe=requests.find(p=>p.command.includes('roside_mapsim_readiness'));
+      assert.ok(probe);assert.equal(probe.timeout,30000);assert.match(probe.command,/timeout --signal=TERM --kill-after=2s 25s/);
+      assert.ok(!probe.command.includes('ros2 node list'),'no daemon-dependent polling loop');
+      requests.length=0;
+      const repeated=await invoke('POST','/api/sim/run-mapsim',{user,body:{sessionId}});
+      assert.equal(repeated.body.ok,true);assert.equal(repeated.body.buildCached,true);
+      assert.equal(requests.some(p=>p.command.includes('colcon build')),false);
+    }finally{fs.rmSync(workspace,{recursive:true,force:true});}
+  `);
+});
+
+test('queued MapSim HTTP jobs return immediately, share duplicate work and hide other users jobs',()=>{
+  runIsolatedServerScenario(`
+    const {wsRoot}=require(${JSON.stringify(path.join(root,'sim.js'))});
+    const key='SIM-queued-save-'+process.pid,workspace=wsRoot(key),user={id:401},sessionId='queued-save';
+    const map={bounds:[-3,-3,3,3],start:[0,0],walls:[],objects:[]};
+    fs.mkdirSync(workspace,{recursive:true});fs.writeFileSync(path.join(workspace,'map.json'),JSON.stringify(map));
+    hooks.sessions.set(sessionId,{robotKey:key,userId:user.id});
+    let finishBuild,builds=0,applied=0;
+    hooks.agents.set(key,{applyMapWithoutRestart:async()=>{applied++;},ws:{readyState:1,send(raw){
+      const msg=JSON.parse(raw),cb=hooks.pendingReqs.get(msg.reqId);hooks.pendingReqs.delete(msg.reqId);
+      if(msg.payload.command.includes('colcon build')){builds++;finishBuild=()=>cb({ok:true,data:{code:0,stdout:'',stderr:''}});return;}
+      cb({ok:true,data:{code:0,stdout:msg.payload.command.includes('roside_mapsim_readiness')?'/sim_robot_mapsim':'',stderr:''}});
+    }}});
+    try{
+      const submitted=await invoke('POST','/api/sim/run-mapsim',{user,body:{sessionId,map,async:true}});
+      assert.equal(submitted.status,202);const jobId=submitted.body.job.id;
+      const duplicate=await invoke('POST','/api/sim/run-mapsim',{user,body:{sessionId,map,async:true}});
+      assert.equal(duplicate.body.job.id,jobId);
+      const changed={...map,start:[1,1]};
+      const conflict=await invoke('POST','/api/sim/run-mapsim',{user,body:{sessionId,map:changed,async:true}});
+      assert.equal(conflict.status,409);
+      assert.deepEqual(JSON.parse(fs.readFileSync(path.join(workspace,'map.json'),'utf8')),map,'rejected save must not overwrite accepted map');
+      const direct=await invoke('POST','/api/files/write',{user,body:{sessionId,path:'~/map.json',content:JSON.stringify(changed)}});
+      assert.equal(direct.status,409);
+      const slam=await invoke('POST','/api/sim/save-slam-map',{user,body:{sessionId,mapName:'other',async:true}});
+      assert.equal(slam.status,409,'SLAM cannot build inside a running MapSim job');
+      const forbidden=await invoke('POST','/api/sim/mapsim-job',{user:{id:402},body:{sessionId,jobId}});
+      assert.equal(forbidden.status,403);
+      for(let i=0;i<100&&!finishBuild;i++)await new Promise(r=>setTimeout(r,10));
+      assert.equal(builds,1);assert.equal(applied,1);
+      const status=await invoke('POST','/api/sim/mapsim-job',{user,body:{sessionId,jobId}});
+      assert.equal(status.body.job.phase,'build');finishBuild();
+      let completed;
+      for(let i=0;i<100;i++){
+        completed=await invoke('POST','/api/sim/mapsim-job',{user,body:{sessionId,jobId}});
+        if(completed.body.job.state==='succeeded')break;
+        await new Promise(r=>setTimeout(r,10));
+      }
+      assert.equal(completed.body.job.result.running,true);
+    }finally{fs.rmSync(workspace,{recursive:true,force:true});}
+  `);
+});
+
+test('real ROS MapSim save, restart and RViz streams deliver all Playground data', {skip:process.env.ROSIDE_TEST_ROS!=='1'}, () => {
+  runIsolatedServerScenario(`
+    globalThis.__routeTimeout=160000;
+    const {createSimAgent,wsRoot}=require(${JSON.stringify(path.join(root,'sim.js'))});
+    const key='SIM-playground-live-'+process.pid,workspace=wsRoot(key),sessionId='playground-live',user={id:303};
+    const setup=process.env.ROSIDE_TEST_SETUP||'/opt/ros/jazzy/setup.bash';
+    const map=process.env.ROSIDE_MAP_FIXTURE?JSON.parse(fs.readFileSync(process.env.ROSIDE_MAP_FIXTURE,'utf8')):{bounds:[-3,-3,3,3],start:[0,-2],walls:[[-3,-3,3,-3],[3,-3,3,3],[3,3,-3,3],[-3,3,-3,-3]],objects:[]};
+    fs.mkdirSync(workspace,{recursive:true});fs.writeFileSync(path.join(workspace,'map.json'),JSON.stringify(map));
+    const agent=createSimAgent(key,{pendingReqs:hooks.pendingReqs,monSockets:hooks.monSockets,webSockets:hooks.webSockets,WebSocket,forwardPtyMessage:hooks.routeAgentPtyMessage});
+    hooks.agents.set(key,agent);hooks.sessions.set(sessionId,{robotKey:key,userId:user.id,rosInfo:{setupBash:setup}});
+    let socket;
+    try{
+      const applied=await invoke('POST','/api/sim/apply-map',{user,body:{sessionId,map}});
+      assert.equal(applied.body.ok,true,JSON.stringify(applied.body));
+      for(const topic of ['/map','/slam_map']){
+        const began=Date.now();
+        const started=await invoke('POST','/api/sim/run-mapsim',{user,body:{sessionId}});
+        assert.equal(started.body.ok,true,JSON.stringify(started.body));
+        if(topic==='/slam_map')assert.equal(started.body.buildCached,true);
+        socket=makeSocket(user);hooks.wss.emit('connection',socket,'/ws/rviz');
+        socket.emit('message',JSON.stringify({type:'start',sessionId,odom:'/odom',laser:'/scan',map:topic,path:'/plan'}));
+        const received=new Set(),deadline=Date.now()+35000;
+        while(Date.now()<deadline&&received.size<6){
+          for(const message of socket.sent.splice(0)){
+            assert.notEqual(message.type,'error',JSON.stringify(message));
+            if(message.type==='data'){
+              const data=message.data;if(data.stream==='ready')received.add('runtime');
+              for(const name of ['tf','odom','scan','map','desc'])if(data[name])received.add(name);
+            }
+          }
+          await new Promise(resolve=>setTimeout(resolve,50));
+        }
+        assert.deepEqual([...received].sort(),['desc','map','odom','runtime','scan','tf']);
+        console.log('Live Playground '+topic+' ready in '+(Date.now()-began)+'ms');
+        socket.close();socket=null;
+      }
+      const configured=await invoke('POST','/api/sim/configure-navigation',{user,body:{sessionId,radius:.26,clearance:.08,inflation:.1}});
+      assert.equal(configured.body.ok,true,JSON.stringify(configured));
+      const parameters=await invoke('POST','/api/sim/navigation-parameters',{user,body:{sessionId}});
+      assert.equal(parameters.body.parameters.radius,.26);assert.equal(parameters.body.parameters.inflation,.34);
+      const canceled=await invoke('POST','/api/sim/navigation-goal',{user,body:{sessionId,cancel:true}});
+      assert.equal(canceled.body.ok,true,JSON.stringify(canceled));
+      const slam=await invoke('POST','/api/sim/save-slam-map',{user,body:{sessionId,mapName:'regression_map'}});
+      assert.equal(slam.body.ok,true,JSON.stringify(slam));
+      assert.ok(fs.existsSync(path.join(workspace,'maps','regression_map','map.yaml')));
+      assert.deepEqual(JSON.parse(fs.readFileSync(path.join(workspace,'map.json'),'utf8')),map);
+    }finally{
+      socket?.close();agent.ws.close();
+      await new Promise(resolve=>setTimeout(resolve,6000));
+      fs.rmSync(workspace,{recursive:true,force:true});
+    }
+  `,{timeout:240000});
+});
+
+test('twenty real ROS workspaces queue saves and stream RViz concurrently', {skip:process.env.ROSIDE_TEST_MULTIUSER!=='1'},()=>{
+  runIsolatedServerScenario(`
+    const {createSimAgent,wsRoot}=require(${JSON.stringify(path.join(root,'sim.js'))});
+    const clients=[],startedAt=Date.now(),setup='/opt/ros/jazzy/setup.bash',userCount=Math.max(1,Math.min(60,Number(process.env.ROSIDE_TEST_MULTIUSER_COUNT)||20));
+    const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+    const hostSample=()=>{
+      const times=fs.readFileSync('/proc/stat','utf8').split('\\n')[0].trim().split(/\\s+/).slice(1,9).map(Number);
+      return {total:times.reduce((a,b)=>a+b,0),idle:times[3]+times[4],available:Number(fs.readFileSync('/proc/meminfo','utf8').match(/MemAvailable:\\s+(\\d+)/)[1])};
+    };
+    try{
+      for(let i=0;i<userCount;i++){
+        const key='SIM-multiuser-test-'+process.pid+'-'+i,sessionId='multiuser-'+i,user={id:800+i},workspace=wsRoot(key);
+        const map={bounds:[-5,-5,5,5],start:[-3.6+(i%10)*.8,-3],startPose:{yaw:90},walls:[[-5,-5,5,-5],[5,-5,5,5],[5,5,-5,5],[-5,5,-5,-5],[-2,0,-1,0],[-1,0,-1,1],[-1,1,-2,1],[-2,1,-2,0],[1,0,2,0],[2,0,2,1],[2,1,1,1],[1,1,1,0]],objects:[]};
+        const agent=createSimAgent(key,{pendingReqs:hooks.pendingReqs,monSockets:hooks.monSockets,webSockets:hooks.webSockets,WebSocket,forwardPtyMessage:hooks.routeAgentPtyMessage});
+        hooks.agents.set(key,agent);hooks.sessions.set(sessionId,{robotKey:key,userId:user.id,rosInfo:{setupBash:setup}});
+        const client={key,sessionId,user,workspace,agent,map,seen:new Set(),samples:0};clients.push(client);
+        const submitted=await invoke('POST','/api/sim/run-mapsim',{user,body:{sessionId,map,async:true}});
+        assert.equal(submitted.status,202,JSON.stringify(submitted));client.jobId=submitted.body.job.id;
+      }
+      assert.equal(new Set(clients.map(c=>c.agent._domainId)).size,userCount);
+      const deadline=Date.now()+Math.max(300000,userCount*9000);
+      while(clients.some(c=>!c.ready)&&Date.now()<deadline){
+        for(const c of clients.filter(c=>!c.ready)){
+          const status=await invoke('POST','/api/sim/mapsim-job',{user:c.user,body:{sessionId:c.sessionId,jobId:c.jobId}});
+          assert.equal(status.body.ok,true);assert.notEqual(status.body.job.state,'failed',JSON.stringify(status.body.job));
+          if(status.body.job.state==='succeeded'){
+            c.ready=true;c.readyMs=Date.now()-startedAt;
+            c.socket=makeSocket(c.user);hooks.wss.emit('connection',c.socket,'/ws/rviz');
+            c.socket.emit('message',JSON.stringify({type:'start',sessionId:c.sessionId,odom:'/odom',laser:'/scan',map:'/slam_map',path:'/plan'}));
+          }
+        }
+        await wait(500);
+      }
+      assert.ok(clients.every(c=>c.ready),'not all 20 builds completed');
+      const collect=()=>{
+        for(const c of clients)for(const message of c.socket.sent.splice(0)){
+          assert.notEqual(message.type,'error',JSON.stringify(message));
+          if(message.type==='data'){
+            const d=message.data;
+            for(const name of ['tf','odom','scan','map','desc'])if(d[name])c.seen.add(name);
+            if(d.odom){c.samples++;c.lastOdom=d.odom;}
+            if(d.nav_status)c.navStatus=d.nav_status;
+          }
+        }
+      };
+      const streamDeadline=Date.now()+35000;
+      while(clients.some(c=>c.seen.size<5)&&Date.now()<streamDeadline){collect();await wait(100);}
+      assert.ok(clients.every(c=>c.seen.size===5),'one or more clients missed a stream');
+      const before=hostSample();clients.forEach(c=>{c.samples=0;});
+      for(let i=0;i<100;i++){collect();await wait(100);}
+      const after=hostSample();
+      assert.ok(clients.every(c=>c.samples>=20),'a concurrent stream stalled');
+      for(const c of clients){
+        assert.deepEqual(JSON.parse(fs.readFileSync(path.join(c.workspace,'map.json'),'utf8')),c.map);
+        assert.ok(Math.abs(c.lastOdom.x-c.map.start[0])<.02,'pose crossed workspace boundaries');
+        assert.ok(Math.abs(Math.abs(c.lastOdom.qz)-Math.SQRT1_2)<.02,'saved yaw was not applied');
+      }
+      console.log('MULTIUSER_RESULT '+JSON.stringify({users:userCount,streams:100,firstReadyMs:Math.min(...clients.map(c=>c.readyMs)),lastReadyMs:Math.max(...clients.map(c=>c.readyMs)),minOdomHz:Math.min(...clients.map(c=>c.samples))/10,hostCpuPercent:Math.round(100*(1-(after.idle-before.idle)/(after.total-before.total))),hostAvailableMiB:Math.round(after.available/1024)}));
+      if(process.env.ROSIDE_TEST_MULTIUSER_NAV==='1'){
+        const configured=await Promise.all(clients.map(c=>invoke('POST','/api/sim/configure-navigation',{user:c.user,body:{sessionId:c.sessionId,speed:.45}})));
+        assert.ok(configured.every(r=>r.body.ok),JSON.stringify(configured));
+        const started=Date.now(),goals=await Promise.all(clients.map(c=>invoke('POST','/api/sim/navigation-goal',{user:c.user,body:{sessionId:c.sessionId,x:c.map.start[0],y:2.2,yaw:0}})));
+        assert.ok(goals.every(r=>r.body.ok),JSON.stringify(goals));
+        const navBefore=hostSample();clients.forEach(c=>{c.samples=0;});
+        const navDeadline=Date.now()+60000;
+        while(clients.some(c=>c.navStatus?.state!=='succeeded')&&Date.now()<navDeadline){
+          collect();
+          for(const c of clients){
+            assert.notEqual(c.navStatus?.state,'failed',JSON.stringify({key:c.key,status:c.navStatus,pose:c.lastOdom}));
+            assert.notEqual(c.navStatus?.state,'blocked',JSON.stringify({key:c.key,status:c.navStatus,pose:c.lastOdom}));
+            if(c.lastOdom){
+              const {x,y}=c.lastOdom;
+              for(const [x1,y1,x2,y2] of c.map.walls){
+                const dx=x2-x1,dy=y2-y1,t=Math.max(0,Math.min(1,((x-x1)*dx+(y-y1)*dy)/(dx*dx+dy*dy)));
+                assert.ok(Math.hypot(x-(x1+dx*t),y-(y1+dy*t))>=.319,'clearance violation '+JSON.stringify({key:c.key,x,y}));
+              }
+            }
+          }
+          await wait(100);
+        }
+        const navAfter=hostSample();
+        assert.ok(clients.every(c=>c.navStatus?.state==='succeeded'),JSON.stringify(clients.map(c=>({key:c.key,status:c.navStatus,pose:c.lastOdom}))));
+        console.log('NAVIGATION_MULTIUSER_RESULT '+JSON.stringify({users:userCount,succeeded:clients.filter(c=>c.navStatus?.state==='succeeded').length,elapsedMs:Date.now()-started,minOdomHz:Math.round(Math.min(...clients.map(c=>c.samples))*10000/(Date.now()-started))/10,hostCpuPercent:Math.round(100*(1-(navAfter.idle-navBefore.idle)/(navAfter.total-navBefore.total)))}));
+      }
+    }finally{
+      clients.forEach(c=>{c.socket?.close();c.agent.ws.close();hooks.sessions.delete(c.sessionId);});
+      await wait(6500);
+      for(const c of clients)fs.rmSync(c.workspace,{recursive:true,force:true});
+    }
+  `,{timeout:Math.max(360000,(Number(process.env.ROSIDE_TEST_MULTIUSER_COUNT)||20)*10000+120000),report:true});
 });
 
 test('Robots page reports ROS Wizzard progress from each configured workspace', () => {
   const server=read('server.js'),robots=read('public/robots.html'),scanner=read('project-scanner.js');
-  assert.match(server,/const SIMULATION_WIZARD_ORDER=\['urdf','tf','odom','lidar','control','mapping','navigation'\]/);
-  assert.match(server,/const REAL_ROBOT_WIZARD_ORDER=\['urdf','lidar','hardware','pid','control','mapping','navigation'\]/);
+  assert.match(server,/const SIMULATION_WIZARD_ORDER=\['urdf','lidar','control','mapping','navigation'\]/);
+  assert.match(server,/const REAL_ROBOT_WIZARD_ORDER=\['system','urdf','lidar','hardware','pid','control','mapping','navigation'\]/);
+  assert.match(server,/block\('urdf',\['system'\]\)/);
+  assert.match(server,/if\(isSim\(s\.robotKey\)\)return res\.status\(400\)\.json\(\{ok:false,error:'ภารกิจตรวจระบบใช้สำหรับหุ่นยนต์จริงเท่านั้น'\}\)/);
   assert.match(server,/const REAL_ROBOT_OPTIONAL_ORDER=\[\]/);
   assert.match(server,/function inspectRobotWizardProgress\(robot\)/);
-  assert.match(server,/scanLocalProject\(workspace\)/);
+  assert.match(server,/buildProjectScanScript\(workspace\)/);
+  assert.match(server,/parseProjectScanOutput\(result\.stdout\)/);
   assert.match(server,/inspectSimulationMissionArtifacts\(workspace\)/);
-  assert.match(server,/wizardProgress:await inspectRobotWizardProgress\(robot\)/);
+  assert.match(server,/wizardProgress:robotWizardProgressView\(robot\)/);
   assert.match(scanner,/function scanLocalProject\(workspace\)/);
   assert.match(robots,/function renderRobotProgress\(robot\)/);
   assert.match(robots,/role="progressbar"/);
@@ -111,7 +1038,9 @@ test('free users keep robot limits while admins and active Pro users are unlimit
   assert.match(server,/ACTIVE_ROBOT_LIMIT_REACHED/);
   assert.match(server,/if\(!membership\.isUnlimited\)/);
   assert.match(server,/unlimited:\{simulation:isUnlimited,real:isUnlimited,activeConnections:false\}/);
-  assert.match(server,/isOwn:Number\(robot\.added_by\)===Number\(req\.user\.id\)/);
+  assert.match(server,/const isOwner=Number\(robot\.added_by\)===Number\(req\.user\.id\)/);
+  assert.match(server,/isOwn:req\.user\.role==='admin'\?isOwner:true/);
+  assert.match(server,/FROM robot_user_access rua JOIN robots r ON r\.id=rua\.robot_id WHERE rua\.user_id=\?/);
   assert.match(server,/const activeSessionReservations = new Map\(\)/);
   assert.match(server,/app\.post\('\/api\/robots\/:id\/disconnect',auth/);
   assert.match(server,/connected:activeByRobot\.has\(robot\.id\)/);
@@ -247,6 +1176,34 @@ test('Terminal opens inside the configured workspace and simulation PTY returns 
   }finally{
     agent.ws.close();
     fs.rmSync(wsRoot(key),{recursive:true,force:true});
+  }
+});
+
+test('simulation completes map replacement and honors an exec timeout before the request expires', async () => {
+  const key=`SIM-save-timeout-regression-${process.pid}`,pendingReqs=new Map();
+  const agent=require('../sim').createSimAgent(key,{pendingReqs,monSockets:new Map(),webSockets:new Map(),WebSocket:{OPEN:1}});
+  try{
+    const map={bounds:[-4,-4,4,4],start:[0,0],walls:[],objects:[]};
+    await agent.respawnBackend(map);
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(wsRoot(key),'map.json'),'utf8')),map);
+    const began=Date.now();
+    const response=await new Promise((resolve,reject)=>{
+      const deadline=setTimeout(()=>reject(new Error('exec did not honor its shorter timeout')),4000);
+      pendingReqs.set('timeout-test',result=>{clearTimeout(deadline);resolve(result);});
+      agent.ws.send(JSON.stringify({type:'request',reqId:'timeout-test',action:'exec',payload:{command:'sleep 10 & echo $!; wait',timeout:1000}}));
+    });
+    assert.equal(response.ok,true);assert.notEqual(response.data.code,0);
+    assert.match(response.data.stderr,/timed out/);assert.ok(Date.now()-began<4000);
+    const childPid=Number(response.data.stdout.trim());assert.ok(childPid>0);
+    let childState;
+    for(let attempt=0;attempt<25;attempt++){
+      childState=undefined;try{childState=fs.readFileSync(`/proc/${childPid}/stat`,'utf8').split(') ')[1][0];}catch{}
+      if(!childState||childState==='Z')break;
+      await new Promise(resolve=>setTimeout(resolve,20));
+    }
+    assert.ok(!childState||childState==='Z','timed-out shell must not leave its child running');
+  }finally{
+    agent.ws.close();fs.rmSync(wsRoot(key),{recursive:true,force:true});
   }
 });
 
@@ -440,8 +1397,8 @@ test('ROS Wizzard is separated from runtime status cards', () => {
   assert.match(wizard,/ROS Wizzard/);
   assert.doesNotMatch(wizard,/id="dc-nodes"|id="nodes-grid"/);
   for(const id of ['dc-nodes','dc-topics','dc-cpu','dc-mem','nodes-grid']) assert.match(status,new RegExp(`id="${id}"`),id);
-  assert.match(dashboard,/SIMULATION_WIZARD_ORDER = \['urdf','tf','odom','lidar','control','mapping','navigation'\]/);
-  assert.match(dashboard,/REAL_ROBOT_WIZARD_ORDER = \['urdf','lidar','hardware','pid','control','mapping','navigation'\]/);
+  assert.match(dashboard,/SIMULATION_WIZARD_ORDER = \['urdf','lidar','control','mapping','navigation'\]/);
+  assert.match(dashboard,/REAL_ROBOT_WIZARD_ORDER = \['system','urdf','lidar','hardware','pid','control','mapping','navigation'\]/);
   assert.match(dashboard,/REAL_ROBOT_OPTIONAL_ORDER = \[\]/);
   assert.doesNotMatch(dashboard,/publisher:\s*\{/);
   assert.match(dashboard,/function openAgvWizardStep/);
@@ -477,7 +1434,30 @@ test('Motion Control stays locked until the LiDAR field is ready in Simulation',
   context.__dependencies(realRobot,false);
   assert.equal(realRobot[1].detected,false);
   assert.equal(realRobot[1].dependencyBlocked,true);
-  assert.match(realRobot[1].dependencyMessage,/จูนค่า PID/);
+  assert.match(realRobot[1].dependencyMessage,/Hardware/);
+});
+
+test('real wizard skips tuning and selects mission 5 without fabricating PID verification', () => {
+  const context={window:{},document:{addEventListener:()=>{}},console,setTimeout,clearTimeout,setInterval,clearInterval};
+  vm.runInNewContext(read('public/dashboard.js')+'\n;globalThis.dependencies=applyAgvWizardDependencies;',context);
+  const backend=read('server.js'),serverContext={};
+  vm.runInNewContext(backend.slice(backend.indexOf('const SIMULATION_WIZARD_ORDER='),backend.indexOf('const ROBOT_LIMITS='))+'\n'+backend.slice(backend.indexOf('function summarizeRobotWizard('),backend.indexOf('async function inspectRealRobotSystem('))+'\n;globalThis.summarize=summarizeRobotWizard;',serverContext);
+  const fixture=()=>['system','urdf','tf','odom','lidar','hardware','pid','control','mapping','navigation'].map(id=>({id,detected:!['pid','control','mapping','navigation'].includes(id),tuneVerified:false}));
+  const capabilities=context.dependencies(fixture(),false);
+  const pid=capabilities.find(item=>item.id==='pid');
+  assert.equal(pid.skipped,true);
+  assert.equal(pid.detected,false);
+  assert.equal(pid.tuneVerified,false);
+  assert.notEqual(capabilities.find(item=>item.id==='control').dependencyBlocked,true);
+  const next=capabilities.filter(item=>!item.skipped&&!['tf','odom'].includes(item.id)).find(item=>!item.detected);
+  assert.equal(next.id,'control');
+  const summary=serverContext.summarize(fixture(),false);
+  assert.equal(summary.next,'control');
+  assert.equal(summary.total,7);
+  const complete=fixture().map(item=>({...item,detected:item.id!=='pid',mappingVerified:true}));
+  assert.equal(serverContext.summarize(complete,false).percent,100);
+  const withoutHardware=fixture().map(item=>({...item,detected:item.id==='hardware'?false:item.detected}));
+  assert.equal(context.dependencies(withoutHardware,false).find(item=>item.id==='control').dependencyBlocked,true);
 });
 
 test('ROS Wizzard rejects scanner-only Mapping and Navigation results', () => {
@@ -496,21 +1476,21 @@ test('ROS Wizzard rejects scanner-only Mapping and Navigation results', () => {
   assert.equal(verified.find(item=>item.id==='mapping').detected,true);
   assert.equal(verified.find(item=>item.id==='navigation').detected,true);
   assert.match(dashboard,/capability\.wizardActionCheck===true&&capability\.progressVersion===2&&capability\.mapFolderExists===true/);
-  assert.match(html,/dashboard\.js\?v=20260828-drive-center3/);
+  assert.match(html,/dashboard\.js\?v=[A-Za-z0-9-]+/);
 });
 
-test('real robot wizard contains only the navigation commissioning path in dependency order', () => {
+test('real robot wizard starts with system readiness before the navigation commissioning path', () => {
   const dashboard=read('public/dashboard.js'),server=read('server.js');
-  const expected="['urdf','lidar','hardware','pid','control','mapping','navigation']";
+  const expected="['system','urdf','lidar','hardware','pid','control','mapping','navigation']";
   assert.ok(dashboard.includes(`REAL_ROBOT_WIZARD_ORDER = ${expected}`));
   assert.ok(server.includes(`REAL_ROBOT_WIZARD_ORDER=${expected}`));
   for(const removed of ['safety','diagnostics','automation','deployment','camera','perception','manipulation','imu','calibration','localization']){
     assert.equal(expected.includes(`'${removed}'`),false,removed);
   }
-  for(const dependency of ["block('pid',['hardware']","block('control',['hardware','pid']","block('mapping',['control','lidar']","block('navigation',['pid','mapping']"]){
+  for(const dependency of ["block('urdf',['system']","block('pid',['hardware']","block('control',['hardware']","block('mapping',['control','lidar']","block('navigation',['mapping']"]){
     assert.ok(dashboard.includes(dependency),dependency);
   }
-  assert.match(server,/block\('navigation',\['pid','mapping'\]\)/);
+  assert.match(server,/block\('navigation',\['mapping'\]\)/);
   assert.match(dashboard,/name:'ประกอบหุ่น', tech:'Robot Model · TF · Odometry'/);
   assert.match(dashboard,/assemblyParts\.every\(part=>part\.detected===true\)/);
   assert.match(server,/\['urdf','tf','odom'\]\.every\(id=>byId\[id\]\?\.detected===true\)/);
@@ -558,6 +1538,16 @@ test('real robot LiDAR step installs a selected driver into workspace src and pl
   assert.match(server,/app\.post\('\/api\/lidar\/build'/);
   assert.match(server,/app\.post\('\/api\/lidar\/driver'/);
   assert.match(server,/ROSIDE_PROCESS=running/);
+  assert.match(server,/ROSIDE_LOG_STATE=missing/);
+  assert.match(server,/platform\.log/);
+  assert.match(server,/ROSIDE_PLATFORM_LOG_BEGIN/);
+  assert.match(server,/FAILED stage=\$\{currentStage\}/);
+  assert.match(server,/action==='start'&&!processRunning/);
+  assert.match(server,/action==='start'&&!topicReady/);
+  assert.match(server,/command:conflictingRuntimeStop,timeout:10000/);
+  assert.doesNotMatch(server,/\$\{stopCommand\}; \$\{conflictingRuntimeStop\}; : > \$\{remoteShellPath\(paths\.log\)\}/);
+  assert.match(lidar,/result\.action==='status'\?\[result\.platformLog/);
+  assert.match(html,/เปิด Driver \+ ทดสอบ/);
   assert.match(server,/tail -120/);
   assert.match(server,/usermod -aG dialout/);
   assert.match(server,/chmod 660/);
@@ -571,8 +1561,30 @@ test('real robot LiDAR step installs a selected driver into workspace src and pl
   assert.match(server,/sudo -S -p ''/);
   assert.match(server,/requiresSudo/);
   assert.match(server,/function decrypt\(t\)/);
-  assert.match(server,/sudoPassword:decrypt\(robot\.ssh_pass\)/);
+  assert.match(server,/sudoPassword:decrypt\(currentRobot\.ssh_pass\)/);
   assert.match(server,/function lidarDirectLaunchCommand/);
+  assert.match(server,/USB LiDARs must never silently fall back to the board UART/);
+  assert.match(server,/USB\|ACM\)\\d\+/);
+  assert.match(server,/channel_type:=serial[\s\S]+scan_mode:=Standard/);
+  assert.match(server,/async function ensureSllidarChannelFix/);
+  assert.match(server,/Result<nullptr_t> ans = SL_RESULT_OK/);
+  assert.match(server,/ans = RESULT_OK/);
+  assert.match(server,/packages-select sllidar_ros2/);
+  assert.match(server,/sllidar-channel-fix-v1/);
+  assert.match(server,/function lidarSerialPreflightCommand/);
+  assert.match(server,/ROSIDE_SERIAL_PREFLIGHT=failed/);
+  assert.match(server,/async function resetRobotUsbSerial/);
+  assert.match(server,/ROSIDE_USB_RESET=begin/);
+  assert.match(server,/cp210x\|ch341\|ftdi_sio\|usbserial/);
+  assert.match(server,/fcntl\.ioctl\(fd,21780,0\)/);
+  assert.match(server,/resetRobotUsbSerial\(session,port,password,'device'\)/);
+  assert.match(server,/async function restoreDetachedUsbSerial/);
+  assert.match(server,/detached_silicon_labs_candidates/);
+  assert.match(server,/\/sys\/class\/tty\/ttyUSB\*\/device/);
+  assert.match(server,/ROSIDE_USB_RESTORE=ready/);
+  assert.match(server,/async function runLidarStartWithUsbRecovery/);
+  assert.match(server,/Errno 5\|Input\\\/output error/);
+  assert.match(server,/conflictingRuntimeStop/);
   assert.match(server,/rosdep install --from-paths/);
   assert.match(server,/robot@roside\.local/);
   assert.match(server,/reportedDistro&&reportedDistro!=='unknown'/);
@@ -633,7 +1645,7 @@ test('real robot Hardware Builder follows saved Robot Model and ODOM after desig
   assert.doesNotMatch(hardware,/accessories\.has\('rplidar'\)/);
   assert.match(html,/Hardware Wiring Workspace/);
   assert.match(html,/class="wire-layer"|id="wiring-board"/);
-  assert.match(dashboard,/const designReady=\['urdf','tf','odom','lidar'\]\.every/);
+  assert.match(dashboard,/const designReady=\['urdf','lidar'\]\.every/);
   assert.match(dashboard,/hardware\.dependencyMessage='ทำ Robot Model, TF, ODOM และติดตั้ง LIDAR ให้สำเร็จก่อน/);
   assert.match(hardware,/sim_robot_tf\/tf_model\.json/);
   assert.match(hardware,/sim_robot_odom\/odom_config\.json/);
@@ -642,13 +1654,17 @@ test('real robot Hardware Builder follows saved Robot Model and ODOM after desig
   assert.match(html,/Controller Pinout Diagram/);
   assert.match(hardware,/function pinoutCard\(/);
   assert.match(hardware,/function drawPinoutLines\(\)/);
-  assert.match(hardware,/BLUE PILL · SERIAL BRIDGE/);
+  assert.match(hardware,/BLUE PILL · UART1 PA9\/PA10/);
+  assert.match(hardware,/HardwareSerial SerialBridge\(PA10, PA9\)/);
+  assert.match(hardware,/\['PB14','PB15','PB0','PA2','PA3'\]/);
+  assert.doesNotMatch(hardware,/\['PB14','PB15','PA9','PA2','PA3'\]/);
+  assert.match(hardware,/trig:'PA11',echo:'PA12'/);
   assert.match(hardware,/Motor Driver|driverLabel/);
   assert.match(hardware,/Encoder · \$\{encoder\.name\}/);
-  assert.match(hardware,/configuredEncoders\.find\(item=>item\.name===component\.name\)\|\|configuredEncoders\[index\]/);
+  assert.match(hardware,/configuredEncoders\.find\(item=>item\.name===component\.name\)\|\|\(!xy\?configuredEncoders\[index\]:null\)/);
   assert.match(hardware,/<option value="">\$\{esc\(encoder\.name\)\}<\/option>/);
   assert.match(hardware,/<small>frame_id<\/small>/);
-  assert.match(html,/hardware\.js\?v=20260828-control-mode10/);
+  assert.match(html,/hardware\.js\?v=[A-Za-z0-9-]+/);
   assert.match(hardware,/function hardwareApplyAssignmentAccordions\(\)/);
   assert.match(html,/\.assignment-accordion/);
   assert.equal((html.match(/class="card sidebar-card"/g)||[]).length,3);
@@ -664,6 +1680,9 @@ test('real robot Hardware Builder follows saved Robot Model and ODOM after desig
   assert.match(hardware,/kMpu6050Address = 0x68/);
   assert.match(hardware,/kBno055Address = 0x28/);
   assert.match(html,/id="code-modal"[^>]+role="dialog"[^>]+aria-modal="true"/);
+  const modalMarkup=html.slice(html.indexOf('<div class="code-modal"'),html.indexOf('<script src="/hardware-visuals.js'));
+  assert.ok(modalMarkup.indexOf('id="upload-port"')<modalMarkup.indexOf('class="code-tabs"'),'COM port and Build/Upload controls should lead the modal');
+  assert.match(html,/\.code-modal\{display:flex;align-items:center;justify-content:center/);
   assert.doesNotMatch(html,/id="code-button"/);
   assert.match(hardware,/function openCodeModal\(mode='preview'\)/);
   assert.match(hardware,/function compileHardwareCode\(\)/);
@@ -742,7 +1761,7 @@ test('real robot Hardware Builder follows saved Robot Model and ODOM after desig
   assert.match(hardware,/api\('\/api\/files\/write'/);
   assert.doesNotMatch(read('public/transformation.js'),/function tfApplyHardwareConfig\(config\)/);
   assert.match(html,/id="hardware-assignments"/);
-  assert.match(html,/hardware\.js\?v=20260828-control-mode10/);
+  assert.match(html,/hardware\.js\?v=[A-Za-z0-9-]+/);
   assert.match(hardware,/function writeHardwareBuildEvidence\(base,state,config=null\)/);
   assert.match(hardware,/build_verified\.json/);
   assert.match(hardware,/capability:'serial_bridge'/);
@@ -751,7 +1770,7 @@ test('real robot Hardware Builder follows saved Robot Model and ODOM after desig
   assert.match(html,/id="pid-kp"/);
   assert.match(html,/id="pid-control-enabled"[^>]+checked/);
   assert.match(html,/data-code-file="controller_bridge\.py"/);
-  assert.match(hardware,/robotDesign\.drive!==\'diff2\'/);
+  assert.match(hardware,/if\(!hardwareSupported\(\)\)/);
   assert.match(hardware,/function controllerBridgePython\(\)/);
   assert.match(hardware,/src\/roside_controller_bridge/);
   assert.match(hardware,/create_subscription\(Twist, '\/cmd_vel'/);
@@ -790,7 +1809,7 @@ test('real robot Hardware Builder follows saved Robot Model and ODOM after desig
   assert.match(transformation,/PID \+ ODOM แกน X\/Y/);
   assert.match(transformation,/motor: \{ enabled: w\.motorEnabled/);
   assert.match(transformation,/encoder: \{ enabled: w\.encoderEnabled/);
-  assert.match(index,/transformation\.js\?v=20260813-all-encoders3/);
+  assert.match(index,/transformation\.js\?v=20261015-mecanum-xy2/);
   assert.match(transformation,/function tfDetectEncoders\(/);
   assert.match(transformation,/Encoder ทั้งหมดจาก Robot Model/);
   assert.match(transformation,/encoders:\(o\.encoders\|\|\[\]\)\.map/);
@@ -798,9 +1817,9 @@ test('real robot Hardware Builder follows saved Robot Model and ODOM after desig
   assert.match(hardware,/ENCODER จาก MODEL/);
   assert.match(hardware,/encoderAssignments/);
   assert.match(hardware,/มี Encoder ติดท้ายมอเตอร์/);
-  assert.match(hardware,/encoderEnabled=encoder\?!!encoder\.enabled:!!wheel\.encoderEnabled/);
+  assert.match(hardware,/encoderEnabled=isMecanumXY\(\)\?false:\(encoder\?!!encoder\.enabled:!!wheel\.encoderEnabled\)/);
   assert.match(hardware,/ppr:encoder\?\.ppr\|\|wheel\.ppr\|\|600/);
-  assert.match(hardware,/version:13/);
+  assert.match(hardware,/version:18/);
   assert.match(hardware,/encoderEnabled,encoderRole,ppr,channels,invert/);
   assert.match(hardware,/กลับทิศ Encoder \(Invert\)/);
   assert.match(hardware,/key==='invert'.+value\?-1:1/);
@@ -817,7 +1836,7 @@ test('real robot Hardware Builder follows saved Robot Model and ODOM after desig
 
 test('ESP32 Hardware upload prepares Linux and esptool automatic boot mode', () => {
   const hardware=read('public/hardware.js'),html=read('public/hardware.html');
-  assert.match(html,/hardware\.js\?v=20260828-control-mode10/);
+  assert.match(html,/hardware\.js\?v=[A-Za-z0-9-]+/);
   assert.match(html,/NodeMCU-32S · ESP32 Auto BOOT/);
   assert.match(hardware,/NodeMCU-32S \(Auto BOOT\)/);
   assert.match(hardware,/esp32:\['espressif32','nodemcu-32s',''\]/);
@@ -843,26 +1862,26 @@ test('robot tuning follows motor count, verifies controller protocol, and handle
   assert.ok(dashboard.indexOf("'hardware','pid','control'")>0);
   assert.match(html,/id="tune-port"/);
   assert.match(html,/id="protocol-state"/);
-  assert.match(html,/id="rpm-chart"/);
-  assert.match(html,/id="gyro-chart"/);
-  assert.match(html,/id="gyro-x"/);
-  assert.match(html,/tune\.js\?v=20260828-control-mode10/);
+  assert.match(html,/id="tune-dashboard"/);
+  assert.match(html,/id="td-add-chart"/);
+  assert.match(html,/tune-dashboard\.js\?v=20261016-pose-dashboard/);
+  assert.match(html,/tune\.js\?v=20261016-pose-dashboard/);
   assert.match(html,/data-test="forward"/);
   assert.match(tune,/\/ws\/controller-tune/);
   assert.match(tune,/data\.event==='port_open'/);
   assert.match(tune,/data\.event!==\'frame\'/);
   assert.match(tune,/data\.kind==='RPM'/);
   assert.match(tune,/data\.kind==='GYRO'/);
-  assert.match(tune,/function drawGyroChart\(/);
+  assert.match(tune,/tuneDashboard\?\.ingest\(data\)/);
   assert.match(tune,/function configuredGyro\(config\)/);
-  assert.match(tune,/pidControlEnabled=hardwareConfig\.pidControl!==false/);
+  assert.match(tune,/pidControlEnabled=!positionOnly&&hardwareConfig\.pidControl!==false/);
   assert.match(tune,/\$\('pid-card'\)\.hidden=!pidControlEnabled/);
   assert.match(tune,/!pidControlEnabled\|\|pidAcks>0/);
   assert.match(tune,/hasEncoder/);
-  assert.match(tune,/gyroCapability\.enabled/);
+  assert.match(tune,/gyroCapability=configuredGyro\(hardwareConfig\)/);
   assert.match(tune,/state\('gyro-state','NO DATA'/);
   assert.match(tune,/state\('rpm-state','NO DATA'/);
-  assert.match(html,/id="gyro-card"/);
+  assert.doesNotMatch(html,/id="gyro-card"/);
   assert.match(html,/id="pid-card"/);
   assert.match(html,/id="gyro-state-row"/);
   assert.match(tune,/motorList\(config\)/);
@@ -924,9 +1943,22 @@ test('AGV mission details open on demand in an accessible modal', () => {
   assert.doesNotMatch(dashboard,/openAgvWizardStep\(initial\)/);
 });
 
+test('real robot mission zero selects Humble or Jazzy without changing the SIM order', () => {
+  const dashboard=read('public/dashboard.js'),server=read('server.js');
+  assert.match(dashboard,/const SIMULATION_WIZARD_ORDER = \['urdf','lidar','control','mapping','navigation'\]/);
+  assert.match(dashboard,/const REAL_ROBOT_WIZARD_ORDER = \['system','urdf','lidar','hardware','pid','control','mapping','navigation'\]/);
+  assert.match(dashboard,/name:'ตรวจความพร้อมระบบ'/);
+  assert.match(dashboard,/runRealSystemCheck\(false\)/);
+  assert.match(dashboard,/runRealSystemCheck\(true\)/);
+  assert.match(server,/inspectRealRobotSystem\(session\.robotKey\)/);
+  assert.match(server,/buildRealSystemInstallCommand\(distro\)/);
+  assert.match(server,/rosdep update --rosdistro \$\{distro\}/);
+  assert.match(dashboard,/Ubuntu 22\.04 LTS \(Jammy\).*ROS 2 Humble/);
+});
+
 test('SIM LiDAR mission opens Map Editor and stores an installable hardware choice', () => {
   const html=read('public/index.html'), dashboard=read('public/dashboard.js'), map=read('public/map.js'), server=read('server.js');
-  assert.match(server,/robotName:robot\.name,isSim:isSim\(robot\.robot_key\)/);
+  assert.match(server,/robotName:robot\.access_alias\|\|robot\.name,isSim:isSim\(robot\.robot_key\)/);
   assert.match(server,/rosInfo:s\.rosInfo,isSim:isSim\(s\.robotKey\)/);
   assert.match(dashboard,/id === 'lidar' && isSimWorkspace/);
   assert.match(dashboard,/page: 'map'/);
@@ -966,7 +1998,7 @@ test('3D Map Editor stores metric objects and keeps legacy simulation walls', ()
   assert.match(html,/id="map3d-container"/);
   assert.match(editor,/const MAP3D_ASSETS=/);
   const assetBlock=editor.slice(editor.indexOf('const MAP3D_ASSETS=['),editor.indexOf('].map(([id,type,label,icon,category,defaults={}])'));
-  assert.equal((assetBlock.match(/\['[^']+','[^']+','[^']+'/g)||[]).length,39);
+  assert.equal((assetBlock.match(/\['[^']+','[^']+','[^']+'/g)||[]).length,51);
   for (const asset of ['wall','door','table','chair','sofa','double-bed','refrigerator','whiteboard','charging-station','start']) assert.match(editor,new RegExp(`'${asset}'`),asset);
   assert.match(html,/id="map3d-palette"/);
   assert.match(html,/id="map3d-robot-config-layout"/);
@@ -998,13 +2030,12 @@ test('3D Map Editor stores metric objects and keeps legacy simulation walls', ()
   assert.match(editor,/function map3dReturnToWizard\(\)[\s\S]+window\.switchPage\('dashboard'\)[\s\S]+loadDashboard\(\)/);
   assert.match(editor,/บันทึกและรัน \/sim_robot_mapsim แล้ว[\s\S]{0,160}map3dReturnToWizard\(\)/);
   assert.match(editor,/path:'~\/map\.json'/);
-  assert.match(editor,/\/api\/sim\/apply-map/);
   assert.match(editor,/\/api\/sim\/run-mapsim/);
   assert.match(server,/app\.post\('\/api\/sim\/run-mapsim'/);
   assert.match(server,/cat install\/\.colcon_install_layout/);
   assert.match(server,/= \"merged\"/);
-  assert.match(server,/colcon build --merge-install --packages-select sim_robot_mapsim/);
-  assert.match(server,/colcon build --packages-select sim_robot_mapsim/);
+  assert.match(server,/colcon build --merge-install --executor sequential --parallel-workers 1 --packages-select sim_robot_mapsim/);
+  assert.match(server,/colcon build --executor sequential --parallel-workers 1 --packages-select sim_robot_mapsim/);
   assert.match(server,/node:'\/sim_robot_mapsim'/);
   assert.match(dashboard,/pkg:'sim_robot_mapsim', exe:'mapsim'/);
   assert.match(genMapsimFiles()['setup.cfg'],/install_scripts=\$base\/lib\/sim_robot_mapsim/);
@@ -1059,6 +2090,8 @@ test('Robot Playground reuses RViz runtime and starts the saved MapSim world', (
   assert.match(playground,/rvizUseDesktopLayout/);
   assert.match(playground,/path:'~\/map\.json'/);
   assert.match(playground,/\/api\/sim\/run-mapsim/);
+  assert.match(playground,/function playgroundConnectRuntime/);
+  assert.match(playground,/await playgroundConnectRuntime\(\)/);
   assert.match(playground,/rvizTeleopSet/);
   assert.match(playground,/setPointerCapture/);
   assert.match(playground,/lostpointercapture/);
@@ -1074,8 +2107,10 @@ test('Robot Playground reuses RViz runtime and starts the saved MapSim world', (
   assert.match(playground,/d\.type==='TF'&&d\.enabled/);
   assert.match(rviz,/lastMapSig===sig/);
   assert.match(rviz,/cy=w-1-x/);
-  assert.match(playground,/mesh\.rotation\.y=rotation\*Math\.PI\/180/);
-  assert.match(rviz,/const TELEOP_RATE = 60/);
+  assert.match(playground,/MapSceneAssets\.build\(obj,objects\)/);
+  assert.match(playground,/group\.rotation\.y=Math\.PI\/2/);
+  assert.match(rviz,/const TELEOP_RATE = 30/);
+  assert.match(rviz,/const TELEOP_IDLE_STOP_MS = 5000/);
   assert.match(rviz,/_teleopWriteChain=_teleopWriteChain/);
   assert.match(rviz,/rvizTeleop\.curLin = 0; rvizTeleop\.curAng = 0/);
   assert.match(server,/_sim_state_pub\[\.\]py/);
@@ -1108,13 +2143,15 @@ test('Robot Config follows the app theme and saves TF, model, and wheel odometry
 test('Robot Config templates replace old 3D objects and create the expected drive layouts', () => {
   const html=read('public/index.html');
   const transformation=read('public/transformation.js');
-  const source=transformation+'\n;globalThis.__tf=tf;globalThis.__templates=TF_ROBOT_TEMPLATES;globalThis.__apply=tfApplyRobotTemplate;globalThis.__clear=tfClearRenderedComponents;';
+  const source=transformation+'\n;globalThis.__tf=tf;globalThis.__templates=TF_ROBOT_TEMPLATES;globalThis.__apply=tfApplyRobotTemplate;globalThis.__applyComps=tfApplyComps;globalThis.__buildUrdf=tfBuildURDF;globalThis.__buildModel=tfBuildModelJSON;globalThis.__clear=tfClearRenderedComponents;';
   const storage=new Map(),context={
     window:{addEventListener:()=>{},confirm:()=>true},
     document:{getElementById:()=>null,querySelectorAll:()=>[]},
     localStorage:{getItem:key=>storage.get(key)||null,setItem:(key,value)=>storage.set(key,value)},
     requestAnimationFrame:()=>{},performance:{now:()=>0},setTimeout,
     sbMsg:()=>{},escH:value=>String(value),encArg:value=>String(value),
+    THREE:{MathUtils:{degToRad:value=>value*Math.PI/180}},
+    RobotVisuals:require('../public/robot-visuals'),
     console,JSON,Math,Object,Array,Set,Map,parseInt,isNaN,
   };
   vm.runInNewContext(source,context);
@@ -1127,7 +2164,26 @@ test('Robot Config templates replace old 3D objects and create the expected driv
     assert.ok(wheels.every(wheel=>wheel.parent==='base_link'),kind);
     assert.ok(context.__tf.comps.some(part=>part.type==='lidar'),kind+' lidar');
     assert.ok(context.__tf.comps.some(part=>part.type==='imu'),kind+' imu');
+    const base=context.__tf.comps.find(part=>part.type==='base');
+    assert.equal(base.pos.z,0,kind+' base_link Z');
+    assert.equal(base.baseOrigin,'bottom_center',kind+' base origin convention');
   }
+  const urdf=context.__buildUrdf();
+  assert.match(urdf,/<link name="base_link">\s*<visual><origin xyz="0\.000000 0\.000000 0\.090000"/);
+  assert.match(urdf,/<collision><origin xyz="0\.000 0\.000 0\.090"/);
+
+  const legacy=[
+    {id:'legacy-base',type:'base',name:'base_link',parent:'',pos:{x:.2,y:-.1,z:.12},rpy:{r:0,p:0,y:0},params:{sx:.58,sy:.4,sz:.18}},
+    {id:'legacy-lidar',type:'lidar',name:'laser_link',parent:'base_link',pos:{x:.12,y:0,z:.15},rpy:{r:0,p:0,y:0},params:{radius:.055,height:.09}},
+  ];
+  context.__applyComps(legacy);
+  assert.deepEqual(context.__tf.comps[0].pos,{x:.2,y:-.1,z:0},'legacy base keeps X/Y but moves to Z=0');
+  assert.equal(context.__tf.comps[1].pos.z,.24,'legacy child is shifted once to preserve its chassis-relative placement');
+  context.__applyComps(JSON.parse(context.__buildModel()));
+  assert.equal(context.__tf.comps[1].pos.z,.24,'bottom-origin models must not be migrated twice');
+  const chassisParts=context.RobotVisuals.parts(context.__tf.comps[0]).filter(p=>p.shape==='box');
+  assert.ok(chassisParts.every(p=>p.xyz[2]-p.size[2]/2>=-1e-8),'chassis geometry stays above base_link');
+  assert.match(transformation,/c\.pos\.z = c\.type === 'base' \? 0/);
   let removed=0,geometryDisposed=0,materialDisposed=0,textureDisposed=0;
   const oldGroup={parent:{remove:target=>{assert.equal(target,oldGroup);removed++}},traverse:visit=>visit({geometry:{dispose:()=>geometryDisposed++},material:{map:{dispose:()=>textureDisposed++},dispose:()=>materialDisposed++}})};
   const stale=context.__tf.comps[0];stale.group=oldGroup;stale.label={};stale._mat={};
@@ -1141,7 +2197,8 @@ test('Robot Config templates replace old 3D objects and create the expected driv
   const applyBlock=transformation.slice(transformation.indexOf('function tfApplyRobotTemplate'),transformation.indexOf('// เพิ่มคู่ เอนโคเดอร์'));
   assert.ok(applyBlock.indexOf('tfClearRenderedComponents(tf.comps)')<applyBlock.indexOf('tf.comps=['));
   assert.match(transformation,/function tfBuildScene\(\)[\s\S]{0,100}tfClearRenderedComponents\(tf\.comps\)/);
-  assert.equal(Object.keys(context.__templates).length,6);
+  assert.equal(Object.values(context.__templates).filter(t=>!t.articulated).length,7);
+  assert.equal(Object.values(context.__templates).filter(t=>t.articulated).length,3);
   assert.match(html,/class="tf-panel-scroll"/);
   assert.match(html,/id="tf-template-modal"/);
   assert.match(html,/onclick="tfOpenTemplateModal\(\)"/);
@@ -1159,11 +2216,15 @@ test('Robot Playground builds a progressive SLAM map and exports a Nav2 package'
   assert.match(sim,/create_publisher\(OccupancyGrid,'\/slam_map',ST\)/);
   assert.match(sim,/create_service\(Trigger,'\/save_slam_map'/);
   assert.match(sim,/def _integrate_slam_scan/);
+  assert.match(sim,/if self\.nav_goal is None and tick_now-self\._last_slam_publish>=0\.5 and scan_pose!=self\._slam_pose:\n\s+self\._last_slam_publish=tick_now\n\s+self\._integrate_slam_scan/);
   assert.match(sim,/sim_robot_nav_map/);
   assert.match(sim,/map\.pgm/);
   assert.match(sim,/map\.yaml/);
   assert.match(server,/app\.post\('\/api\/sim\/save-slam-map'/);
   assert.match(server,/colcon build[^\n]+sim_robot_nav_map/);
+  assert.match(server,/function cleanupStaleSimMapBuilds\(root\)/);
+  assert.match(server,/CMakeCache[.]txt/);
+  assert.match(server,/removedStaleArtifacts/);
 });
 
 test('Robot Playground separates mapping and kid-friendly Navigation missions', () => {
@@ -1178,8 +2239,8 @@ test('Robot Playground separates mapping and kid-friendly Navigation missions', 
   assert.match(sim,/_check_web_nav_config/);
   assert.match(playground,/if\(playgroundNavStarting\)/);
   assert.match(playground,/playgroundNavStarting=true/);
-  assert.match(server,/const mapsimLaunches = new Set\(\)/);
-  assert.match(server,/mapsimLaunches\.has\(s\.robotKey\)/);
+  assert.match(server,/const mapsimQueue = new MapsimQueue\(/);
+  assert.match(server,/mapsimQueue\.enqueue\(s\.robotKey/);
   assert.match(rviz,/playgroundPosePublished/);
   assert.match(rviz,/playgroundUpdateNavPose/);
   assert.match(sim,/create_subscription\(PoseStamped,'\/goal_pose'/);
@@ -1200,7 +2261,7 @@ test('Robot Playground separates mapping and kid-friendly Navigation missions', 
   assert.match(sim,/def _check_web_goal/);
   assert.match(rviz,/\/api\/sim\/navigation-goal/);
   assert.match(sim,/def _plan_nav_path/);
-  assert.match(sim,/heapq\.heappush/);
+  assert.match(read('sim-navigation.py'),/heapq\.heappush/);
   assert.match(sim,/nav_inflation_radius/);
   assert.match(sim,/create_publisher\(Path,'\/plan'/);
   for(const id of ['pg-nav-inflation','pg-nav-lookahead'])assert.match(html,new RegExp(`id="${id}"`));
@@ -1305,7 +2366,7 @@ test('real robot Motion Control connects Controller and LiDAR with ODOM driving 
   const html=read('public/index.html'),dashboard=read('public/dashboard.js');
   for(const id of ['real-teleop-modal','real-teleop-stop','real-teleop-linear','real-teleop-angular','real-controller-port','real-controller-connect','real-lidar-model','real-lidar-port','real-teleop-map','real-odom-x','real-odom-y','real-odom-yaw'])assert.match(html,new RegExp(`id="${id}"`),id);
   assert.match(html,/ฝึกบังคับหุ่นยนต์จริง/);
-  assert.equal((html.match(/class="real-teleop-btn" data-dir=/g)||[]).length,4);
+  assert.equal((html.match(/class="real-teleop-btn" data-dir=/g)||[]).length,6);
   assert.match(dashboard,/realTeleop: true/);
   assert.match(dashboard,/function openRealRobotTeleop\(\)/);
   assert.match(dashboard,/addEventListener\('pointercancel',up\)/);
@@ -1319,7 +2380,8 @@ test('real robot Motion Control connects Controller and LiDAR with ODOM driving 
   assert.match(dashboard,/data\.kind==='ODOM'/);
   assert.match(dashboard,/realOdomTrail\.push/);
   assert.match(dashboard,/function realTeleopDrawMap\(\)/);
-  assert.match(dashboard,/w:'fwd'.+a:'left'.+d:'right'/);
+  const keySource=dashboard.slice(dashboard.indexOf('function realTeleopKeyDirection('),dashboard.indexOf('function realTeleopSendDrive('));
+  for(const mecanum of [false,true]){const context=vm.createContext({realTeleopIsMecanum:()=>mecanum});vm.runInContext(keySource,context);assert.equal(context.realTeleopKeyDirection('a'),mecanum?'strafe-left':'left');assert.equal(context.realTeleopKeyDirection('d'),mecanum?'strafe-right':'right');}
   assert.match(dashboard,/event\.code==='Space'/);
   assert.match(dashboard,/V \$\{vx\.toFixed\(4\)\} 0 \$\{wz\.toFixed\(4\)\}/);
 });
@@ -1349,7 +2411,7 @@ test('every main workspace page has a contextual beginner guide', () => {
   assert.match(guide,/function pageGuidePageChanged\(/);
   assert.match(guide,/ros2ide_page_guide_seen_/);
   assert.match(guide,/ต้องไป Robot Playground โหมด Mapping และกด Save Map/);
-  assert.match(html,/guide\.js\?v=20260812-guide1/);
+  assert.match(html,/guide\.js\?v=20260912-real-ros-distros/);
 });
 
 test('every tool page exposes a top-right return to ROS Wizzard', () => {
@@ -1415,17 +2477,41 @@ test('real robot Mapping page collects SLAM layers and saves Nav2 map evidence',
   assert.match(html,/ความเร็วตรง/);
   assert.match(html,/id="controller-port"/);
   assert.match(html,/id="lidar-port"/);
+  assert.match(html,/id="lidar-model"/);
+  assert.match(html,/RPLIDAR C1 · 460800/);
   assert.match(html,/id="refresh-ports"/);
   assert.match(js,/controllerPort/);
   assert.match(server,/req\.body\.controllerPort/);
   assert.match(server,/req\.body\.lidarPort/);
-  assert.match(js,/CMD \$\{linear\} 0/);
+  const commandSource=js.slice(js.indexOf('function commandFor('),js.indexOf('function sendDrive('));
+  const commandContext=vm.createContext({mappingHardware:{drive:'diff2'},RealDriveMotion:require('../public/real-drive-motion'),$:id=>({value:id==='linear'?'.2':'.6'})});vm.runInContext(commandSource,commandContext);assert.equal(commandContext.commandFor('forward'),'CMD 0.2 0');assert.equal(commandContext.commandFor('left'),'CMD 0 0.6');
   assert.match(html,/id="controller-state"/);
   assert.match(server,/serial\.Serial\(PORT,BAUD,timeout=0\)/);
   assert.match(server,/send\('V %\.4f 0 %\.4f'/);
   assert.match(js,/driveTimer=setInterval\(\(\)=>sendDrive\(kind\),100\)/);
   assert.match(js,/Controller TX →/);
   assert.match(html,/NO MAP DATA/);
+  assert.match(html,/#empty\[hidden\]\{display:none!important\}/);
+  assert.match(js,/const renderMappingBase=draw/);
+  assert.match(server,/lidarPid:'~\/\.roside\/mapping-runtime\/lidar\.pid'/);
+  assert.match(server,/lidarLog:'~\/\.roside\/mapping-runtime\/lidar\.log'/);
+  assert.match(server,/ROSIDE_MAPPING_LIDAR_CLEANUP_BEGIN/);
+  assert.match(server,/ROSIDE_MAPPING_LIDAR_DIED_BEFORE_SCAN/);
+  assert.match(server,/ROSIDE_MAPPING_SCAN_WAIT_FAILED/);
+  assert.match(server,/ROSIDE_LIDAR_CONFIG model=/);
+  assert.match(server,/เปิด serial ได้ แต่ LiDAR ไม่ตอบ DeviceInfo/);
+  assert.match(server,/lidarTfLaunchCommands/);
+  assert.match(server,/timeout 8s ros2 run tf2_ros static_transform_publisher[\s\S]*frame-id odom --child-frame-id base_link[\s\S]*roside_odom_bootstrap/);
+  assert.doesNotMatch(server,/ros2 launch sim_robot_tf tf_static\.launch\.py/);
+  assert.match(js,/function checkMappingDiagnostics/);
+  assert.match(js,/result\.lidarRunning===false/);
+  assert.match(js,/status\.processRunning&&status\.lidarRunning/);
+  assert.match(js,/lidarModelId/);
+  assert.match(server,/requestedLidarModelId/);
+  assert.match(server,/lidarModelId:req\.body\.lidarModelId/);
+  assert.match(js,/function enforceMappingUsbLidarPort/);
+  assert.match(js,/RECOVERED ระบบบนหุ่นยนต์ทำงานอยู่จริง/);
+  assert.match(js,/\/dev\/ttyUSB0 · รอกู้การเชื่อมต่อ USB/);
   assert.match(dashboard,/realMapping: true/);
   assert.match(scanner,/mapping_result\.json/);
 });
@@ -1434,19 +2520,101 @@ test('real robot Nav2 page reuses Mapping map and drives controller from cmd_vel
   const server=read('server.js'),dashboard=read('public/dashboard.js'),html=read('public/navigation.html'),js=read('public/navigation.js');
   assert.match(server,/app\.get\('\/navigation'/);
   assert.match(server,/app\.post\('\/api\/navigation\/maps'/);
+  assert.match(server,/app\.post\('\/api\/navigation\/map-data'/);
+  assert.match(server,/source:'saved-map-files'/);
   assert.match(server,/app\.post\('\/api\/navigation\/runtime'/);
   assert.match(server,/nav2_bringup bringup_launch\.py/);
+  assert.match(server,/sed 's\/base_footprint\/base_link\/g'/);
+  assert.match(server,/params_file:=\$\{remoteShellPath\(navParams\)\}/);
+  assert.match(server,/for _ in range\(3\).*initial_pub\.publish/);
+  assert.match(server,/\{requireSlam:false,lidarModelId:req\.body\.lidarModelId\}/);
+  assert.match(server,/timeout 4s ros2 topic echo --once \/scan/);
+  assert.match(server,/lidarPid:'~\/\.roside\/navigation-runtime\/lidar\.pid'/);
+  assert.match(server,/lidarLog:'~\/\.roside\/navigation-runtime\/lidar\.log'/);
+  assert.match(server,/ROSIDE_LIDAR=running/);
+  assert.match(server,/stage:'launch-lidar'/);
+  assert.match(server,/lidarRunning,lidarLog/);
+  assert.match(server,/fuser -k/);
+  assert.match(server,/pkill -KILL -f \$\{staleLidarPattern\}/);
+  assert.match(server,/ROSIDE_LIDAR_CLEANUP_BEGIN/);
+  assert.match(server,/ROSIDE_OLD_NAV_NODES_BEGIN/);
+  assert.match(server,/ROSIDE_NAV_CLEANUP_REMAINING_BEGIN/);
+  assert.match(server,/\[c\]ontroller_server/);
+  assert.match(server,/\[c\]ontroller_bridge\.py --ros-args/);
+  assert.match(server,/grep -E '\[r\]oside_navigation_live\|\[c\]ontroller_bridge/);
+  assert.match(server,/nav_script=\/tmp\/_roside_navigation_\\\$\(printf live\)\.py/);
+  assert.match(server,/frame_id:=\$\{frame\}/);
+  assert.match(server,/lidarTfLaunchCommands/);
+  assert.match(server,/ros2 topic echo --once \/scan --qos-reliability best_effort/);
+  assert.match(server,/scan_ok=\$\(\(scan_ok\+1\)\)/);
+  assert.match(server,/ROSIDE_LIDAR_START_FAILED/);
+  assert.match(server,/ROSIDE_SCAN_WAIT_FAILED/);
+  assert.match(server,/ROSIDE_SCAN_TOPICS=/);
+  assert.match(server,/scanPublisherCount/);
+  assert.match(server,/scanTopicPresent/);
   assert.match(server,/NavigateToPose/);
   assert.match(server,/NavigateThroughPoses/);
   assert.match(server,/navigate_through_poses/);
   assert.match(server,/create_subscription\(Twist,'\/cmd_vel'/);
+  assert.match(server,/MIN_SPEED=\$\{minSpeed\}/);
+  assert.match(server,/def commanded_speed/);
+  assert.match(server,/from nav_msgs\.srv import GetMap/);
+  assert.match(server,/map_client=n\.create_client\(GetMap,'\/map_server\/map'\)/);
+  assert.match(server,/map_future=map_client\.call_async\(GetMap\.Request\(\)\)/);
+  assert.match(server,/event='bridge_ready'/);
+  assert.match(server,/vx=commanded_speed\(m\.linear\.x,MAX_SPEED\)/);
+  assert.match(server,/wz=commanded_speed\(m\.angular\.z,MAX_TURN\)/);
+  assert.match(server,/math\.copysign\(target,value\) if abs\(value\)>1e-5 else 0\.0/);
+  assert.match(server,/navMaxSpeedYaml=navMaxSpeed\.toFixed\(6\)/);
+  assert.match(server,/\[\$\{navMaxSpeedYaml\}, 0\.0, \$\{navMaxTurnYaml\}\]/);
+  assert.match(js,/เชื่อม Nav2 stream แล้ว/);
+  assert.match(server,/minSpeed>\s*Math\.min\(10,maxSpeed\)/);
+  assert.match(js,/minSpeed:Number\(\$\('min-speed'\)\.value\)/);
   assert.match(server,/pathname==='\/ws\/navigation'/);
   assert.match(dashboard,/realNavigation:\s*true/);
   assert.match(dashboard,/window\.location\.assign\('\/navigation'\)/);
-  for(const id of ['map-select','controller-port','lidar-port','pose-mode','goal-mode','route-mode','run-route','nav-canvas'])assert.match(html,new RegExp(`id="${id}"`));
+  for(const id of ['map-select','controller-port','lidar-port','lidar-model','pose-mode','goal-mode','route-mode','run-route','nav-canvas'])assert.match(html,new RegExp(`id="${id}"`));
+  assert.match(js,/lidarModelId/);
+  assert.match(html,/#empty\[hidden\]\{display:none!important\}/);
+  assert.match(js,/onpointerdown=pointerDown/);
+  assert.match(js,/poseDraft=\{\.\.\.p,yaw:0,dragged:false\}/);
+  assert.match(js,/function pointerUp/);
+  assert.match(js,/Math\.atan2\(dy,dx\)/);
+  assert.match(js,/ยังไม่ได้รับ \/amcl_pose จึงยังวางแผนไม่ได้/);
+  assert.match(js,/function sendInitialPoseUntilLocalized/);
+  assert.match(js,/poseRetryCount<5/);
+  assert.match(js,/function updatePlanningProgress/);
+  assert.match(js,/ยังไม่ได้เส้นทางหลัง/);
+  assert.match(js,/function checkNavigationDiagnostics/);
+  assert.match(js,/function loadSavedMap/);
+  assert.match(js,/\/api\/navigation\/map-data/);
+  assert.match(js,/action:'status'/);
+  assert.match(js,/lidarRunning===false/);
+  assert.match(js,/LIDAR ERROR/);
+  assert.match(js,/รันอยู่แต่ยังไม่ได้ข้อมูล \/scan/);
+  assert.match(js,/scanPublisherCount/);
+  assert.match(js,/function enforceNavigationUsbLidarPort/);
   assert.match(js,/mapping_result\.json/);
-  assert.match(js,/`POSE \$\{p\.x\}/);
-  assert.match(js,/`GOAL \$\{p\.x\}/);
+  assert.match(js,/`POSE \$\{initialPose\.x\}/);
+  assert.match(js,/`GOAL \$\{draft\.x\} \$\{draft\.y\} \$\{draft\.yaw\}`/);
+  assert.match(js,/`SPEED \$\{maxSpeed\}/);
+  assert.match(html,/id="speed"[^>]+max="10\.00"/);
+  assert.match(html,/id="turn"[^>]+max="10\.00"/);
+  assert.match(html,/id="speed"[^>]+value="2\.00"/);
+  assert.match(html,/id="turn"[^>]+value="2\.00"/);
+  assert.match(html,/id="min-speed"[^>]+max="10\.00"/);
+  assert.match(html,/id="min-turn"[^>]+max="10\.00"/);
+  assert.match(server,/maxSpeed>10/);
+  assert.match(server,/maxTurn>10/);
+  assert.match(server,/f\[0\]=='SPEED'/);
+  assert.match(server,/function apply_nav_speed|def apply_nav_speed/);
+  assert.match(server,/FollowPath\.desired_linear_vel/);
+  assert.match(server,/FollowPath\.max_vel_theta/);
+  assert.match(server,/AsyncParameterClient/);
+  assert.match(server,/max_vel_x\|max_speed_xy\|desired_linear_vel/);
+  assert.match(server,/max_vel_theta\|rotate_to_heading_angular_vel/);
+  assert.match(js,/requestAnimationFrame/);
+  assert.match(js,/mapBitmap=document\.createElement\('canvas'\)/);
   assert.match(js,/send\('CANCEL'\)/);
   assert.match(js,/type:'route',points/);
 });

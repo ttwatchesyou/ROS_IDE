@@ -1,0 +1,60 @@
+{
+  "parser": [
+    {
+      "chunkBytes": 1024,
+      "chunks": 380,
+      "frameBytes": 388956,
+      "frames": 3,
+      "existing": {
+        "wallMs": 45.30156399999999,
+        "cpuMs": 70.305,
+        "received": 3
+      },
+      "incrementalPrototype": {
+        "wallMs": 50.15374200000001,
+        "cpuMs": 84.242,
+        "received": 3
+      }
+    },
+    {
+      "chunkBytes": 4096,
+      "chunks": 95,
+      "frameBytes": 388956,
+      "frames": 3,
+      "existing": {
+        "wallMs": 36.592468,
+        "cpuMs": 57.054,
+        "received": 3
+      },
+      "incrementalPrototype": {
+        "wallMs": 26.772670000000005,
+        "cpuMs": 27.125,
+        "received": 3
+      }
+    },
+    {
+      "chunkBytes": 16384,
+      "chunks": 24,
+      "frameBytes": 388956,
+      "frames": 3,
+      "existing": {
+        "wallMs": 22.41313600000001,
+        "cpuMs": 22.557,
+        "received": 3
+      },
+      "incrementalPrototype": {
+        "wallMs": 25.341488,
+        "cpuMs": 26.237,
+        "received": 3
+      }
+    }
+  ],
+  "pulse": {
+    "links": 2,
+    "packets": 2,
+    "wireBytesPerPulse": 1286,
+    "networkInterfaceEnumerationsPerPulse": 1,
+    "pulsesPerSecond": 4
+  },
+  "notes": "Offline synthetic replay; no robot commands or server load traffic were generated."
+}

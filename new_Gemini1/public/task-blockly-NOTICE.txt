@@ -1,0 +1,30 @@
+Blockly 12.4.1 — https://github.com/google/blockly
+Copyright 2012 Google Inc. and Blockly contributors.
+Licensed under Apache License 2.0; see task-blockly-LICENSE.txt.
+
+Vendored from npm blockly@12.4.1 (unmodified distribution assets):
+blockly_compressed.js -> task-blockly.js
+msg/th.js -> task-blockly-th.js
+media/sprites.png -> task-blockly-sprites.png
+blocks_compressed.js -> task-blockly-standard.js
+javascript_compressed.js -> task-blockly-javascript.js
+python_compressed.js -> task-blockly-python.js
+media/sprites.png -> sprites.png (stock control asset path)
+media/delete-icon.svg -> delete-icon.svg
+media/foldout-icon.svg -> foldout-icon.svg
+media/resize-handle.svg -> resize-handle.svg
+
+SHA-256:
+221b9d555ffd4d9d76d8a0b295565ff91dbf0e48a5d6c8b78e09ba7955a752f8 task-blockly.js
+f3721b4a7da1341735a09d90f75ef2ffeadd0f36156cff4bd5250daba0e7d092 task-blockly-th.js
+6be49176dc8bef41c97958e02903c77c5e298b8dc26d2a09905851bfb73cc459 task-blockly-sprites.png
+d81768b75d6557da6d6e5604d27ee13ef791ac45b87478e8cfa2cb0df319a2c6 task-blockly-standard.js
+0e06988d22cf2d2a68869c657e79b02be2290eea2e9f86f7b05f7ca102d89829 task-blockly-javascript.js
+5799539eb44e470425f4b2a184405520abd3ce41d89307eda6cafe587cd91894 task-blockly-python.js
+3eee02b06f476ce746566808178543389e53cd4e9d7fd32b69e329eff4fc71ef delete-icon.svg
+0ac7478b56f5e5cc583c26710cb7ee5edcedb563cde65cd2385f4dd3e9e08c64 foldout-icon.svg
+c95d07b3fb3aaa088e6665061b01952e7ea9dda462b7032a85e095bf8a12855b resize-handle.svg
+
+Blockly assets are served locally, not loaded from a CDN. Sounds are disabled.
+The standard editor enables official comments, collapse, trashcan and zoom;
+legacy editor settings are unchanged. Only standalone Task Studio loads Blockly.

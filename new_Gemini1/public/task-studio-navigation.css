@@ -1,0 +1,54 @@
+/* Workspace navigation for the standalone Task Studio only. */
+:root{--ts-main-nav-height:44px}
+#ts-main-nav{height:44px;display:flex;align-items:center;gap:14px;padding:0 14px;border-bottom:1px solid #dfe6f0;background:#fff;color:#233149;font:12px/1.5 system-ui,sans-serif;position:sticky;top:0;z-index:60;box-sizing:border-box}
+#ts-main-nav *{box-sizing:border-box}
+#ts-main-nav a{color:inherit;text-decoration:none}
+#ts-main-nav .ts-shell-logo{font-size:14px;font-weight:800;white-space:nowrap;margin-right:10px;letter-spacing:-.4px}
+#ts-main-nav .ts-shell-logo span{color:#2874f0}
+#ts-main-nav .ts-shell-logo small{font:700 9px ui-monospace,monospace;margin-left:7px;color:inherit;letter-spacing:0}
+#ts-main-nav .ts-shell-menus{display:flex;align-items:center;gap:8px;margin:0;padding:0;border:0;flex-wrap:nowrap}
+#ts-main-nav .ts-shell-menus>details{position:relative}
+#ts-main-nav summary{list-style:none;cursor:pointer;white-space:nowrap}
+#ts-main-nav summary::-webkit-details-marker{display:none}
+#ts-main-nav .ts-shell-menus>details>summary,#ts-main-nav .ts-shell-terminal{padding:8px 10px;border-radius:6px;color:#526078;display:block;font-size:11px}
+#ts-main-nav .ts-shell-menus>details[open]>summary,#ts-main-nav .ts-shell-terminal:hover{background:#edf3ff;color:#2563eb}
+#ts-main-nav .ts-shell-dropdown{position:absolute;left:0;top:calc(100% + 4px);min-width:230px;padding:6px;background:#fff;border:1px solid #dfe6f0;border-radius:10px;box-shadow:0 10px 32px #20345322;display:grid;gap:3px}
+#ts-main-nav .ts-shell-dropdown a,#ts-main-nav .ts-shell-dropdown button{display:flex;align-items:center;gap:9px;min-height:38px;padding:8px 11px;border:0;border-radius:6px;font:12px system-ui,sans-serif;background:transparent;color:#34435e;text-align:left;cursor:pointer}
+#ts-main-nav .ts-shell-dropdown a:hover,#ts-main-nav .ts-shell-dropdown button:hover{background:#edf3ff;color:#2563eb}
+#ts-main-nav .ts-shell-dropdown .ts-shell-current{background:#f1edff;color:#7452cb;cursor:default}
+#ts-main-nav .ts-shell-actions{display:flex;align-items:center;gap:5px;margin-left:auto;flex-shrink:0}
+#ts-main-nav .ts-shell-action{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;min-height:34px;padding:7px;border:1px solid #dfe6f0;border-radius:9px;background:#f7f9fc;color:#52729b;cursor:pointer;font:15px/1 system-ui,sans-serif;flex-shrink:0}
+#ts-main-nav .ts-shell-action svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+#ts-main-nav .ts-shell-action.ts-shell-wizard{background:#f3edff;border-color:#dfd0fd;color:#8457dd}
+#ts-main-nav .ts-shell-action.ts-shell-robot{background:#edf8f6;border-color:#d5e9e4;cursor:default}
+#ts-main-nav .ts-shell-action.ts-shell-build{color:#338265}
+#ts-main-nav .ts-shell-action:hover{border-color:#a9c7f6;background:#edf3ff}
+#ts-main-nav .ts-shell-connection{cursor:default}
+#ts-main-nav .ts-shell-connection i{width:8px;height:8px;border-radius:50%;background:#a0abbd;box-shadow:0 0 0 5px #a0abbd15}
+#ts-main-nav .ts-shell-connection.ready i{background:#68bb98;box-shadow:0 0 0 5px #68bb9819}
+#ts-main-nav .ts-shell-profile{position:relative}
+#ts-main-nav .ts-shell-profile .ts-shell-dropdown{right:0;left:auto;max-width:calc(100vw - 20px)}
+#ts-main-nav .ts-shell-account{padding:8px 11px;color:#71809a;font-size:11px;overflow-wrap:anywhere}
+#ts-main-nav .ts-shell-account strong{display:block;color:#34435e;margin-top:3px}
+#ts-main-nav a:focus-visible,#ts-main-nav button:focus-visible,#ts-main-nav summary:focus-visible{outline:3px solid #8fb3f6;outline-offset:2px}
+#ts-nav-help{width:min(520px,calc(100vw - 28px));padding:22px;border:1px solid #dfe6f0;border-radius:16px;background:#fff;color:#27334d;box-shadow:0 18px 65px #1f2b5140;max-height:85dvh;overflow:auto}
+#ts-nav-help::backdrop{background:#1e294a65}
+#ts-nav-help h2{font-size:18px;margin:0 0 12px}
+#ts-nav-help p,#ts-nav-help li{font:13px/1.8 system-ui,sans-serif;color:#526078}
+#ts-nav-help ol{padding-left:22px}
+#ts-nav-help form{text-align:right;margin-top:16px}
+#ts-nav-help button{background:#7254d3;border-color:#7254d3;color:white}
+#ts-app #ts-workspace-return{display:inline-flex;align-items:center;gap:5px;flex-shrink:0;white-space:nowrap;padding:7px 10px;border:1px solid #d9e4f8;border-radius:10px;background:#f4f8ff;color:#2d66b4;text-decoration:none;font-size:11px;font-weight:700;min-height:36px}
+#ts-app #ts-workspace-return:hover{background:#e9f0ff;border-color:#b5cdf3}
+#ts-app .ts-layout{min-height:calc(100dvh - 97px - var(--ts-main-nav-height))}
+#ts-app .ts-editor-grid{height:calc(100dvh - 151px - var(--ts-main-nav-height))}
+#ts-app .ts-graph-scroll{height:calc(100dvh - 280px - var(--ts-main-nav-height))}
+[data-theme=dark] #ts-main-nav{background:#182233;color:#e1e9f7;border-color:#304058}
+[data-theme=dark] #ts-main-nav .ts-shell-dropdown{background:#182233;border-color:#304058}
+[data-theme=dark] #ts-main-nav .ts-shell-dropdown a,[data-theme=dark] #ts-main-nav .ts-shell-dropdown button,[data-theme=dark] #ts-main-nav .ts-shell-account strong{color:#e1e9f7}
+[data-theme=dark] #ts-main-nav .ts-shell-menus>details>summary,[data-theme=dark] #ts-main-nav .ts-shell-terminal{color:#b4c2d8}
+[data-theme=dark] #ts-main-nav .ts-shell-action{background:#202e43;border-color:#344862;color:#a8c3ec}
+[data-theme=dark] #ts-main-nav .ts-shell-dropdown a:hover,[data-theme=dark] #ts-main-nav .ts-shell-dropdown button:hover,[data-theme=dark] #ts-main-nav .ts-shell-dropdown .ts-shell-current,[data-theme=dark] #ts-main-nav .ts-shell-menus>details[open]>summary{background:#29395a;color:#b4cafa}
+@media(max-width:1100px){#ts-main-nav{gap:7px;padding-inline:12px}#ts-main-nav .ts-shell-logo{margin-right:0}#ts-app .ts-top{gap:8px}#ts-app .ts-brand small{display:none}}
+@media(max-width:760px){:root{--ts-main-nav-height:84px}#ts-main-nav{height:auto;min-height:84px;gap:3px 8px;flex-wrap:wrap;padding:5px 10px}#ts-main-nav .ts-shell-menus{order:3;width:100%;gap:4px}#ts-main-nav .ts-shell-actions{gap:4px}#ts-main-nav .ts-shell-action{width:30px;height:30px;min-height:30px;padding:5px}#ts-main-nav .ts-shell-extra{display:none}#ts-main-nav .ts-shell-logo{font-size:12px}#ts-main-nav .ts-shell-logo small{font-size:8px;margin-left:4px}#ts-main-nav .ts-shell-menus>details>summary,#ts-main-nav .ts-shell-terminal{padding:6px 10px}#ts-app .ts-top{gap:7px}#ts-app .ts-brand{flex:1}#ts-app .ts-actions{margin-left:auto}#ts-app .ts-editor-grid{height:auto}#ts-app .ts-graph-scroll{height:440px}#ts-main-nav .ts-shell-dropdown{min-width:210px}#ts-app #ts-workspace-return{font-size:10px;padding:6px 8px}}
+@media(max-width:410px){#ts-main-nav .ts-shell-connection{display:none}#ts-main-nav .ts-shell-actions{gap:3px}#ts-main-nav .ts-shell-logo small{display:none}#ts-main-nav .ts-shell-menus>details:nth-child(2) .ts-shell-dropdown{left:-55px}#ts-app .ts-brand{font-size:11px}#ts-app .ts-brand i{display:none}#ts-app .ts-top{padding:9px 10px}#ts-app #ts-workspace-return{min-height:32px}}

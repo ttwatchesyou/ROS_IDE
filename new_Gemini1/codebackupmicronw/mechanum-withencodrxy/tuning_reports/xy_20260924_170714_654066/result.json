@@ -1,0 +1,37 @@
+{
+  "parameters": {
+    "axis": "x",
+    "distance": 0.4,
+    "speed": 0.5,
+    "kp": 3.0,
+    "ki": 0.0,
+    "kd": 0.1,
+    "cross_kp": 3.0,
+    "cross_ki": 0.0,
+    "cross_kd": 0.1,
+    "yaw_kp": 9.5,
+    "yaw_kd": 0.4,
+    "yaw_max": 1.5,
+    "yaw_target": null,
+    "firmware_defaults": false,
+    "base": "http://127.0.0.1:8001",
+    "run": true
+  },
+  "legs": [],
+  "fault": "Motion reversed by 0.050 m before settling",
+  "origin": {
+    "goal_x": 0.0433,
+    "goal_y": 0.0526,
+    "goal_yaw": -0.0015,
+    "imu_ok": true,
+    "position_active": false,
+    "x": 0.0461,
+    "y": 0.0614,
+    "yaw": 0.0076
+  },
+  "last_target": {
+    "x": 0.44610000000000005,
+    "y": 0.0614,
+    "yaw": 0.0076
+  }
+}

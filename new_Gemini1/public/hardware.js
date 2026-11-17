@@ -10,10 +10,17 @@ let activeCodeFile='main.cpp';
 let platformioBusy=false;
 let hardwareOpenAssignment='';
 let tunedWheelPid=null;
+let odomSwapXY=false;
+let hardwarePinAssignments={};
 const DRIVE_META={diff2:{label:'2WD Differential',motors:2,kinematics:'differential',icon:'🛞'},diff4:{label:'4WD Differential',motors:4,kinematics:'differential_4wd',icon:'🚙'},mecanum4:{label:'4WD Mecanum',motors:4,kinematics:'mecanum',icon:'✣'}};
+function isMecanumXY(){return robotDesign?.hardwareTemplate==='mecanum_xy';}
+function hardwareSupported(){return robotDesign?.drive==='diff2'||(isMecanumXY()&&robotDesign.drive==='mecanum4');}
 const COLORS={power:'#ff718b',control:'#6c8cff',motor:'#ffb653',encoder:'#32d5f2',sensor:'#b879ff',data:'#3ed598'};
 const CONTROLLERS={
-  stm32f103:{label:'STM32F103C8T6',sub:'BLUE PILL · SERIAL BRIDGE',motors:[['PB12','PB13','PA8','PA0','PA1'],['PB14','PB15','PA9','PA2','PA3'],['PB3','PB4','PA6','PA4','PA5'],['PB5','PB8','PA7','PB10','PB11']],aux:{scl:'PB6',sda:'PB7',trig:'PB0',echo:'PB1',servo:'PB9'}},
+  // USART1 is the real-robot bridge: PA9=TX and PA10=RX are reserved and must
+  // never be allocated to motors, encoders, or accessories. PB0 replaces the
+  // old M2 PWM assignment; the ultrasonic pair moves to the free PA11/PA12.
+  stm32f103:{label:'STM32F103C8T6',sub:'BLUE PILL · UART1 PA9/PA10',motors:[['PB12','PB13','PA8','PA0','PA1'],['PB14','PB15','PB0','PA2','PA3'],['PB3','PB4','PA6','PA4','PA5'],['PB5','PB8','PA7','PB10','PB11']],aux:{scl:'PB6',sda:'PB7',trig:'PA11',echo:'PA12',servo:'PB9'}},
   portenta_h7:{label:'Arduino Portenta H7',sub:'CUSTOM SERIAL · PYTHON BRIDGE',motors:[['D2','D3','D5','D22','D23'],['D4','D7','D6','D24','D25'],['D8','D12','D9','D26','D27'],['D13','D14','D10','D28','D29']],aux:{scl:'SCL',sda:'SDA',trig:'D30',echo:'D31',servo:'D11'}},
   nanorp2040:{label:'Nano RP2040 Connect',sub:'CUSTOM SERIAL · PYTHON BRIDGE',motors:[['D2','D3','D5','A0','A1'],['D4','D7','D6','A2','A3'],['D8','D9','D10','D11','D12'],['D13','D14','D15','D16','D17']],aux:{scl:'SCL',sda:'SDA',trig:'D18',echo:'D19',servo:'D20'}},
   opencr:{label:'ROBOTIS OpenCR',sub:'USB SERIAL · PYTHON BRIDGE',motors:[['D2','D3','D4','D22','D23'],['D5','D6','D7','D24','D25'],['D8','D9','D10','D26','D27'],['D11','D12','D13','D28','D29']],aux:{scl:'SCL',sda:'SDA',trig:'D30',echo:'D31',servo:'D14'}},
@@ -62,7 +69,8 @@ async function readWorkspaceJson(relativePath){
 }
 
 function deriveRobotDesign(model,odom){
-  const sourceWheels=Array.isArray(odom?.wheels)?odom.wheels:[];
+  const xy=model?.some(c=>c.type==='base'&&c.params?.hardwareTemplate==='mecanum_xy');
+  const sourceWheels=(Array.isArray(odom?.wheels)?odom.wheels:[]).filter(w=>!xy||!model.find(c=>c.name===w.name)?.params?.passiveOdom);
   if(!Array.isArray(model)||!model.length)throw new Error('Robot Model ยังไม่มีชิ้นส่วน');
   if(!sourceWheels.length)throw new Error('ODOM config ยังไม่มีข้อมูลล้อ');
   const pattern=String(odom.pattern||''),defaultEncoderRole=pattern==='mecanum'||pattern.startsWith('omni')?'odom_xy':'odom_x';
@@ -70,13 +78,15 @@ function deriveRobotDesign(model,odom){
   // ชื่อ Encoder ต้องตาม frame_id ล่าสุดจาก Robot Model เสมอ ส่วนค่า PPR/role
   // เดิมจะจับคู่ด้วยชื่อก่อน และใช้ลำดับเดิมเป็น fallback เมื่อมีการเปลี่ยนชื่อ frame
   const sourceEncoders=modelEncoders.length?modelEncoders.map((component,index)=>{
-    const configured=configuredEncoders.find(item=>item.name===component.name)||configuredEncoders[index]||{};
-    return{...configured,name:component.name||configured.name||`encoder_${index+1}`,parent:component.parent||configured.parent||'',x:component.pos?.x??configured.x??0,y:component.pos?.y??configured.y??0,z:component.pos?.z??configured.z??0,enabled:configured.enabled!==false,role:configured.role||defaultEncoderRole,ppr:configured.ppr||1024,channels:configured.channels||4,invert:configured.invert||1};
+    const configured=configuredEncoders.find(item=>item.name===component.name)||(!xy?configuredEncoders[index]:null)||{};
+    const defaults=component.params||{};
+    const linked=defaults.attachedWheel||sourceWheels.find(w=>component.name==='encoder_'+w.name)?.name;
+    return{...configured,attached_wheel:defaults.passiveOdom?'':(configured.attached_wheel??configured.attachedWheel??linked),passiveOdom:!!defaults.passiveOdom,name:component.name||configured.name||`encoder_${index+1}`,parent:component.parent||configured.parent||'',x:component.pos?.x??configured.x??0,y:component.pos?.y??configured.y??0,z:component.pos?.z??configured.z??0,enabled:configured.enabled!==false,role:configured.role||defaults.encoderRole||defaultEncoderRole,ppr:configured.ppr||defaults.ppr||1024,channels:configured.channels||defaults.channels||4,invert:configured.invert||defaults.encoderInvert||1};
   }):configuredEncoders;
-  const encoders=sourceEncoders.map((encoder,index)=>{const attachedWheel=encoder.attached_wheel||encoder.attachedWheel||sourceWheels.find(wheel=>wheel.name===encoder.parent)?.name||model.find(component=>(component.type==='wheel'||component.type==='omni')&&component.parent===encoder.name)?.name||'';return{name:encoder.name||`encoder_${index+1}`,parent:encoder.parent||'',attachedWheel,enabled:encoder.enabled!==false,role:pattern==='differential'&&attachedWheel?defaultEncoderRole:(encoder.role||defaultEncoderRole),ppr:Math.max(1,Number(encoder.ppr)||1024),channels:Math.max(1,Number(encoder.channels)||1),invert:Number(encoder.invert)===-1?-1:1,x:Number(encoder.x)||0,y:Number(encoder.y)||0,z:Number(encoder.z)||0};});
+  const encoders=sourceEncoders.map((encoder,index)=>{const attachedWheel=encoder.passiveOdom?'':encoder.attached_wheel??encoder.attachedWheel??sourceWheels.find(wheel=>wheel.name===encoder.parent)?.name??model.find(component=>(component.type==='wheel'||component.type==='omni')&&!component.params?.passiveOdom&&component.parent===encoder.name)?.name??'';return{name:encoder.name||`encoder_${index+1}`,parent:encoder.parent||'',attachedWheel,enabled:xy&&attachedWheel?false:encoder.enabled!==false,role:pattern==='differential'&&attachedWheel?defaultEncoderRole:(encoder.role||defaultEncoderRole),ppr:Math.max(1,Number(encoder.ppr)||1024),channels:Math.max(1,Number(encoder.channels)||1),invert:Number(encoder.invert)===-1?-1:1,x:Number(encoder.x)||0,y:Number(encoder.y)||0,z:Number(encoder.z)||0};});
   const wheels=sourceWheels.map((wheel,index)=>{
     const defaultRole=sourceWheels.length===2?(Number(wheel.y)>=0?'left':'right'):sourceWheels.length===4?`${Number(wheel.x)>=0?'front':'rear'}_${Number(wheel.y)>=0?'left':'right'}`:'auxiliary';
-    const encoder=encoders.find(item=>item.attachedWheel===wheel.name),integrated=wheel.encoder||{};return{...wheel,motorEnabled:wheel.motor?.enabled!==false,motorRole:wheel.motor?.role||defaultRole,encoderEnabled:encoder?encoder.enabled:integrated.enabled===true,encoderRole:encoder?.role||(pattern==='differential'?defaultEncoderRole:(integrated.role||defaultEncoderRole)),ppr:encoder?.ppr||Math.max(1,Number(integrated.ppr??wheel.ppr)||600),channels:encoder?.channels||Math.max(1,Number(integrated.channels??wheel.channels)||1),invert:encoder?.invert||(Number(integrated.invert??wheel.invert)===-1?-1:1),encoderName:encoder?.name||'',sourceIndex:index};
+    const encoder=encoders.find(item=>item.attachedWheel===wheel.name),integrated=wheel.encoder||{};return{...wheel,motorInvert:wheel.motorInvert===true||(xy&&wheel.motorInvert==null&&defaultRole.endsWith('_right')),motorEnabled:wheel.motor?.enabled!==false,motorRole:wheel.motor?.role||defaultRole,encoderEnabled:encoder?encoder.enabled:integrated.enabled===true,encoderRole:encoder?.role||(pattern==='differential'?defaultEncoderRole:(integrated.role||defaultEncoderRole)),ppr:encoder?.ppr||Math.max(1,Number(integrated.ppr??wheel.ppr)||600),channels:encoder?.channels||Math.max(1,Number(integrated.channels??wheel.channels)||1),invert:encoder?.invert||(Number(integrated.invert??wheel.invert)===-1?-1:1),encoderName:encoder?.name||'',sourceIndex:index};
   });
   const motorCount=wheels.filter(wheel=>wheel.motorEnabled).length;
   const drive=pattern==='differential'&&motorCount===2?'diff2':pattern==='skid'&&motorCount===4?'diff4':pattern==='mecanum'&&motorCount===4?'mecanum4':null;
@@ -88,10 +98,15 @@ function deriveRobotDesign(model,odom){
   const types=new Set(model.map(component=>component.type));
   const attachedWheels=new Set(encoders.map(encoder=>encoder.attachedWheel).filter(Boolean));
   const encoderCount=encoders.filter(encoder=>encoder.enabled).length+wheels.filter(wheel=>wheel.encoderEnabled&&!attachedWheels.has(wheel.name)).length;
-  return{drive,driveLabel:drive?DRIVE_META[drive].label:'กรุณาตรวจ Motor Assignment',pattern,motorCount,encoderCount,wheelDiameterMm:diameter,wheelTrackMm:track,wheelBaseMm:wheelBase,hasImu:types.has('imu'),hasLidar:types.has('lidar'),componentCount:model.length,wheels,encoders};
+  return{hardwareTemplate:model.find(c=>c.type==='base')?.params?.hardwareTemplate||'',drive,driveLabel:drive?DRIVE_META[drive].label:'กรุณาตรวจ Motor Assignment',pattern,motorCount,encoderCount,wheelDiameterMm:diameter,wheelTrackMm:track,wheelBaseMm:wheelBase,hasImu:types.has('imu'),hasLidar:types.has('lidar'),componentCount:model.length,wheels,encoders};
 }
 
 function syncDesignAssignments(){
+  if(isMecanumXY())for(const wheel of robotDesign.wheels){
+    const encoder=robotDesign.encoders.find(item=>item.attachedWheel===wheel.name);
+    wheel.encoderEnabled=!!encoder?.enabled;
+    if(encoder){wheel.encoderRole=encoder.role;wheel.ppr=encoder.ppr;wheel.channels=encoder.channels;wheel.invert=encoder.invert;}
+  }
   robotDesign.motorCount=robotDesign.wheels.filter(wheel=>wheel.motorEnabled).length;
   const attachedWheels=new Set(robotDesign.encoders.map(encoder=>encoder.attachedWheel).filter(Boolean));
   robotDesign.encoderCount=robotDesign.encoders.filter(encoder=>encoder.enabled).length+robotDesign.wheels.filter(wheel=>wheel.encoderEnabled&&!attachedWheels.has(wheel.name)).length;
@@ -103,10 +118,25 @@ function syncDesignAssignments(){
   }
 }
 
+async function restoreWorkspaceHardwareOptions(){
+  const saved=await readWorkspaceJson('.roside/hardware.json').catch(()=>null);
+  if(!saved||!Array.isArray(saved.assignments)||!CONTROLLERS[saved.controller])return;
+  if(isMecanumXY()!==(saved.robotDesign?.hardwareTemplate==='mecanum_xy'))return;
+  let cached=null;try{cached=JSON.parse(localStorage.getItem(storageKey())||'null');}catch(_){}
+  if(cached&&(Date.parse(cached.updatedAt)||0)>=(Date.parse(saved.updatedAt)||0))return;
+  localStorage.setItem(storageKey(),JSON.stringify(saved));
+  localStorage.setItem(storageKey()+'_pins',JSON.stringify(saved.pinAssignments||{}));
+  localStorage.setItem(storageKey()+'_odom_swap',saved.odomSwapXY?'1':'0');
+}
+
 function applySavedOptions(){
   let saved=null;try{saved=JSON.parse(localStorage.getItem(storageKey())||'null');}catch(_){ }
+  if(isMecanumXY()&&saved?.robotDesign?.hardwareTemplate!=='mecanum_xy')saved=null;
+  try{hardwarePinAssignments=JSON.parse(localStorage.getItem(storageKey()+'_pins')||'null')||saved?.pinAssignments||{};}catch(_){hardwarePinAssignments={};}
+  const savedOdomSwap=localStorage.getItem(storageKey()+'_odom_swap');
+  odomSwapXY=isMecanumXY()&&(savedOdomSwap===null?saved?.odomSwapXY===true:savedOdomSwap==='1');
   const legacySharedPid=Number(saved?.version||0)<12&&!saved?.pid?.left&&!saved?.pid?.right&&Math.abs(Number(saved?.pid?.kp)-.975)<.0001&&Math.abs(Number(saved?.pid?.ki)-5.005)<.0001&&Math.abs(Number(saved?.pid?.kd)||0)<.0001;
-  tunedWheelPid=saved?.pid?.left&&saved?.pid?.right?{left:{...saved.pid.left},right:{...saved.pid.right}}:null;
+  tunedWheelPid=Array.isArray(saved?.pid?.motors)&&saved.pid.motors.length===4?{motors:saved.pid.motors.map(gains=>({...gains}))}:saved?.pid?.left&&saved?.pid?.right?{left:{...saved.pid.left},right:{...saved.pid.right}}:null;
   if(saved?.controller&&CONTROLLERS[saved.controller])$('controller-board').value=saved.controller;
   if(saved?.motorDriver&&['cycron','tb6612','l298n'].includes(saved.motorDriver))$('motor-driver').value=saved.motorDriver;
   if($('pid-control-enabled'))$('pid-control-enabled').checked=saved?.pidControl!==false;
@@ -120,21 +150,63 @@ function applySavedOptions(){
     'pid-kd':legacySharedPid?0:(saved?.pid?.kd??saved?.pid?.left?.kd)
   };
   for(const [id,value] of Object.entries(restoredFields))if(value!==undefined&&value!==null&&$(id))$(id).value=String(value);
-  if(Array.isArray(saved?.assignments))for(const assignment of saved.assignments){const wheel=robotDesign.wheels.find(item=>item.name===assignment.name);if(wheel){const migrate2wdOdom=Number(saved.version||0)<8&&robotDesign.pattern==='differential'&&!wheel.encoderName&&assignment.encoderEnabled===true&&(!assignment.encoderRole||assignment.encoderRole==='motor_feedback'||assignment.encoderRole==='unused'),restored={motorEnabled:assignment.motorEnabled!==false,motorRole:assignment.motorRole||wheel.motorRole,encoderRole:migrate2wdOdom?'odom_x':(assignment.encoderRole||wheel.encoderRole),ppr:Math.max(1,Number(assignment.ppr)||wheel.ppr),channels:Math.max(1,Number(assignment.channels)||wheel.channels),invert:Number(assignment.invert)===-1?-1:1};if(Object.prototype.hasOwnProperty.call(assignment,'encoderEnabled'))restored.encoderEnabled=assignment.encoderEnabled===true;Object.assign(wheel,restored);}}
+  if(Array.isArray(saved?.assignments))for(const assignment of saved.assignments){const wheel=robotDesign.wheels.find(item=>item.name===assignment.name);if(wheel){const migrate2wdOdom=Number(saved.version||0)<8&&robotDesign.pattern==='differential'&&!wheel.encoderName&&assignment.encoderEnabled===true&&(!assignment.encoderRole||assignment.encoderRole==='motor_feedback'||assignment.encoderRole==='unused'),xyRightFix=isMecanumXY()&&Number(saved.version||0)<15&&(assignment.motorRole||wheel.motorRole).endsWith('_right'),restored={motorInvert:xyRightFix||assignment.motorInvert===true,motorEnabled:assignment.motorEnabled!==false,motorRole:assignment.motorRole||wheel.motorRole,hardwareChannel:Number.isInteger(assignment.hardwareChannel)&&assignment.hardwareChannel>=0&&assignment.hardwareChannel<4?assignment.hardwareChannel:undefined,encoderRole:migrate2wdOdom?'odom_x':(assignment.encoderRole||wheel.encoderRole),ppr:Math.max(1,Number(assignment.ppr)||wheel.ppr),channels:Math.max(1,Number(assignment.channels)||wheel.channels),invert:Number(assignment.invert)===-1?-1:1};if(Object.prototype.hasOwnProperty.call(assignment,'encoderEnabled'))restored.encoderEnabled=assignment.encoderEnabled===true;Object.assign(wheel,restored);}}
   if(Array.isArray(saved?.encoderAssignments))for(const assignment of saved.encoderAssignments){const encoder=robotDesign.encoders.find(item=>item.name===assignment.name);if(encoder){const attachedWheel=assignment.attachedWheel||'',migrate2wdOdom=Number(saved.version||0)<8&&robotDesign.pattern==='differential'&&attachedWheel&&(!assignment.role||assignment.role==='motor_feedback'||assignment.role==='unused');Object.assign(encoder,{attachedWheel,enabled:assignment.enabled!==false,role:migrate2wdOdom?'odom_x':(assignment.role||encoder.role),ppr:Math.max(1,Number(assignment.ppr)||encoder.ppr),channels:Math.max(1,Number(assignment.channels)||encoder.channels),invert:Number(assignment.invert)===-1?-1:1});}}
+  if(isMecanumXY())for(const encoder of robotDesign.encoders)if(encoder.attachedWheel)encoder.enabled=false;
   syncDesignAssignments();
   const selected=new Set(Array.isArray(saved?.accessories)?saved.accessories:[]);
   const imuInputs=[...document.querySelectorAll('input[name="imu-model"]')];
-  imuInputs.forEach(input=>{input.disabled=!robotDesign.hasImu;input.checked=robotDesign.hasImu&&selected.has(input.value);});
-  if(robotDesign.hasImu&&!imuInputs.some(input=>input.checked))imuInputs[0].checked=true;
+  imuInputs.forEach(input=>{input.disabled=!robotDesign.hasImu||(input.value==='bno08x'&&!isMecanumXY());input.checked=!input.disabled&&selected.has(input.value);});
+  if(robotDesign.hasImu&&!imuInputs.some(input=>input.checked)){const first=imuInputs.find(input=>!input.disabled);if(first)first.checked=true;}
   for(const input of document.querySelectorAll('.device-option input[type="checkbox"]:not([name="imu-model"])'))input.checked=selected.has(input.value);
+  if(isMecanumXY()) {
+    $('controller-board').value='stm32f103';$('motor-driver').value='cycron';
+    $('controller-board').disabled=true;$('motor-driver').disabled=true;
+    $('pid-control-enabled').checked=false;$('pid-control-enabled').disabled=true;
+    for(const input of document.querySelectorAll('.device-option input')) {input.checked=input.value==='bno08x';input.disabled=true;}
+    if(saved?.robotDesign?.hardwareTemplate!=='mecanum_xy') {
+      $('motor-max-rpm').value='500';$('command-timeout-ms').value='1000';
+    }
+    for(const id of ['pid-kp','pid-ki','pid-kd'])$(id).disabled=true;
+  }
+  updateMecanumProfileUI();
   updatePidControlFields();
+  if(isMecanumXY())for(const id of ['pid-kp','pid-ki','pid-kd'])$(id).disabled=true;
+}
+
+function updateMecanumProfileUI(){
+  const xy=isMecanumXY();
+  if($('xy-profile-note'))$('xy-profile-note').hidden=!xy;
+  if($('pid-mode-title'))$('pid-mode-title').textContent=xy?'Position Control X/Y + BNO08x':'ใช้ PID Control คุมความเร็วล้อ';
+  if($('pid-mode-help'))$('pid-mode-help').textContent=xy?'อ่าน RPM/พัลส์ของมอเตอร์ทั้ง 4 ตัวเพื่อตรวจสอบ · ใช้ PWM feed-forward ขับมอเตอร์ และ Encoder X/Y อิสระร่วมกับ BNO08x ทำ ODOM':'ปิดเพื่อสั่งความเร็วแบบตรง (Open-loop) โดย Encoder และ ODOM ยังทำงานตาม Config เดิม';
+  for(const field of document.querySelectorAll('.pid-field'))field.hidden=xy;
+  if($('sensor-combo'))$('sensor-combo').hidden=xy;
+  const option=$('motor-driver')?.querySelector?.('option[value="cycron"]');
+  if(option)option.textContent=xy?'PWM + DIR · 4 ช่อง ตามโค้ดตัวอย่าง':'Cycron Driver · PWML / PWMR';
+}
+
+function restoreMecanumAssignments(){
+  if(!isMecanumXY()||platformioBusy)return;
+  odomSwapXY=false;localStorage.setItem(storageKey()+'_odom_swap','0');
+  // Explicit user action: reset assignments and polarity to the reference table.
+  for(const wheel of robotDesign.wheels){
+    const role=`${wheel.x>=0?'front':'rear'}_${wheel.y>=0?'left':'right'}`;
+    Object.assign(wheel,{motorEnabled:true,motorRole:role,hardwareChannel:['front_left','front_right','rear_left','rear_right'].indexOf(role),motorInvert:role.endsWith('_right'),encoderEnabled:false,encoderRole:'motor_feedback',ppr:600,channels:1,invert:role==='front_left'?1:-1});
+  }
+  for(const encoder of robotDesign.encoders){
+    const wheel=robotDesign.wheels.find(w=>encoder.name==='encoder_'+w.name)||robotDesign.wheels.find(w=>w.name===encoder.attachedWheel);
+    if(wheel)Object.assign(encoder,{attachedWheel:wheel.name,enabled:false,role:'motor_feedback',ppr:600,channels:1,invert:wheel.invert});
+    else if(/^encoder_odom_[xy]$/.test(encoder.name))Object.assign(encoder,{attachedWheel:'',enabled:true,role:encoder.name.endsWith('_x')?'odom_x':'odom_y',ppr:600,channels:1,invert:encoder.name.endsWith('_x')?-1:1});
+  }
+  syncDesignAssignments();renderAssignments();renderSummary();renderDiagram();
+  $('generate-button').disabled=!hardwareSupported();if($('hardware-upload-open'))$('hardware-upload-open').disabled=!hardwareSupported();$('save-status').textContent='คืนค่า Motor/Encoder ตามตัวอย่างแล้ว · ตรวจผังสายก่อนสร้าง Firmware';
+  if(!$('code-modal').hidden)refreshCodePreview();
 }
 
 function updatePidControlFields(){
   const enabled=$('pid-control-enabled')?.checked!==false;
   document.querySelectorAll('.pid-field').forEach(field=>{field.classList.toggle('disabled',!enabled);const input=field.querySelector('input');if(input)input.disabled=!enabled;});
-  if($('bridge-config-summary'))$('bridge-config-summary').textContent=enabled?'🔧 Python Bridge + PID Tune':'🔧 Python Bridge + Open-loop Speed';
+  if($('bridge-config-summary'))$('bridge-config-summary').textContent=isMecanumXY()?'🔧 Serial + Position Control X/Y':enabled?'🔧 Python Bridge + PID Tune':'🔧 Python Bridge + Open-loop Speed';
 }
 
 function selectedAccessories(){return [...document.querySelectorAll('.device-option input:checked')].map(input=>input.value);}
@@ -146,10 +218,73 @@ function updateMultiCombos(){
   }
 }
 
+// Header order viewed from the component side, USB at the bottom (Blue Pill).
+// Original board schematic: stm32-base.org/assets/pdf/boards/original-schematic-STM32F103C8T6-Blue_Pill.pdf
+const HARDWARE_HEADERS={
+  stm32f103:[['VBAT','PC13','PC14','PC15','PA0','PA1','PA2','PA3','PA4','PA5','PA6','PA7','PB0','PB1','PB10','PB11','NRST','3V3','GND','GND'],['PB12','PB13','PB14','PB15','PA8','PA9','PA10','PA11','PA12','PA15','PB3','PB4','PB5','PB6','PB7','PB8','PB9','5V','GND','3V3']]
+};
+function pinScope(){return `${$('controller-board').value}:${isMecanumXY()?'mecanum_xy':'standard'}`;}
+function mappedPin(key,fallback){const value=hardwarePinAssignments[pinScope()]?.[key];return typeof value==='string'&&pinChoices().includes(value)?value:fallback;}
+function pinChoices(){
+  const board=$('controller-board').value,profile=CONTROLLERS[board]||CONTROLLERS.stm32f103;
+  if(board==='stm32f103')return HARDWARE_HEADERS.stm32f103.flat().filter((pin,i,all)=>/^P[ABC]\d+$/.test(pin)&&!['PA9','PA10','PC14','PC15'].includes(pin)&&all.indexOf(pin)===i);
+  if(board==='esp32')return ['4','13','14','16','17','18','19','21','22','23','25','26','27','32','33','34','35','36','39'];
+  if(board==='pico')return Array.from({length:23},(_,i)=>'GP'+i).concat(['GP26','GP27','GP28']);
+  return [...new Set([...profile.motors.flat(),...Object.values(profile.aux)])];
+}
+function allowedPin(pin,field){
+  const board=$('controller-board').value;
+  if(board==='stm32f103'&&field==='pwm')return ['PA0','PA1','PA2','PA3','PA6','PA7','PA8','PB0','PB1','PB6','PB7','PB8','PB9'].includes(pin);
+  if(board==='esp32'&&!['echo','encA','encB'].includes(field)&&Number(pin)>=34)return false;
+  if(board==='esp32'&&['encA','encB'].includes(field)&&Number(pin)>=34)return false; // generated INPUT_PULLUP
+  return true;
+}
+function pinLocation(pin){
+  const headers=HARDWARE_HEADERS[$('controller-board').value];
+  if(headers)for(let side=0;side<headers.length;side++){const index=headers[side].indexOf(pin);if(index>=0)return `${side===0?'แถวซ้าย':'แถวขวา'} · ลำดับ ${index+1} จากด้านบน (USB ด้านล่าง)`;}
+  return `ขาที่พิมพ์ชื่อ ${pin} บนบอร์ด`;
+}
+function pinControl(key,field,pin,locked=false){
+  const options=locked?[pin]:pinChoices().filter(value=>allowedPin(value,field)||value===pin);
+  const note=locked?(field==='pwm'?' · ผูกกับ Timer ของ Template':' · ใช้พินประจำบัสของ Template'):'';
+  return `<select class="hardware-pin-select" aria-label="เลือกพิน ${esc(key)}" title="${esc(pinLocation(pin)+note)}" data-pin-key="${esc(key)}" ${locked?'disabled':''} onchange="changeHardwarePin(this.dataset.pinKey,this.value)">${options.map(value=>`<option value="${esc(value)}" ${value===pin?'selected':''}>${esc(value)}</option>`).join('')}</select>`;
+}
+function changeHardwarePin(key,pin){
+  if(!pinChoices().includes(pin))return;
+  hardwarePinAssignments[pinScope()]={...hardwarePinAssignments[pinScope()],[key]:pin};
+  localStorage.setItem(storageKey()+'_pins',JSON.stringify(hardwarePinAssignments));
+  renderAssignments();renderDiagram();
+  if(!$('code-modal').hidden)refreshCodePreview();
+}
+function resetHardwarePins(){delete hardwarePinAssignments[pinScope()];localStorage.setItem(storageKey()+'_pins',JSON.stringify(hardwarePinAssignments));renderAssignments();renderDiagram();if(!$('code-modal').hidden)refreshCodePreview();}
+function hardwarePinConnections(){
+  const rows=[];
+  for(const motor of motorPinData()){
+    for(const field of ($('motor-driver').value==='cycron'?['in1','pwm']:['in1','in2','pwm']).concat(motor.encoderEnabled?['encA','encB']:[]))rows.push({key:`motor:${motor.wheelName}:${field}`,field,pin:motor[field],label:`${motor.name} · ${field.toUpperCase()}`,locked:isMecanumXY()&&field==='pwm'});
+  }
+  const aux=hardwareAuxPins(),selected=new Set(selectedAccessories());
+  for(const [device,fields] of [['mpu6050',['scl','sda']],['bno055',['scl','sda']],['hcsr04',['trig','echo']],['servo',['servo']]])if(selected.has(device))for(const field of fields){if(rows.some(row=>row.key==='aux:'+field))continue;rows.push({key:'aux:'+field,field,pin:aux[field],label:device+' · '+field.toUpperCase(),locked:['scl','sda'].includes(field)});}
+  if(isMecanumXY()){
+    const pins=MecanumXY.odomPins(odomSwapXY);
+    for(const axis of ['x','y'])for(const [index,field] of ['encA','encB'].entries())rows.push({key:`odom:${axis}:${field}`,field,pin:mappedPin(`odom:${axis}:${field}`,pins[axis][index]),label:`Encoder ${axis.toUpperCase()} · ${field}`});
+    for(const [field,pin] of [['scl','PB10'],['sda','PB11'],['reset','PC13']])rows.push({key:'bno08x:'+field,field,pin,label:'BNO08x · '+field.toUpperCase(),locked:true});
+  }
+  return rows;
+}
+function hardwareAuxPins(){const profile=CONTROLLERS[$('controller-board').value]||CONTROLLERS.stm32f103;return Object.fromEntries(Object.entries(profile.aux).map(([key,pin])=>[key,['scl','sda'].includes(key)?pin:mappedPin('aux:'+key,pin)]));}
+function pinConflictErrors(){
+  const rows=hardwarePinConnections(),errors=[];
+  for(const row of rows){if(!row.locked&&!allowedPin(row.pin,row.field))errors.push(`${row.label}: ${row.pin} ไม่รองรับหน้าที่นี้`);const other=rows.find(item=>item!==row&&item.pin===row.pin&&item.key!==row.key);if(other)errors.push(`${row.pin} ซ้ำ: ${row.label} / ${other.label}`);}
+  if($('controller-board').value==='stm32f103'){
+    const interrupts=rows.filter(row=>row.field==='encA');
+    for(const row of interrupts)if(interrupts.some(other=>other!==row&&other.pin.slice(2)===row.pin.slice(2)))errors.push(`Encoder interrupt EXTI${row.pin.slice(2)} ซ้ำ`);
+  }
+  return [...new Set(errors)];
+}
 function motorPinData(){
   const profile=CONTROLLERS[$('controller-board')?.value]||CONTROLLERS.stm32f103;
   const wheels=robotDesign.wheels.filter(wheel=>wheel.motorEnabled).sort((a,b)=>MOTOR_ROLE_ORDER.indexOf(a.motorRole)-MOTOR_ROLE_ORDER.indexOf(b.motorRole));
-  return wheels.map((wheel,index)=>{const pins=profile.motors[index],encoder=robotDesign.encoders.find(item=>item.attachedWheel===wheel.name),encoderEnabled=encoder?!!encoder.enabled:!!wheel.encoderEnabled;return{...wheel,wheelName:wheel.name,name:`M${index+1} · ${MOTOR_ROLES[wheel.motorRole]||wheel.name}`,encoderEnabled,encoderRole:robotDesign.drive==='diff2'&&encoderEnabled?'odom_x':(encoder?.role||wheel.encoderRole||'unused'),encoderName:encoder?.name||'',ppr:encoder?.ppr||wheel.ppr||600,channels:encoder?.channels||wheel.channels||1,invert:encoder?.invert||wheel.invert||1,in1:pins[0],in2:pins[1],pwm:pins[2],encA:pins[3],encB:pins[4]};});
+  return wheels.map((wheel,index)=>{const channel=Number.isInteger(wheel.hardwareChannel)?wheel.hardwareChannel:(isMecanumXY()?['front_left','front_right','rear_left','rear_right'].indexOf(wheel.motorRole):index),pins=isMecanumXY()?(MecanumXY.pins[channel]||['—','—','—','—','—']):profile.motors[channel],encoder=robotDesign.encoders.find(item=>item.attachedWheel===wheel.name),encoderEnabled=isMecanumXY()?false:(encoder?!!encoder.enabled:!!wheel.encoderEnabled);return{...wheel,hardwareChannel:channel,wheelName:wheel.name,name:`M${channel+1} · ${MOTOR_ROLES[wheel.motorRole]||wheel.name}`,encoderEnabled,encoderRole:robotDesign.drive==='diff2'&&encoderEnabled?'odom_x':(encoder?.role||wheel.encoderRole||'unused'),encoderName:encoder?.name||'',ppr:encoder?.ppr||wheel.ppr||600,channels:encoder?.channels||wheel.channels||1,invert:encoder?.invert||wheel.invert||1,...Object.fromEntries(['in1','in2','pwm','encA','encB'].map((field,i)=>[field,isMecanumXY()&&field==='pwm'?pins[i]:mappedPin(`motor:${wheel.name}:${field}`,pins[i])]))};});
 }
 
 // Firmware attaches one interrupt to encoder A on RISING. This is x1 decoding:
@@ -160,10 +295,45 @@ function encoderTicksPerRevolution(motor){return Math.max(1,Number(motor.ppr)||6
 function renderAssignments(){
   const target=$('hardware-assignments');if(!target||!robotDesign)return;
   queueMicrotask(hardwareApplyAssignmentAccordions);
-  const motors=robotDesign.wheels.map((wheel,index)=>{const modelEncoder=robotDesign.encoders.find(encoder=>encoder.attachedWheel===wheel.name);const encoderControls=modelEncoder?`<div class="assignment-note">ใช้ Encoder จาก Model: <b>${esc(modelEncoder.name)}</b> · ตั้งค่า PPR และทิศทางในรายการ Encoder ด้านล่าง</div>`:`<label class="assignment-field"><span class="assignment-switch"><input type="checkbox" ${wheel.encoderEnabled?'checked':''} onchange="updateAssignment(${index},'encoderEnabled',this.checked)"> มี Encoder ติดท้ายมอเตอร์</span></label>${wheel.encoderEnabled?`<div class="assignment-grid"><label class="assignment-field">PPR ต่อรอบ<input class="insp-input" type="number" min="1" step="1" value="${wheel.ppr}" onchange="updateAssignment(${index},'ppr',this.value)"></label><label class="assignment-field">Channels<select onchange="updateAssignment(${index},'channels',this.value)"><option value="1" ${wheel.channels===1?'selected':''}>1</option><option value="2" ${wheel.channels===2?'selected':''}>2</option><option value="4" ${wheel.channels===4?'selected':''}>4 · Quadrature</option></select></label><label class="assignment-field">หน้าที่ Encoder<select onchange="updateAssignment(${index},'encoderRole',this.value)">${Object.entries(ENCODER_ROLES).map(([value,label])=>`<option value="${value}" ${wheel.encoderRole===value?'selected':''}>${label}</option>`).join('')}</select></label><label class="assignment-field"><span class="assignment-switch"><input type="checkbox" ${wheel.invert===-1?'checked':''} onchange="updateAssignment(${index},'invert',this.checked)"> กลับทิศ Encoder (Invert)</span></label></div>${robotDesign.drive==='diff2'?'<div class="assignment-note">2WD: Encoder นี้ใช้คำนวณตำแหน่ง X และมุม Yaw ของ ODOM</div>':''}`:''}`;return`<article class="assignment-row"><div class="assignment-head"><strong>🛞 ${esc(wheel.name)}</strong><small>x ${esc(wheel.x)} · y ${esc(wheel.y)}</small></div><label class="assignment-field"><span class="assignment-switch"><input type="checkbox" ${wheel.motorEnabled?'checked':''} onchange="updateAssignment(${index},'motorEnabled',this.checked)"> ใช้มอเตอร์</span><select ${wheel.motorEnabled?'':'disabled'} onchange="updateAssignment(${index},'motorRole',this.value)">${Object.entries(MOTOR_ROLES).map(([value,label])=>`<option value="${value}" ${wheel.motorRole===value?'selected':''}>${label}</option>`).join('')}</select></label>${encoderControls}</article>`;}).join('');
+  if(isMecanumXY()){renderMecanumAssignments(target);return;}
+  const motors=robotDesign.wheels.map((wheel,index)=>{const modelEncoder=robotDesign.encoders.find(encoder=>encoder.attachedWheel===wheel.name);const encoderControls=modelEncoder?`<div class="assignment-note">ใช้ Encoder จาก Model: <b>${esc(modelEncoder.name)}</b> · ตั้งค่า PPR และทิศทางในรายการ Encoder ด้านล่าง</div>`:`<label class="assignment-field"><span class="assignment-switch"><input type="checkbox" ${wheel.encoderEnabled?'checked':''} onchange="updateAssignment(${index},'encoderEnabled',this.checked)"> มี Encoder ติดท้ายมอเตอร์</span></label>${wheel.encoderEnabled?`<div class="assignment-grid"><label class="assignment-field">PPR ต่อรอบ<input class="insp-input" type="number" min="1" step="1" value="${wheel.ppr}" onchange="updateAssignment(${index},'ppr',this.value)"></label><label class="assignment-field">Channels<select onchange="updateAssignment(${index},'channels',this.value)"><option value="1" ${wheel.channels===1?'selected':''}>1</option><option value="2" ${wheel.channels===2?'selected':''}>2</option><option value="4" ${wheel.channels===4?'selected':''}>4 · Quadrature</option></select></label><label class="assignment-field">หน้าที่ Encoder<select onchange="updateAssignment(${index},'encoderRole',this.value)">${Object.entries(ENCODER_ROLES).map(([value,label])=>`<option value="${value}" ${wheel.encoderRole===value?'selected':''}>${label}</option>`).join('')}</select></label><label class="assignment-field"><span class="assignment-switch"><input type="checkbox" ${wheel.invert===-1?'checked':''} onchange="updateAssignment(${index},'invert',this.checked)"> กลับทิศ Encoder (Invert)</span></label></div>${robotDesign.drive==='diff2'?'<div class="assignment-note">2WD: Encoder นี้ใช้คำนวณตำแหน่ง X และมุม Yaw ของ ODOM</div>':''}`:''}`;return`<article class="assignment-row"><div class="assignment-head"><strong>🛞 ${esc(wheel.name)}</strong><small>x ${esc(wheel.x)} · y ${esc(wheel.y)}</small></div><label class="assignment-field"><span class="assignment-switch"><input type="checkbox" ${wheel.motorEnabled?'checked':''} onchange="updateAssignment(${index},'motorEnabled',this.checked)"> ใช้มอเตอร์</span><select ${wheel.motorEnabled?'':'disabled'} onchange="updateAssignment(${index},'motorRole',this.value)">${Object.entries(MOTOR_ROLES).map(([value,label])=>`<option value="${value}" ${wheel.motorRole===value?'selected':''}>${label}</option>`).join('')}</select></label><label class="assignment-field"><span class="assignment-switch"><input type="checkbox" ${wheel.motorInvert?'checked':''} onchange="updateAssignment(${index},'motorInvert',this.checked)"> กลับทิศมอเตอร์ (Motor Invert)</span></label><div class="assignment-note">หลังเปลี่ยนทิศมอเตอร์ ตรวจ Encoder แยกกัน: หมุนล้อไปทางเดินหน้าต้องอ่าน RPM เป็นบวก</div>${encoderControls}</article>`;}).join('');
   const encoders=robotDesign.encoders.map((encoder,index)=>`<article class="assignment-row"><div class="assignment-head"><strong>🟠 ${esc(encoder.name)}</strong><small>frame_id</small><span class="assignment-switch"><input type="checkbox" ${encoder.enabled?'checked':''} onchange="updateEncoderAssignment(${index},'enabled',this.checked)"> ใช้ Encoder</span></div><div class="assignment-grid"><label class="assignment-field">ติดกับ Motor / ล้อ<select onchange="updateEncoderAssignment(${index},'attachedWheel',this.value)"><option value="">${esc(encoder.name)}</option>${robotDesign.wheels.map(wheel=>`<option value="${esc(wheel.name)}" ${encoder.attachedWheel===wheel.name?'selected':''}>${esc(wheel.name)} · ${esc(MOTOR_ROLES[wheel.motorRole]||wheel.motorRole)}</option>`).join('')}</select></label><label class="assignment-field">หน้าที่ Encoder<select onchange="updateEncoderAssignment(${index},'role',this.value)">${Object.entries(ENCODER_ROLES).map(([value,label])=>`<option value="${value}" ${encoder.role===value?'selected':''}>${label}</option>`).join('')}</select></label><label class="assignment-field">PPR<input class="insp-input" type="number" min="1" value="${encoder.ppr}" onchange="updateEncoderAssignment(${index},'ppr',this.value)"></label><label class="assignment-field">Channels<select onchange="updateEncoderAssignment(${index},'channels',this.value)"><option value="1" ${encoder.channels===1?'selected':''}>1</option><option value="2" ${encoder.channels===2?'selected':''}>2</option><option value="4" ${encoder.channels===4?'selected':''}>4 · Quadrature</option></select></label><label class="assignment-field"><span class="assignment-switch"><input type="checkbox" ${encoder.invert===-1?'checked':''} onchange="updateEncoderAssignment(${index},'invert',this.checked)"> กลับทิศ Encoder (Invert)</span></label></div></article>`).join('');
   target.innerHTML=`<div class="device-group-label">⚙️ MOTOR · ${robotDesign.wheels.length} ตัว</div>${motors}<div class="device-group-label">🟠 ENCODER จาก MODEL · ${robotDesign.encoders.length} ตัว</div>${encoders||'<div class="assignment-warning">ไม่พบ Encoder แยกใน Robot Model — ถ้ามี Encoder ติดท้ายมอเตอร์ ให้ติ๊กและกำหนด PPR ที่การ์ดมอเตอร์แต่ละตัวด้านบน</div>'}`+(!robotDesign.drive?`<div class="assignment-warning">⚠️ ${esc(robotDesign.pattern)} ต้องใช้จำนวนมอเตอร์ตาม Template เดิมก่อนจึงจะสร้าง Firmware ได้</div>`:'');
-  if(robotDesign.drive==='diff2')target.insertAdjacentHTML('afterbegin','<div class="assignment-note">2WD ใช้ Encoder ซ้าย/ขวาทำ PID และ ODOM X/Yaw อัตโนมัติ · Firmware นับแบบ ×1 ที่ขา A ขอบ RISING ดังนั้น Ticks/รอบ = PPR (ขา B ใช้ดูทิศทาง)</div>');
+  if(isMecanumXY())target.insertAdjacentHTML('afterbegin','<button type="button" class="assignment-reset" onclick="restoreMecanumAssignments()">คืนค่า Motor/Encoder และทิศทางสำหรับ Mecanum XY</button><div class="assignment-note">Mecanum XY · FR/RR กลับทิศมอเตอร์ตามล้อขวาของหุ่นจริง · Encoder ปรับแยกจากทิศมอเตอร์ · ยกล้อลอยตรวจ RPM บวกเมื่อสั่งเดินหน้า · FL interrupt ที่ B (PA1)</div>');
+  if(robotDesign.drive==='diff2')target.insertAdjacentHTML('afterbegin','<div class="assignment-note">2WD ใช้ Encoder ซ้าย/ขวาทำ PID และ ODOM X/Yaw อัตโนมัติ · Firmware นับแบบ ×1 ที่ขา A ขอบ RISING ดังนั้น Ticks/รอบ = PPR (ขา B ใช้ดูทิศทาง)</div><button type="button" class="btn" onclick="reverseBothMotors()">⇄ กลับทิศมอเตอร์ทั้งซ้ายและขวา</button><div class="assignment-note">สลับ Motor Invert จากค่าปัจจุบันทั้งสองล้อ · ไม่เปลี่ยน Encoder · ต้องสร้างและอัปโหลด Firmware ใหม่จึงมีผล</div>');
+}
+
+function renderMecanumAssignments(target){
+  const roles=['front_left','front_right','rear_left','rear_right'];
+  const odomPins=MecanumXY.odomPins(odomSwapXY);
+  const encoderFields=(encoder,index,passive=false)=>!passive?'<div class="assignment-note">อ่าน Encoder เพื่อตรวจสอบได้ที่หน้าควบคุมมอเตอร์แยกตัว · ใช้ PWM feed-forward</div>':encoder?`<label class="assignment-field"><span class="assignment-switch"><input type="checkbox" ${encoder.enabled?'checked':''} onchange="updateEncoderAssignment(${index},'enabled',this.checked)"> ใช้ Encoder ${esc(encoder.name)}</span></label><div class="assignment-grid"><label class="assignment-field">PPR · นับ ×1<input type="number" min="1" value="${encoder.ppr}" onchange="updateEncoderAssignment(${index},'ppr',this.value)"></label><label class="assignment-field"><span class="assignment-switch"><input type="checkbox" ${encoder.invert===-1?'checked':''} onchange="updateEncoderAssignment(${index},'invert',this.checked)"> กลับทิศ Encoder</span></label></div>`:passive?'<div class="assignment-warning">ต้องมี Encoder ตำแหน่ง X/Y อิสระเพื่อใช้ Position Control</div>':'<div class="assignment-note">ไม่มี Encoder ความเร็วที่ผูกกับล้อนี้ — สร้าง Firmware แบบ feed-forward อัตโนมัติ</div>';
+  const motors=robotDesign.wheels.map((wheel,index)=>{
+    const channel=roles.indexOf(wheel.motorRole),mapped=motorPinData().find(motor=>motor.wheelName===wheel.name),pins=mapped?[mapped.in1,mapped.in2,mapped.pwm,mapped.encA,mapped.encB]:MecanumXY.pins[channel];
+    const encoder=robotDesign.encoders.find(e=>e.attachedWheel===wheel.name);
+    return `<article class="assignment-row"><div class="assignment-head"><strong>${['FL · หน้าซ้าย','FR · หน้าขวา','RL · หลังซ้าย','RR · หลังขวา'][channel]||esc(wheel.motorRole)}</strong><small>${esc(wheel.name)}</small></div><div class="assignment-note">${pins?`PWM ${pins[2]} · DIR ${pins[0]} · ไม่มี feedback ความเร็วล้อ · ใช้ PWM feed-forward`: 'หน้าที่ล้อไม่ถูกต้อง — กดคืนค่าตามตัวอย่าง'}</div><label class="assignment-field"><span class="assignment-switch"><input type="checkbox" ${wheel.motorEnabled?'checked':''} onchange="updateAssignment(${index},'motorEnabled',this.checked)"> ใช้มอเตอร์</span></label><label class="assignment-field"><span class="assignment-switch"><input type="checkbox" ${wheel.motorInvert?'checked':''} onchange="updateAssignment(${index},'motorInvert',this.checked)"> กลับทิศมอเตอร์</span></label>${encoderFields(encoder,robotDesign.encoders.indexOf(encoder))}</article>`;
+  }).join('');
+  const passive=['x','y'].map(axis=>{
+    const encoder=robotDesign.encoders.find(e=>!e.attachedWheel&&e.role==='odom_'+axis);
+    return `<article class="assignment-row"><div class="assignment-head"><strong>Encoder วัดระยะ ${axis.toUpperCase()} · อิสระ</strong></div><div class="assignment-note">A ${mappedPin(`odom:${axis}:encA`,odomPins[axis][0])} / B ${mappedPin(`odom:${axis}:encB`,odomPins[axis][1])} · ${axis==='x'?'หน้า–หลัง':'ซ้าย–ขวา'} · ล้อ R=29 mm<br>ใช้วัดตำแหน่ง ไม่ผูกกับมอเตอร์</div>${encoderFields(encoder,robotDesign.encoders.indexOf(encoder),true)}</article>`;
+  }).join('');
+  target.innerHTML='<button type="button" class="assignment-reset" onclick="restoreMecanumAssignments()">คืนค่า Motor/Encoder และทิศทางสำหรับ Mecanum XY</button><div class="assignment-note">อ่าน RPM/พัลส์มอเตอร์ทั้ง 4 ตัวเพื่อตรวจสอบ · Position Control และ ODOM ใช้ Encoder X/Y อิสระกับมุมจาก BNO08x ที่สดใหม่</div><div class="device-group-label">มอเตอร์ 4 ตัว · Encoder สำหรับตรวจสอบ</div>'+motors+'<div class="device-group-label">Encoder ตำแหน่ง X/Y · 2 ตัว (จำเป็น)</div><label class="assignment-field">การจับคู่ Encoder X/Y กับขา STM32<select onchange="setMecanumOdomSwap(this.value)"><option value="normal" '+(!odomSwapXY?'selected':'')+'>ปกติ · X = PB0/PB1, Y = PB9/PB5</option><option value="swapped" '+(odomSwapXY?'selected':'')+'>สลับ X ↔ Y · X = PB9/PB5, Y = PB0/PB1</option></select></label><div class="assignment-note">สลับเฉพาะคู่ขาสัญญาณ X/Y ใน Firmware · ค่า Invert และ PPR ของแต่ละแกนปรับด้านล่าง</div>'+passive;
+}
+
+function setMecanumOdomSwap(value){
+  if(!isMecanumXY()||platformioBusy)return;
+  odomSwapXY=value==='swapped';localStorage.setItem(storageKey()+'_odom_swap',odomSwapXY?'1':'0');
+  renderAssignments();renderDiagram();
+  if(!$('code-modal').hidden)refreshCodePreview();
+}
+
+function reverseBothMotors(){
+  if(platformioBusy||robotDesign?.drive!=='diff2')return;
+  const wheels=robotDesign.wheels.filter(wheel=>wheel.motorEnabled);
+  if(wheels.length!==2||!wheels.some(wheel=>wheel.motorRole==='left')||!wheels.some(wheel=>wheel.motorRole==='right'))return;
+  if(!confirm('กลับทิศมอเตอร์ซ้ายและขวาจากค่าปัจจุบันหรือไม่?\nยังไม่ส่งคำสั่งหรืออัปโหลดลงหุ่น ต้องสร้างและอัปโหลด Firmware ใหม่\nตัดไฟมอเตอร์และตรวจทิศ Encoder ด้วยมือก่อนทดสอบ PID'))return;
+  for(const wheel of wheels)wheel.motorInvert=!wheel.motorInvert;
+  syncDesignAssignments();renderAssignments();renderSummary();renderDiagram();
+  if(!$('code-modal').hidden)refreshCodePreview();
 }
 
 function hardwareApplyAssignmentAccordions(){
@@ -180,13 +350,61 @@ function hardwareApplyAssignmentAccordions(){
 }
 
 function updateAssignment(index,key,value){
-  const wheel=robotDesign?.wheels?.[index];if(!wheel)return;if(key==='motorEnabled'||key==='encoderEnabled'){wheel[key]=!!value;if(key==='encoderEnabled'&&value&&robotDesign.pattern==='differential')wheel.encoderRole='odom_x';}else if(key==='invert')wheel.invert=value?-1:1;else if(key==='ppr'||key==='channels')wheel[key]=Math.max(1,Number(value)||1);else wheel[key]=value;syncDesignAssignments();renderAssignments();renderSummary();renderDiagram();$('generate-button').disabled=robotDesign.drive!=='diff2';if(!$('code-modal').hidden)refreshCodePreview();
+  const wheel=robotDesign?.wheels?.[index];if(!wheel)return;if(key==='motorEnabled'||key==='encoderEnabled'||key==='motorInvert'){wheel[key]=!!value;if(key==='encoderEnabled'&&value&&robotDesign.pattern==='differential')wheel.encoderRole='odom_x';}else if(key==='invert')wheel.invert=value?-1:1;else if(key==='ppr'||key==='channels')wheel[key]=Math.max(1,Number(value)||1);else wheel[key]=value;syncDesignAssignments();renderAssignments();renderSummary();renderDiagram();$('generate-button').disabled=!hardwareSupported();if(!$('code-modal').hidden)refreshCodePreview();
 }
 function updateEncoderAssignment(index,key,value){
   const encoder=robotDesign?.encoders?.[index];if(!encoder)return;if(key==='enabled')encoder.enabled=!!value;else if(key==='invert')encoder.invert=value?-1:1;else if(key==='ppr'||key==='channels')encoder[key]=Math.max(1,Number(value)||1);else encoder[key]=value;if(robotDesign.pattern==='differential'&&encoder.enabled&&encoder.attachedWheel&&(key==='enabled'||key==='attachedWheel'))encoder.role='odom_x';if(key==='attachedWheel'&&encoder.attachedWheel)for(const other of robotDesign.encoders){if(other!==encoder&&other.attachedWheel===encoder.attachedWheel)other.attachedWheel='';}syncDesignAssignments();renderAssignments();renderSummary();renderDiagram();if(!$('code-modal').hidden)refreshCodePreview();
 }
 
-function pinoutCard(id,side,icon,name,sub,pins,color){return `<article class="pinout-card ${side}" id="pinout-${esc(id)}" data-side="${side}" style="--wire:${color}"><div class="pinout-card-head"><span>${icon}</span><div><strong>${esc(name)}</strong><small>${esc(sub)}</small></div></div><div class="pinout-pins">${pins.map(([label,pin])=>`<div class="pinout-pin"><small>${esc(label)}</small><b>${esc(pin)}</b></div>`).join('')}</div></article>`;}
+function hardwareDeviceArt(kind,variant,label){return typeof HardwareVisuals==='undefined'?'':HardwareVisuals.render(kind,variant,label);}
+function hardwareDisplayMotors(){return motorPinData().sort((a,b)=>a.hardwareChannel-b.hardwareChannel);}
+function hardwareWheelRoles(){return robotDesign?.wheels?.filter(wheel=>wheel.motorEnabled).length===2&&robotDesign.pattern==='differential'?['left','right']:['front_left','front_right','rear_left','rear_right'];}
+function assignHardwareMotorRole(wheelName,role){
+  if(platformioBusy||!hardwareWheelRoles().includes(role))return;
+  const wheel=robotDesign.wheels.find(item=>item.name===wheelName&&item.motorEnabled);if(!wheel||wheel.motorRole===role)return;
+  // Preserve each channel's pins, then exchange roles to keep the assignment unique.
+  for(const motor of motorPinData())robotDesign.wheels.find(item=>item.name===motor.wheelName).hardwareChannel=motor.hardwareChannel;
+  const other=robotDesign.wheels.find(item=>item!==wheel&&item.motorEnabled&&item.motorRole===role);
+  if(other)other.motorRole=wheel.motorRole;
+  wheel.motorRole=role;
+  syncDesignAssignments();renderAssignments();renderSummary();renderDiagram();
+  $('generate-button').disabled=!hardwareSupported();
+  if(!$('code-modal').hidden)refreshCodePreview();
+}
+function hardwareWheelRoleControl(id){
+  if(!id.startsWith('driver-'))return '';
+  const motor=hardwareDisplayMotors()[Number(id.slice(7))];if(!motor)return '';
+  return `<label class="hardware-wheel-role"><small>ตำแหน่งล้อ</small><select aria-label="ตำแหน่งล้อ M${motor.hardwareChannel+1}" data-wheel-name="${esc(motor.wheelName)}" onchange="assignHardwareMotorRole(this.dataset.wheelName,this.value)">${hardwareWheelRoles().map(role=>`<option value="${role}" ${role===motor.motorRole?'selected':''}>${esc(MOTOR_ROLES[role])}</option>`).join('')}</select></label>`;
+}
+function pinoutCellControl(id,label,pin){
+  let key='',field='',locked=false;
+  const motors=hardwareDisplayMotors();
+  if(id.startsWith('driver-')){
+    const motor=motors[Number(id.slice(7))];
+    field=label.startsWith('PWM')?'pwm':label==='IN2'?'in2':'in1';
+    if(motor)key=`motor:${motor.wheelName}:${field}`;
+    locked=isMecanumXY()&&field==='pwm';
+  }else if(id.startsWith('motor-encoder-')&&label.startsWith('ENC ')){
+    const motor=motors.filter(item=>item.encoderEnabled)[Number(id.slice(14))];
+    field=label==='ENC A'?'encA':'encB';
+    if(motor)key=`motor:${motor.wheelName}:${field}`;
+  }else if(id.startsWith('passive-')&&label.startsWith('ENC ')){
+    field=label==='ENC A'?'encA':'encB';key=`odom:${id.slice(8)}:${field}`;
+  }else if(['mpu6050','bno055'].includes(id)&&['SCL','SDA'].includes(label)){
+    field=label.toLowerCase();key='aux:'+field;locked=true;
+  }else if(id==='bno08x'&&['SCL','SDA','RESET'].includes(label)){
+    field=label.toLowerCase();key='bno08x:'+field;locked=true;
+  }else if(id==='hcsr04'&&['TRIG','ECHO'].includes(label)){
+    field=label.toLowerCase();key='aux:'+field;
+  }else if(id==='servo'&&label==='PWM'){
+    field='servo';key='aux:servo';
+  }
+  return key?pinControl(key,field,pin,locked):`<b>${esc(pin)}</b>`;
+}
+function pinoutCard(id,side,icon,name,sub,pins,color){
+  const kind=id.startsWith('driver-')?'driver':id.includes('encoder-')?'encoder':id,variant=kind==='driver'?$('motor-driver').value:kind;
+  return `<article class="pinout-card ${side}" id="pinout-${esc(id)}" data-side="${side}" style="--wire:${color}"><div class="pinout-card-head"><span aria-hidden="true">${icon}</span><div><strong>${esc(name)}</strong><small>${esc(sub)}</small></div></div>${hardwareWheelRoleControl(id)}<div class="hw-device-scene">${hardwareDeviceArt(kind,variant,name)}</div><div class="pinout-pins">${pins.map(([label,pin])=>`<div class="pinout-pin"><small>${esc(label)}</small>${pinoutCellControl(id,label,pin)}</div>`).join('')}</div></article>`;
+}
 
 function renderSummary(){
   const meta=DRIVE_META[robotDesign.drive]||{icon:'⚠️',label:robotDesign.driveLabel};
@@ -196,16 +414,22 @@ function renderSummary(){
 
 function renderDiagram(){
   if(!robotDesign)return;
-  const controller=CONTROLLERS[$('controller-board').value]||CONTROLLERS.stm32f103,driver=$('motor-driver').value,driverLabel=driver==='cycron'?'Cycron Driver':driver==='tb6612'?'TB6612FNG':'L298N',motors=motorPinData(),accessories=new Set(selectedAccessories());
+  const controller={...(CONTROLLERS[$('controller-board').value]||CONTROLLERS.stm32f103),aux:hardwareAuxPins()},driver=$('motor-driver').value,driverLabel=driver==='cycron'?'Cycron Driver':driver==='tb6612'?'TB6612FNG':'L298N',motors=hardwareDisplayMotors(),accessories=new Set(selectedAccessories());
   const left=motors.map((motor,index)=>{const channel=index%2===0?'L':'R',pins=driver==='cycron'?[[`DIR${channel}`,motor.in1],[`PWM${channel}`,motor.pwm]]:[['IN1',motor.in1],['IN2',motor.in2],['PWM',motor.pwm]];return pinoutCard(`driver-${index}`,'left','⚙️',`${driverLabel} · M${index+1}`,driver==='cycron'?`Channel ${channel} · Driver #${Math.floor(index/2)+1}`:motor.name,pins,COLORS.control);});
-  const right=motors.filter(motor=>motor.encoderEnabled).map((motor,index)=>pinoutCard(`motor-encoder-${index}`,'right','◌',`Encoder · ${motor.encoderName||motor.wheelName}`,`${motor.name} · ${motor.ppr} PPR ×${motor.channels}${motor.invert===-1?' · INVERT':''}`,[['ENC A',motor.encA],['ENC B',motor.encB],['VCC','ตามสเปก'],['GND','GND ร่วม']],COLORS.encoder));
-  const unresolvedEncoders=robotDesign.encoders.filter(encoder=>encoder.enabled&&!motors.some(motor=>motor.encoderName===encoder.name));
+  const right=motors.filter(motor=>motor.encoderEnabled).map((motor,index)=>pinoutCard(`motor-encoder-${index}`,'right','◌',`Encoder · ${motor.encoderName||motor.wheelName}`,`${motor.name} · ${motor.ppr} PPR ×${isMecanumXY()?1:motor.channels}${isMecanumXY()&&motor.motorRole==='front_left'?' · ISR B (PA1)':''}${motor.invert===-1?' · INVERT':''}`,[['ENC A',motor.encA],['ENC B',motor.encB],['VCC','ตามสเปก'],['GND','GND ร่วม']],COLORS.encoder));
+  const unresolvedEncoders=robotDesign.encoders.filter(encoder=>encoder.enabled&&!(isMecanumXY()&&!encoder.attachedWheel)&&!motors.some(motor=>motor.encoderName===encoder.name));
   unresolvedEncoders.forEach((encoder,index)=>right.push(pinoutCard(`unassigned-encoder-${index}`,'right','◌',`Encoder · ${encoder.name}`,encoder.attachedWheel?`${encoder.attachedWheel} · เปิด Motor ก่อน`:'ยังไม่ได้ผูกกับ Motor / ล้อ',[['ENC A','กำหนดล้อ'],['ENC B','ก่อน'],['VCC','ตามสเปก'],['GND','GND ร่วม']],COLORS.encoder)));
+  if(isMecanumXY()) {
+    const odomPins=MecanumXY.odomPins(odomSwapXY);
+    for(const axis of ['x','y']){const [a,b]=['encA','encB'].map((field,i)=>mappedPin(`odom:${axis}:${field}`,odomPins[axis][i]));right.push(pinoutCard('passive-'+axis,'right','◌','Passive encoder '+axis.toUpperCase(),`${robotDesign.encoders.find(e=>e.role==='odom_'+axis)?.ppr||600} PPR ×1 · tracking wheel R=29 mm`,[['ENC A',a],['ENC B',b],['GND','GND ร่วม']],COLORS.encoder));}
+    right.push(pinoutCard('bno08x','right','🧭','BNO08x','Position heading',[['SCL','PB10'],['SDA','PB11'],['RESET','PC13'],['VCC','3V3'],['GND','GND']],COLORS.sensor));
+  }
   if(accessories.has('mpu6050'))right.push(pinoutCard('mpu6050','right','🧭','MPU6050 IMU','I²C · Address 0x68',[['VCC','3V3'],['SCL',controller.aux.scl],['SDA',controller.aux.sda],['GND','GND']],COLORS.sensor));
   if(accessories.has('bno055'))right.push(pinoutCard('bno055','right','🧿','BNO055 IMU','I²C · Address 0x28',[['VIN','3V3'],['SCL',controller.aux.scl],['SDA',controller.aux.sda],['GND','GND']],COLORS.sensor));
   if(accessories.has('hcsr04'))right.push(pinoutCard('hcsr04','right','📏','HC-SR04','ECHO ผ่าน Voltage divider',[['TRIG',controller.aux.trig],['ECHO',controller.aux.echo],['VCC','5V'],['GND','GND']],COLORS.sensor));
   if(accessories.has('servo'))right.push(pinoutCard('servo','right','⚙️','Servo Signal','ใช้ไฟ 5V ภายนอก',[['PWM',controller.aux.servo],['GND','GND']],COLORS.sensor));
-  $('wiring-board').innerHTML=`<div class="pinout-stage" id="pinout-stage"><svg class="pinout-wires" id="pinout-wires" aria-hidden="true"></svg><div class="pinout-side">${left.join('')}</div><div class="bluepill-wrap"><div class="bluepill" id="pinout-mcu"><span class="bluepill-usb"></span><span class="board-pin-rail left"></span><span class="board-pin-rail right"></span><div class="bluepill-chip"></div><strong>${esc(controller.label)}</strong><small>${esc(controller.sub)}</small><div class="board-label">ซ้าย: MOTOR DRIVER<br>ขวา: ENCODER / SENSOR<br>DEFAULT PIN TEMPLATE</div></div></div><div class="pinout-side">${right.join('')}</div></div>`;
+  $('wiring-board').innerHTML=`<div class="pinout-stage" id="pinout-stage"><svg class="pinout-wires" id="pinout-wires" aria-hidden="true"></svg><div class="pinout-side">${left.join('')}</div><div class="hw-controller" id="pinout-mcu"><span class="hw-controller-kicker">CONTROLLER</span><div class="hw-device-scene">${hardwareDeviceArt('controller',$('controller-board').value,controller.label)}</div><strong>${esc(controller.label)}</strong><small>${esc(controller.sub)}</small><div class="hw-controller-foot">MOTOR DRIVER ← → ENCODER / SENSOR<br>เลือกพินได้ที่ช่องบนการ์ดอุปกรณ์</div></div><div class="pinout-side">${right.join('')}</div></div>`;
+  const pinErrors=pinConflictErrors();if(pinErrors.length)$('wiring-board').insertAdjacentHTML('beforeend',`<div class="assignment-warning" role="alert">${pinErrors.map(esc).join('<br>')}</div>`);
   $('pin-table').hidden=true;
   requestAnimationFrame(drawPinoutLines);
 }
@@ -213,21 +437,41 @@ function renderDiagram(){
 function drawPinoutLines(){
   const stage=$('pinout-stage'),svg=$('pinout-wires'),mcu=$('pinout-mcu');if(!stage||!svg||!mcu)return;
   const root=stage.getBoundingClientRect(),board=mcu.getBoundingClientRect();svg.setAttribute('viewBox',`0 0 ${root.width} ${root.height}`);svg.innerHTML='';
-  stage.querySelectorAll('.pinout-card').forEach(card=>{
+  const cards=[...stage.querySelectorAll('.pinout-card')];
+  cards.forEach(card=>{
     const box=card.getBoundingClientRect(),side=card.dataset.side,color=getComputedStyle(card).getPropertyValue('--wire').trim(),left=side==='left';
+    const siblings=cards.filter(item=>item.dataset.side===side),index=siblings.indexOf(card);
     const x1=(left?box.right:box.left)-root.left,y=box.top+box.height/2-root.top,x2=(left?board.left:board.right)-root.left,mid=x1+(x2-x1)*.52;
-    svg.insertAdjacentHTML('beforeend',`<path class="pinout-wire" style="--wire:${color}" d="M ${x1} ${y} H ${mid} H ${x2}"/><circle class="pinout-dot" style="--wire:${color}" cx="${x2}" cy="${y}" r="5"/>`);
+    // Anchor every connection to the controller card, even with many sensors.
+    // These are grouped visual routes, not claims of physical PCB pin locations.
+    const targetY=board.top-root.top+36+(board.height-72)*(index+1)/(siblings.length+1);
+    svg.insertAdjacentHTML('beforeend',`<path class="pinout-wire" style="--wire:${color}" d="M ${x1} ${y} C ${mid} ${y}, ${mid} ${targetY}, ${x2} ${targetY}"/><circle class="pinout-dot" style="--wire:${color}" cx="${x2}" cy="${targetY}" r="4"/>`);
   });
 }
 
+function validateMecanumXY(){
+  if($('controller-board').value!=='stm32f103'||$('motor-driver').value!=='cycron')throw new Error('Mecanum XY ใช้ STM32F103 และ Driver PWM/DIR');
+  const motors=motorPinData(),passive=robotDesign.encoders.filter(e=>e.enabled&&!e.attachedWheel);
+  const disabled=robotDesign.wheels.filter(w=>!w.motorEnabled).map(w=>w.name+' (Motor ปิด)');
+  if(motors.length!==4)throw new Error('Mecanum XY ต้องเปิดมอเตอร์ครบ 4 ตัว: '+disabled.join(', '));
+  if(new Set(motors.map(m=>m.motorRole)).size!==4||motors.some(m=>!['front_left','front_right','rear_left','rear_right'].includes(m.motorRole)))throw new Error('กำหนด FL / FR / RL / RR ให้ครบและไม่ซ้ำ');
+  if(motors.some(m=>robotDesign.encoders.filter(e=>e.enabled&&e.attachedWheel===m.wheelName).length>1))throw new Error('Encoder มอเตอร์ถูกผูกซ้ำ กรุณาผูกหนึ่งตัวต่อล้อ');
+  if(new Set(motors.filter(m=>m.encoderEnabled).map(m=>m.ppr)).size>1)throw new Error('Encoder ความเร็วล้อที่เปิดใช้งานต้องมี PPR เท่ากัน');
+  if(passive.length!==2||!['odom_x','odom_y'].every(role=>passive.some(e=>e.role===role)))throw new Error('ต้องมี Encoder อิสระ X และ Y อย่างละ 1 ตัว');
+  if(passive[0].ppr!==passive[1].ppr)throw new Error('Encoder X/Y ต้องใช้ PPR เท่ากัน');
+  if(motors.some(m=>m.encoderEnabled&&m.encoderRole!=='motor_feedback'))throw new Error('Encoder ความเร็วล้อที่เปิดใช้งานต้องเป็น motor_feedback; Encoder อิสระใช้ ODOM X/Y');
+}
+
 function currentConfig(){
-  if(robotDesign.drive!=='diff2')throw new Error('รอบนี้รองรับเฉพาะ 2WD Differential เท่านั้น กรุณาตั้ง Motor Assignment เป็นล้อซ้ายและล้อขวา');
-  const motorRoles=robotDesign.wheels.filter(wheel=>wheel.motorEnabled).map(wheel=>wheel.motorRole),required=['left','right'];
+  const pinErrors=pinConflictErrors();if(pinErrors.length)throw new Error(pinErrors.join(' · '));
+  if(isMecanumXY())validateMecanumXY();
+  if(!hardwareSupported())throw new Error('เลือก 2WD Differential หรือ Template Mecanum 4 ล้อ + Encoder X/Y');
+  const motorRoles=robotDesign.wheels.filter(wheel=>wheel.motorEnabled).map(wheel=>wheel.motorRole),required=isMecanumXY()?['front_left','front_right','rear_left','rear_right']:['left','right'];
   if(!required.every(role=>motorRoles.includes(role)))throw new Error(`กรุณากำหนดหน้าที่มอเตอร์ให้ครบ: ${required.map(role=>MOTOR_ROLES[role]).join(', ')}`);
   const numberValue=(id,label,min)=>{const value=Number($(id)?.value);if(!Number.isFinite(value)||value<min)throw new Error(`${label} ไม่ถูกต้อง`);return value;};
   const serialPort=String($('bridge-serial-port')?.value||'').trim();if(!serialPort.startsWith('/dev/'))throw new Error('Serial port ต้องเป็น path ใต้ /dev/ เช่น /dev/ttyUSB0');
-  const baudRate=Math.round(numberValue('bridge-baud-rate','Baud rate',9600)),commandTimeoutMs=Math.round(numberValue('command-timeout-ms','Command timeout',100)),motorMaxRpm=numberValue('motor-max-rpm','Motor max RPM',1),sharedPid={kp:numberValue('pid-kp','PID Kp',0),ki:numberValue('pid-ki','PID Ki',0),kd:numberValue('pid-kd','PID Kd',0)},pid=tunedWheelPid?{...sharedPid,left:{...tunedWheelPid.left},right:{...tunedWheelPid.right}}:sharedPid;
-  const accessories=selectedAccessories(),controller=$('controller-board').value,meta=CONTROLLERS[controller]||CONTROLLERS.stm32f103,assignments=robotDesign.wheels.map(({name,x,y,radius,motorEnabled,motorRole,encoderEnabled,encoderRole,ppr,channels,invert})=>({name,x,y,radius,motorEnabled,motorRole,encoderEnabled,encoderRole,ppr,channels,invert})),encoderAssignments=robotDesign.encoders.map(({name,parent,attachedWheel,enabled,role,ppr,channels,invert})=>({name,parent,attachedWheel,enabled,role,ppr,channels,invert}));return{version:13,source:'sim_robot_tf/tf_model.json + sim_robot_odom/odom_config.json',transport:'python_serial',bridgePackage:'roside_controller_bridge',robotDesign:{...robotDesign,wheels:assignments,encoders:encoderAssignments},assignments,encoderAssignments,controller,board:controller,boardLabel:meta.label,drive:robotDesign.drive,driveLabel:robotDesign.driveLabel,kinematics:DRIVE_META[robotDesign.drive].kinematics,motorCount:robotDesign.motorCount,encoderCount:robotDesign.encoderCount,motorDriver:$('motor-driver').value,pidControl:$('pid-control-enabled')?.checked!==false,wheelDiameterMm:robotDesign.wheelDiameterMm,wheelTrackMm:robotDesign.wheelTrackMm,wheelBaseMm:robotDesign.wheelBaseMm,encoderTicksPerRevolution:600,encoderDecodeMode:'x1_a_rising',motorMaxRpm,serialPort,baudRate,commandTimeoutMs,pid,accessories,updatedAt:new Date().toISOString()};
+  const baudRate=Math.round(numberValue('bridge-baud-rate','Baud rate',9600)),commandTimeoutMs=Math.round(numberValue('command-timeout-ms','Command timeout',100)),motorMaxRpm=numberValue('motor-max-rpm','Motor max RPM',1),sharedPid={kp:numberValue('pid-kp','PID Kp',0),ki:numberValue('pid-ki','PID Ki',0),kd:numberValue('pid-kd','PID Kd',0)},pid=tunedWheelPid?{...sharedPid,...tunedWheelPid}:sharedPid;
+  const accessories=selectedAccessories(),controller=$('controller-board').value,meta=CONTROLLERS[controller]||CONTROLLERS.stm32f103,assignments=robotDesign.wheels.map(({name,x,y,radius,motorEnabled,motorRole,hardwareChannel,motorInvert,encoderEnabled,encoderRole,ppr,channels,invert})=>({name,x,y,radius,motorEnabled,motorRole,hardwareChannel,motorInvert,encoderEnabled,encoderRole,ppr,channels,invert})),encoderAssignments=robotDesign.encoders.map(({name,parent,attachedWheel,enabled,role,ppr,channels,invert,x,y,z})=>({name,parent,attachedWheel,enabled,role,ppr,channels,invert,x,y,z}));return{version:18,pinAssignments:hardwarePinAssignments,odomPinAssignments:isMecanumXY()?Object.fromEntries(['x','y'].map(axis=>[axis,['encA','encB'].map((field,i)=>mappedPin(`odom:${axis}:${field}`,MecanumXY.odomPins(odomSwapXY)[axis][i]))])):null,motorSpeedFeedback:!isMecanumXY(),odomSwapXY:isMecanumXY()&&odomSwapXY,source:'sim_robot_tf/tf_model.json + sim_robot_odom/odom_config.json',transport:'python_serial',bridgePackage:'roside_controller_bridge',robotDesign:{...robotDesign,wheels:assignments,encoders:encoderAssignments},assignments,encoderAssignments,controller,board:controller,boardLabel:meta.label,drive:robotDesign.drive,driveLabel:robotDesign.driveLabel,kinematics:DRIVE_META[robotDesign.drive].kinematics,motorCount:robotDesign.motorCount,encoderCount:robotDesign.encoderCount,motorDriver:$('motor-driver').value,pidControl:$('pid-control-enabled')?.checked!==false,wheelDiameterMm:robotDesign.wheelDiameterMm,wheelTrackMm:robotDesign.wheelTrackMm,wheelBaseMm:robotDesign.wheelBaseMm,encoderTicksPerRevolution:600,encoderDecodeMode:'x1_a_rising',motorMaxRpm,serialPort,baudRate,commandTimeoutMs,pid,accessories,updatedAt:new Date().toISOString()};
 }
 
 function apply2wdRuntimeProtocol(source,config){
@@ -315,7 +559,7 @@ function firmwareSource(config){
   const accessories=new Set(config.accessories);
   const usesI2c=accessories.has('mpu6050')||accessories.has('bno055');
   const cycron=config.motorDriver==='cycron',esp32Pwm=config.controller==='esp32';
-  const aux=(CONTROLLERS[config.controller]||CONTROLLERS.stm32f103).aux;
+  const aux=hardwareAuxPins();
   const radius=(config.wheelDiameterMm/2000).toFixed(6);
   const track=(config.wheelTrackMm/1000).toFixed(6);
   const wheelBase=(Math.max(0,config.wheelBaseMm||0)/1000).toFixed(6);
@@ -348,18 +592,24 @@ function firmwareSource(config){
 
 function readme(config){return `# ${config.boardLabel} — ${config.driveLabel}\n\nGenerated from the saved Robot Model and ODOM. The geometry constants and kinematic equations in \`main.cpp\` follow this configuration.\n\n- Controller: ${config.boardLabel}\n- Drive: ${config.driveLabel}\n- Motors: ${config.motorCount}\n- Wheel diameter: ${config.wheelDiameterMm} mm\n- Wheel radius: ${(config.wheelDiameterMm/2).toFixed(1)} mm\n- Wheel track: ${config.wheelTrackMm} mm\n- Wheel base: ${config.wheelBaseMm||0} mm\n- Encoder resolution: ${config.encoderTicksPerRevolution} ticks/revolution\n- Motor limit: ${config.motorMaxRpm} RPM\n- Driver: ${config.motorDriver.toUpperCase()}\n- Accessories: ${config.accessories.join(', ')||'none'}\n\n## ROS 2 serial protocol\n\n- Velocity command: \`V <linear_x_mps> <linear_y_mps> <angular_z_radps>\`\n- Reset odometry: \`Z\`\n- Odometry output: \`ODOM x y yaw vx vy wz\`\n- Gyroscope output: \`GYRO gx gy gz\` in degrees/second when MPU6050 or BNO055 is selected.\n\n## Safety\n\n- Verify the controller logic voltage, encoder resolution, motor polarity, and default pin template before powering hardware.\n- Use a voltage divider on HC-SR04 ECHO for 3.3V GPIO.\n- Use separate motor power and connect all grounds together.\n- Lift the wheels before the first motor direction test.\n- Firmware stops all motors after 300 ms without a valid command.\n`;}
 function platformioSource(config){
+  if(config.robotDesign?.hardwareTemplate==='mecanum_xy')return MecanumXY.ini(config);
+  // Blue Pill uses newlib-nano: V/R/P commands require its optional %f scanner.
+  // Serial.print(float) can work while sscanf("%f") silently fails without it.
   const target=PLATFORMIO_TARGETS[config.controller]||PLATFORMIO_TARGETS.stm32f103;
   const environment=config.controller==='esp32'?'nodemcu-32s':config.controller;
   const esp32Upload=config.controller==='esp32'?'upload_speed = 115200\nboard_upload.before_reset = default_reset\nboard_upload.after_reset = hard_reset\n':'';
-  return `; Generated by Mecha Rayong Hardware Builder\n; Geometry and pin assignments are stored in src/main.cpp\n; Sensors currently use Arduino Wire pin/address scaffolding only.\n; No unused registry libraries are downloaded during the build.\n\n[env:${environment}]\nplatform = ${target[0]}\nboard = ${target[1]}\nframework = arduino\n${target[2]?target[2]+'\n':''}${esp32Upload}monitor_speed = 115200\nbuild_flags =\n  -Wall\n  -Wextra\n  -Wpedantic${config.controller==='stm32f103'?'\n  -D PIO_FRAMEWORK_CREDENTIALS_NONE':''}\n`;
+  return `; Generated by Mecha Rayong Hardware Builder\n; Geometry and pin assignments are stored in src/main.cpp\n; Sensors currently use Arduino Wire pin/address scaffolding only.\n; No unused registry libraries are downloaded during the build.\n\n[env:${environment}]\nplatform = ${target[0]}\nboard = ${target[1]}\nframework = arduino\n${target[2]?target[2]+'\n':''}${esp32Upload}monitor_speed = 115200\nbuild_flags =\n  -Wall\n  -Wextra\n  -Wpedantic${config.controller==='stm32f103'?'\n  -D PIO_FRAMEWORK_CREDENTIALS_NONE\n  -D PIO_FRAMEWORK_ARDUINO_NANOLIB_FLOAT_SCANF':''}\n`;
 }
 function firmwareSourceWithAssignments(config){
+  if(config.robotDesign?.hardwareTemplate==='mecanum_xy')return MecanumXY.firmware(config,motorPinData());
   const motors=motorPinData(),enabled=motors.map(motor=>motor.encoderEnabled),roles=motors.map(motor=>({unused:0,odom_x:1,odom_y:2,odom_xy:3,motor_feedback:4}[motor.encoderRole]??0)),ticks=motors.map(encoderTicksPerRevolution);
   let source=applyGyroTelemetry(apply2wdRuntimeProtocol(firmwareSource(config),config),config);
-  const assignmentComments=motors.map((motor,index)=>`// M${index+1}: ${motor.name} | encoder=${motor.encoderEnabled?'on':'off'} | role=${motor.encoderRole} | ${motor.ppr} PPR x1 (A RISING, B direction) | signal_channels=${motor.channels} | invert=${motor.invert===-1?'on':'off'}`).join('\n');
+  // Invert the electrical output, not ROS velocity/kinematics or PID targets.
+  source=source.replace('static_cast<int>(requested_pwm)', 'static_cast<int>(requested_pwm * kMotorDirection[index])');
+  const assignmentComments=motors.map((motor,index)=>`// M${index+1}: ${motor.name} | motor_invert=${motor.motorInvert?'on':'off'} | encoder=${motor.encoderEnabled?'on':'off'} | role=${motor.encoderRole} | ${motor.ppr} PPR x1 (A RISING, B direction) | signal_channels=${motor.channels} | invert=${motor.invert===-1?'on':'off'}`).join('\n');
   source=source.replace(`// Motor driver: ${config.motorDriver}`,`// Motor driver: ${config.motorDriver}\n${assignmentComments}`);
   source=source.replace('constexpr float kEncoderTicksPerRevolution = 600.0f;','// Per-wheel encoder PPR and decode multiplier are declared below.');
-  source=source.replace('constexpr MotorPins kMotorPins[kMotorCount] =\n{',`constexpr bool kPidControlEnabled = ${config.pidControl!==false};\nconstexpr bool kEncoderEnabled[kMotorCount] = {${enabled.join(', ')}};\nconstexpr uint8_t kEncoderRole[kMotorCount] = {${roles.join(', ')}};  // 1=X/Yaw odom, 2=Y, 3=X/Y, 4=PID only\nconstexpr uint8_t kEncoderDecodeMultiplier = 1;  // channel A RISING only\nconstexpr float kEncoderPpr[kMotorCount] = {${ticks.map(value=>value.toFixed(1)+'f').join(', ')}};\n\nconstexpr MotorPins kMotorPins[kMotorCount] =\n{`);
+  source=source.replace('constexpr MotorPins kMotorPins[kMotorCount] =\n{',`constexpr int8_t kMotorDirection[kMotorCount] = {${motors.map(motor=>motor.motorInvert?-1:1).join(', ')}};  // electrical output only; encoder sign is calibrated separately\nconstexpr bool kPidControlEnabled = ${config.pidControl!==false};\nconstexpr bool kEncoderEnabled[kMotorCount] = {${enabled.join(', ')}};\nconstexpr uint8_t kEncoderRole[kMotorCount] = {${roles.join(', ')}};  // 1=X/Yaw odom, 2=Y, 3=X/Y, 4=PID only\nconstexpr uint8_t kEncoderDecodeMultiplier = 1;  // channel A RISING only\nconstexpr float kEncoderPpr[kMotorCount] = {${ticks.map(value=>value.toFixed(1)+'f').join(', ')}};\n\nconstexpr MotorPins kMotorPins[kMotorCount] =\n{`);
   source=source.replace('  const float ticks_to_rpm = 60.0f / (kEncoderTicksPerRevolution * dt);\n  for (uint8_t i = 0; i < kMotorCount; ++i)', '  for (uint8_t i = 0; i < kMotorCount; ++i)');
   source=source.replace('    motors[i].measured_rpm = static_cast<float>(delta) * ticks_to_rpm;',`    const float ticks_per_revolution = kEncoderPpr[i] * static_cast<float>(kEncoderDecodeMultiplier);\n    motors[i].measured_rpm = kEncoderEnabled[i]\n      ? static_cast<float>(delta) * (60.0f / (ticks_per_revolution * dt))\n      : motors[i].target_rpm;`);
   source=source.replace('float rpmToRadPerSec(const float rpm)\n{\n  return rpm * (2.0f * PI) / 60.0f;\n}',`float rpmToRadPerSec(const float rpm)\n{\n  return rpm * (2.0f * PI) / 60.0f;\n}\n\nfloat odomRpmX(const uint8_t index)\n{\n  return (kEncoderEnabled[index] && (kEncoderRole[index] == 1 || kEncoderRole[index] == 3)) ? motors[index].measured_rpm : 0.0f;\n}\n\nfloat odomRpmY(const uint8_t index)\n{\n  return (kEncoderEnabled[index] && (kEncoderRole[index] == 2 || kEncoderRole[index] == 3)) ? motors[index].measured_rpm : 0.0f;\n}\n\nfloat odomRpmAny(const uint8_t index)\n{\n  return (kEncoderEnabled[index] && kEncoderRole[index] >= 1 && kEncoderRole[index] <= 3) ? motors[index].measured_rpm : 0.0f;\n}`);
@@ -419,6 +669,30 @@ float applyMotorSlew(MotorState &motor, const float requested_pwm)
     }
     else motors[i].measured_rpm = motors[i].target_rpm;`);
   source=source.replace('    motors[i].target_rpm = 0.0f;\n    setMotor(i, 0.0f);','    motors[i].target_rpm = 0.0f;\n    motors[i].output_pwm = 0.0f;\n    setMotor(i, 0.0f);');
+  source=source.replace('void setup()\n{',`void publishWheelEncoderDiagnostics()
+{
+  static uint32_t previous_ms=0;
+  const uint32_t now=millis();
+  if(now-previous_ms<100)return;
+  previous_ms=now;
+  int32_t ticks[kMotorCount];
+  noInterrupts();for(uint8_t i=0;i<kMotorCount;++i)ticks[i]=encoder_ticks[i];interrupts();
+  uint32_t mask=0;
+  Serial.print("WENC");
+  for(uint8_t i=0;i<kMotorCount;++i){
+    if(kEncoderEnabled[i])mask|=1u<<i;
+    Serial.print(' ');Serial.print(ticks[i]);Serial.print(' ');
+    Serial.print(kEncoderEnabled[i]?motors[i].measured_rpm:0.0f,1);
+  }
+  Serial.print(' ');Serial.println(mask);
+}
+
+void setup()\n{`);
+  source=source.replace('  updateOdometry(dt);','  updateOdometry(dt);\n  publishWheelEncoderDiagnostics();');
+  if(config.controller==='stm32f103'){
+    source=source.replace('#include <Arduino.h>','#include <Arduino.h>\n\n// USART1 serial bridge: PA9 = TX, PA10 = RX. These pins are reserved.\n// STM32 core 3.x renamed the concrete HardwareSerial implementation to Uart.\n#if defined(STM32_CORE_VERSION_MAJOR) && STM32_CORE_VERSION_MAJOR >= 3\nUart SerialBridge(PA10, PA9);\n#else\nHardwareSerial SerialBridge(PA10, PA9);\n#endif');
+    source=source.replace(/\bSerial\b/g,'SerialBridge');
+  }
   return source;
 }
 
@@ -627,29 +901,39 @@ function controllerBridgeFiles(config){
   const setupPy=`from setuptools import find_packages, setup\n\npackage_name = '${pkg}'\nsetup(name=package_name, version='0.1.0', packages=find_packages(), data_files=[('share/ament_index/resource_index/packages', ['resource/' + package_name]), ('share/' + package_name, ['package.xml']), ('share/' + package_name + '/launch', ['launch/controller_bridge.launch.py']), ('share/' + package_name + '/config', ['config/controller.yaml'])], install_requires=['setuptools', 'pyserial'], zip_safe=True, maintainer='ROSIDE', maintainer_email='robot@localhost', description='ROS 2 custom serial controller bridge', license='Apache-2.0', entry_points={'console_scripts': ['controller_bridge = roside_controller_bridge.controller_bridge:main']})\n`;
   const launchPy=`from ament_index_python.packages import get_package_share_directory\nfrom launch import LaunchDescription\nfrom launch_ros.actions import Node\nimport os\n\ndef generate_launch_description():\n    config = os.path.join(get_package_share_directory('${pkg}'), 'config', 'controller.yaml')\n    return LaunchDescription([Node(package='${pkg}', executable='controller_bridge', name='controller_bridge', output='screen', parameters=[config])])\n`;
   const bridgeReadme=`# ROSIDE 2WD Controller Bridge\n\nPython custom serial bridge. It subscribes to /cmd_vel, publishes /odom and /controller/wheel_rpm, and supports per-wheel runtime PID/RPM tuning.\n\nBuild: colcon build --symlink-install --packages-select ${pkg}\nRun: ros2 launch ${pkg} controller_bridge.launch.py\nPID: ros2 param set /controller_bridge left_kp 1.0\nTune all gains: ros2 topic pub --once /controller/pid_gains std_msgs/msg/Float32MultiArray "{data: [1.0, 5.0, 0.0, 1.1, 5.2, 0.0]}"\nTune wheels: ros2 topic pub --once /controller/tune_rpm std_msgs/msg/Float32MultiArray "{data: [30.0, 30.0]}"\n`;
-  return{'package.xml':packageXml,'setup.py':setupPy,'setup.cfg':'[develop]\nscript_dir=$base/lib/roside_controller_bridge\n[install]\ninstall_scripts=$base/lib/roside_controller_bridge\n','resource/roside_controller_bridge':'','roside_controller_bridge/__init__.py':'','roside_controller_bridge/controller_bridge.py':controllerBridgePython(),'launch/controller_bridge.launch.py':launchPy,'config/controller.yaml':yaml,'README.md':bridgeReadme};
+  return{'package.xml':packageXml,'setup.py':setupPy,'setup.cfg':'[develop]\nscript_dir=$base/lib/roside_controller_bridge\n[install]\ninstall_scripts=$base/lib/roside_controller_bridge\n','resource/roside_controller_bridge':'','roside_controller_bridge/__init__.py':'','roside_controller_bridge/controller_bridge.py':config.robotDesign?.hardwareTemplate==='mecanum_xy'?MecanumXY.bridge(controllerBridgePython()):controllerBridgePython(),'launch/controller_bridge.launch.py':launchPy,'config/controller.yaml':config.robotDesign?.hardwareTemplate==='mecanum_xy'?yaml.replace(/^    (?:left|right)_(?:kp|ki|kd):.*\n/gm,''):yaml,'README.md':config.robotDesign?.hardwareTemplate==='mecanum_xy'?MecanumXY.readme:bridgeReadme};
 }
 
 function readmeWithAssignments(config){
+  if(config.robotDesign?.hardwareTemplate==='mecanum_xy'){
+    const roles=['front_left','front_right','rear_left','rear_right'];
+    const odomPins=MecanumXY.odomPins(config.odomSwapXY===true);
+    const modes=roles.map((role,index)=>{
+      const wheel=config.assignments.find(item=>item.motorRole===role);
+      const encoder=config.encoderAssignments.find(item=>item.attachedWheel===wheel?.name);
+      return `- ${['FL','FR','RL','RR'][index]}: ${encoder?.enabled?'Speed PID + encoder':'feed-forward (encoder disabled)'}`;
+    }).join('\n');
+    return MecanumXY.readme+`\nGenerated ODOM X/Y pin mapping${config.odomSwapXY?' (swapped)':''}:\n- X: A ${odomPins.x[0]}, B ${odomPins.x[1]}\n- Y: A ${odomPins.y[0]}, B ${odomPins.y[1]}\n\nGenerated motor speed modes:\n`+modes+'\n';
+  }
   const modelEncoderWheels=new Set(config.encoderAssignments.map(item=>item.attachedWheel).filter(Boolean));
-  const motors=config.assignments.map(item=>`- ${item.name}: Motor=${item.motorEnabled?MOTOR_ROLES[item.motorRole]||item.motorRole:'ไม่ใช้'}${!modelEncoderWheels.has(item.name)&&item.encoderEnabled?` · Encoder ท้ายมอเตอร์=${item.ppr} PPR ×${item.channels} (${ENCODER_ROLES[item.encoderRole]||item.encoderRole}, invert=${item.invert===-1?'on':'off'})`:''}`).join('\n');
+  const motors=config.assignments.map(item=>`- ${item.name}: Motor=${item.motorEnabled?MOTOR_ROLES[item.motorRole]||item.motorRole:'ไม่ใช้'} · motor_invert=${item.motorInvert?'on':'off'}${!modelEncoderWheels.has(item.name)&&item.encoderEnabled?` · Encoder ท้ายมอเตอร์=${item.ppr} PPR ×${item.channels} (${ENCODER_ROLES[item.encoderRole]||item.encoderRole}, invert=${item.invert===-1?'on':'off'})`:''}`).join('\n');
   const encoders=config.encoderAssignments.map(item=>`- ${item.name}: ${item.enabled?ENCODER_ROLES[item.role]||item.role:'ไม่ใช้'} · ติดกับ ${item.attachedWheel||'Encoder อิสระ'} (${item.ppr} PPR ×${item.channels}, invert=${item.invert===-1?'on':'off'})`).join('\n')||'- ไม่พบ Encoder ใน Robot Model';
   const assignments=`### Motors\n\n${motors}\n\n### Encoders\n\n${encoders}`.replace(/PPR ×\d+/g,'PPR ×1 decoded (A RISING; B direction)');
-  const protocol=`## Encoder and runtime tuning\n\n- Control mode: ${config.pidControl!==false?'closed-loop PID':'open-loop direct speed/PWM'}.\n- Enabled odometry encoders always feed X/Yaw odometry, including when PID is disabled.\n- Decode mode: ×1, interrupt on encoder A RISING; encoder B determines direction.\n- Effective ticks/revolution: configured PPR × 1. The Channels field is wiring metadata and does not multiply ticks.\n- Shared PID: \`P <kp> <ki> <kd>\`\n- Per-wheel PID: \`P <left_kp> <left_ki> <left_kd> <right_kp> <right_ki> <right_kd>\`\n- Direct wheel test: \`R <left_rpm> <right_rpm>\`\n- Stop: \`S\`\n- Wheel telemetry: \`RPM target_left measured_left target_right measured_right\`\n- Serial: ${config.serialPort} at ${config.baudRate} baud\n- Command timeout: ${config.commandTimeoutMs} ms\n`;
+  const protocol=`## Encoder and runtime tuning\n\n- Control mode: ${config.pidControl!==false?'closed-loop PID':'open-loop direct speed/PWM'}.\n- Enabled odometry encoders always feed X/Yaw odometry, including when PID is disabled.\n- Decode mode: ×1, interrupt on encoder A RISING; encoder B determines direction.\n- Effective ticks/revolution: configured PPR × 1. The Channels field is wiring metadata and does not multiply ticks.\n- Shared PID: \`P <kp> <ki> <kd>\`\n- Per-wheel PID: \`P <left_kp> <left_ki> <left_kd> <right_kp> <right_ki> <right_kd>\`\n- Direct wheel test: \`R <left_rpm> <right_rpm>\`\n- Stop: \`S\`\n- Wheel telemetry: \`RPM target_left measured_left target_right measured_right\`\n- Serial: ${config.serialPort} at ${config.baudRate} baud\n${config.controller==='stm32f103'?'- MCU UART: USART1 PA9 (TX) / PA10 (RX); both pins are reserved for the serial bridge\n':''}- Command timeout: ${config.commandTimeoutMs} ms\n`;
   return readme(config).replace(`- Motors: ${config.motorCount}`,`- Motors: ${config.motorCount}\n- Encoders: ${config.encoderCount}`).replace(`- Encoder resolution: ${config.encoderTicksPerRevolution} ticks/revolution`,`## Motor / Encoder assignments\n\n${assignments}`).replace('Firmware stops all motors after 300 ms without a valid command.',`Firmware stops all motors after ${config.commandTimeoutMs} ms without a valid command.`)+`\n${protocol}`;
 }
 
 function previewHardwareFiles(){const config=currentConfig(),bridge=controllerBridgeFiles(config);return{'main.cpp':firmwareSourceWithAssignments(config),'platformio.ini':platformioSource(config).replace('monitor_speed = 115200',`monitor_speed = ${config.baudRate}`),'controller_bridge.py':bridge['roside_controller_bridge/controller_bridge.py'],'controller.yaml':bridge['config/controller.yaml'],'README.md':readmeWithAssignments(config)+'\n'+bridge['README.md']};}
-function refreshCodePreview(){if(!robotDesign)return;const files=previewHardwareFiles();$('code-view').textContent=files[activeCodeFile]||'';document.querySelectorAll('.code-tab').forEach(tab=>tab.classList.toggle('active',tab.dataset.codeFile===activeCodeFile));}
+function refreshCodePreview(){if(!robotDesign)return;const files=previewHardwareFiles();$('code-view').textContent=files[activeCodeFile]||'';if($('code-file-label'))$('code-file-label').textContent=activeCodeFile;document.querySelectorAll('.code-tab').forEach(tab=>tab.classList.toggle('active',tab.dataset.codeFile===activeCodeFile));}
 function setBuildStep(name,state){const step=document.querySelector(`[data-build-step="${name}"]`);if(!step)return;step.classList.remove('active','done','error');if(state)step.classList.add(state);const icon=step.querySelector('i');if(icon)icon.textContent=state==='done'?'✓':state==='error'?'!':({files:'1',toolchain:'2',compile:'3',debug:'4'}[name]||'•');}
 function resetBuildProgress(){for(const name of ['files','toolchain','compile','debug','upload'])setBuildStep(name,'');}
-function validSerialPort(value){return /^\/dev\/(?:tty(?:USB|ACM|AMA|THS|S)\d+|rfcomm\d+|serial\/by-id\/[A-Za-z0-9._:+-]+)$/.test(String(value));}
+function validSerialPort(value){return /^\/dev\/(?:tty(?:USB|ACM|AMA|THS|S)\d+|serial\d+|rfcomm\d+|serial\/by-id\/[A-Za-z0-9._:+-]+)$/.test(String(value));}
 function updateUploadAvailability(){const button=$('upload-button');if(button)button.disabled=platformioBusy||!validSerialPort($('upload-port')?.value);}
 function setPlatformioBusy(busy){platformioBusy=busy;$('compile-button').disabled=busy;$('refresh-ports').disabled=busy;updateUploadAvailability();}
 async function discoverSerialPorts(){
   const primary=await api('/api/serial/ports',{sessionId}).catch(error=>({ok:false,error:error.message}));
-  if(primary.ok&&Array.isArray(primary.ports))return primary.ports;
-  const command="for port in /dev/ttyUSB* /dev/ttyACM* /dev/ttyAMA* /dev/ttyTHS* /dev/rfcomm*; do [ -c \"$port\" ] || continue; if [ -r \"$port\" ] && [ -w \"$port\" ]; then access=1; else access=0; fi; printf '%s\\t%s\\n' \"$port\" \"$access\"; done; true";
+  if(primary.ok&&Array.isArray(primary.ports)){if(primary.uartHint)primary.ports.uartHint=primary.uartHint;return primary.ports;}
+  const command="for port in /dev/ttyUSB* /dev/ttyACM* /dev/ttyAMA* /dev/ttyTHS* /dev/ttyS* /dev/serial[0-9]* /dev/rfcomm*; do [ -c \"$port\" ] || continue; if [ -r \"$port\" ] && [ -w \"$port\" ]; then access=1; else access=0; fi; printf '%s\\t%s\\n' \"$port\" \"$access\"; done; true";
   const fallback=await api('/api/exec',{sessionId,command,timeout:10000});
   if(!fallback.ok)throw new Error(primary.error||fallback.error||'ค้นหา COM port ไม่สำเร็จ');
   return String(fallback.stdout||'').split(/\r?\n/).map(line=>line.trim()).filter(Boolean).map(line=>{const [path,access]=line.split('\t');return{path,label:path.split('/').pop(),connected:true,accessible:access==='1'};}).filter(item=>validSerialPort(item.path));
@@ -658,16 +942,18 @@ async function refreshSerialPorts(){
   const select=$('upload-port'),refresh=$('refresh-ports'),previous=select.value;refresh.disabled=true;select.disabled=true;
   select.innerHTML='<option value="">กำลังค้นหา COM port…</option>';updateUploadAvailability();
   try{
-    const ports=(await discoverSerialPorts()).filter(item=>validSerialPort(item.path));
+    const discovered=await discoverSerialPorts(),ports=discovered.filter(item=>validSerialPort(item.path));
     const bridgeList=$('bridge-serial-port-list');if(bridgeList)bridgeList.innerHTML=ports.map(item=>`<option value="${esc(item.path)}">${esc(item.label||item.path)} · ${item.accessible?'พร้อมใช้':'ไม่มีสิทธิ์'}</option>`).join('');
     select.innerHTML='';const placeholder=document.createElement('option');placeholder.value='';placeholder.textContent=ports.length?`เลือก COM port (${ports.length} พอร์ต)`:'ไม่พบ COM port · กรุณาเสียบบอร์ด';select.append(placeholder);
     for(const item of ports){const option=document.createElement('option');option.value=item.path;option.textContent=`${item.path} · ${item.label||item.path} · ${item.accessible?'พร้อมใช้':'ไม่มีสิทธิ์'}`;select.append(option);}
-    const selected=ports.find(item=>item.path===previous||item.stablePath===previous);if(selected)select.value=selected.path;
+    const preferred=previous||$('bridge-serial-port')?.value;const selected=ports.find(item=>item.path===preferred||item.stablePath===preferred||item.aliases?.includes(preferred));if(selected)select.value=selected.path;
     $('compile-status').textContent=ports.length?`พบ COM port ${ports.length} พอร์ต: ${ports.map(item=>item.path).join(', ')}`:'ไม่พบ USB/UART COM port บนเครื่อง Robot';
+    if(selected)$('compile-status').textContent+=' · พร้อมกด Upload Firmware';
+    if(discovered.uartHint)$('compile-status').textContent+=' · '+discovered.uartHint;
   }catch(error){select.innerHTML='<option value="">ค้นหา COM port ไม่สำเร็จ</option>';$('compile-status').textContent=`✕ ${error.message}`;}
   finally{select.disabled=false;refresh.disabled=platformioBusy;updateUploadAvailability();}
 }
-function openCodeModal(mode='preview'){if(!robotDesign)return;activeCodeFile='main.cpp';$('compile-output').textContent='';$('compile-output').className='compile-output';resetBuildProgress();if(mode==='generated'){setBuildStep('files','done');$('compile-status').textContent='✓ สร้างไฟล์แล้ว · พร้อม Build & Debug';}else $('compile-status').textContent='พร้อม Build & Debug';refreshCodePreview();$('code-modal').hidden=false;document.body.style.overflow='hidden';document.querySelector('.code-tab.active')?.focus();refreshSerialPorts();}
+function openCodeModal(mode='preview'){if(!robotDesign)return;const guide=$('stm32-upload-guide');if(guide)guide.hidden=$('controller-board').value!=='stm32f103';activeCodeFile='main.cpp';$('compile-output').textContent='';$('compile-output').className='compile-output';resetBuildProgress();if(mode==='generated'){setBuildStep('files','done');$('compile-status').textContent='✓ สร้างไฟล์แล้ว · พร้อม Build & Debug';}else $('compile-status').textContent='พร้อม Build & Debug';refreshCodePreview();$('code-modal').hidden=false;document.body.style.overflow='hidden';refreshSerialPorts().then(()=>$('upload-port')?.focus());}
 function closeCodeModal(){$('code-modal').hidden=true;document.body.style.overflow='';$('generate-button')?.focus();}
 async function copyCurrentCode(){try{await navigator.clipboard.writeText($('code-view').textContent);$('compile-status').textContent=`คัดลอก ${activeCodeFile} แล้ว`;}catch(_){$('compile-status').textContent='คัดลอกไม่สำเร็จ กรุณาเลือกข้อความด้วยตนเอง';}}
 function shellPath(value){const path=String(value);if(path.startsWith('~/'))return `"$HOME"/'${path.slice(2).replace(/'/g,"'\\''")}'`;return `'${path.replace(/'/g,"'\\''")}'`;}
@@ -767,6 +1053,10 @@ fi
 "$PIO_BIN" --version || fail 'PlatformIO is installed but cannot run.'
 [ -f ${shellPath(`${base}/platformio.ini`)} ] || fail 'platformio.ini is missing from the generated firmware project.'
 [ -f ${shellPath(`${base}/src/main.cpp`)} ] || fail 'src/main.cpp is missing from the generated firmware project.'
+if grep -Fq 'bno08x.initStage' ${shellPath(`${base}/src/main.cpp`)}; then
+  BNO_HEADER=${shellPath(`${base}/lib/Adafruit BNO08x/src/Adafruit_BNO08x.h`)}
+  [ -f "$BNO_HEADER" ] && grep -Fq 'initStage' "$BNO_HEADER" || fail 'Mecanum XY needs the patched BNO08x library. Update Local Agent, reload Hardware Wiring, then regenerate firmware.'
+fi
 echo '[ROSIDE] Preflight passed: firmware project is ready to build'
 cd -- ${shellPath(base)} || fail 'Cannot enter the generated firmware directory.'
 ${serialPreflight}${uploadPort?"echo '[ROSIDE] ESP32 upload uses DTR/RTS auto-reset; no BOOT press is needed on compatible DevKit boards'\n":''}${pioCommand}
@@ -796,9 +1086,10 @@ async function runPlatformioStream(base,onChunk,options={}){
 
 async function writeHardwareFiles(){
   const config=currentConfig(),root=String(workspace).replace(/\/$/,''),base=`${root}/src/roside_stm32_base/firmware`,bridgeBase=`${root}/src/roside_controller_bridge`,bridge=controllerBridgeFiles(config);
-  const directories=[`${root}/.roside`,`${base}/src`,bridgeBase,`${bridgeBase}/resource`,`${bridgeBase}/roside_controller_bridge`,`${bridgeBase}/launch`,`${bridgeBase}/config`];
+  const extraFirmware=isMecanumXY()?MecanumXY.libraryFiles():{};
+  const directories=[...new Set(Object.keys(extraFirmware).map(file=>`${base}/${file.slice(0,file.lastIndexOf('/'))}`)),`${root}/.roside`,`${base}/src`,bridgeBase,`${bridgeBase}/resource`,`${bridgeBase}/roside_controller_bridge`,`${bridgeBase}/launch`,`${bridgeBase}/config`];
   for(const path of directories){const result=await api('/api/files/mkdir',{sessionId,path});if(!result.ok)throw new Error(result.error||'สร้างโฟลเดอร์ไม่สำเร็จ');}
-  const files=[[`${root}/.roside/hardware.json`,JSON.stringify(config,null,2)+'\n'],[`${base}/platformio.ini`,platformioSource(config).replace('monitor_speed = 115200',`monitor_speed = ${config.baudRate}`)],[`${base}/src/main.cpp`,firmwareSourceWithAssignments(config)],[`${base}/README.md`,readmeWithAssignments(config)],...Object.entries(bridge).map(([relativePath,content])=>[`${bridgeBase}/${relativePath}`,content])];
+  const files=[[`${root}/.roside/hardware.json`,JSON.stringify(config,null,2)+'\n'],[`${base}/platformio.ini`,platformioSource(config).replace('monitor_speed = 115200',`monitor_speed = ${config.baudRate}`)],[`${base}/src/main.cpp`,firmwareSourceWithAssignments(config)],[`${base}/README.md`,readmeWithAssignments(config)],...Object.entries(extraFirmware).map(([file,content])=>[`${base}/${file}`,content]),...Object.entries(bridge).map(([relativePath,content])=>[`${bridgeBase}/${relativePath}`,content])];
   for(const [path,content] of files){const result=await api('/api/files/write',{sessionId,path,content});if(!result.ok)throw new Error(result.error||`เขียน ${path} ไม่สำเร็จ`);}
   localStorage.setItem(storageKey(),JSON.stringify(config));return{config,base,bridgeBase};
 }
@@ -822,7 +1113,7 @@ async function compileHardwareCode(){
     const summary=debugSummary(buildLog);output.textContent+=`\n\n[4/4] ${summary}`;
     if(!buildResult.ok){const preflightFailed=/\[ROSIDE ERROR\]/i.test(buildLog);await writeHardwareBuildEvidence(base,'failed').catch(()=>{});if(preflightFailed){setBuildStep('toolchain','error');setBuildStep('compile','');status.textContent='✕ Preflight ไม่ผ่าน · ดูรายละเอียด ROSIDE ERROR แล้วกด Build ใหม่';}setBuildStep('debug','error');output.className='compile-output error';if(!preflightFailed)status.textContent='✕ Build ไม่ผ่าน · ดู Error ใน Debug output';return;}
     await writeHardwareBuildEvidence(base,'compiled',config);
-    setBuildStep('debug','done');output.className='compile-output ok';status.textContent='✓ Build & Debug สำเร็จ · การ์ด Hardware เป็นสีเขียวแล้ว';
+    setBuildStep('debug','done');output.className='compile-output ok';status.textContent='✓ Build สำเร็จ · การ์ด Hardware เป็นสีเขียวแล้ว · ต้องกด Upload จึงจะมี Firmware ใหม่นี้บนบอร์ด';
   }catch(error){await writeHardwareBuildEvidence(evidenceBase,'failed').catch(()=>{});const active=document.querySelector('.build-step.active');if(active){active.classList.remove('active');active.classList.add('error');const icon=active.querySelector('i');if(icon)icon.textContent='!';}output.className='compile-output error';output.textContent+=`\n\n[ERROR] ${error.message}`;status.textContent='✕ Build & Debug ไม่สำเร็จ';}
   finally{setPlatformioBusy(false);}
 }
@@ -836,13 +1127,14 @@ async function uploadHardwareCode(){
     output.textContent+=`[5/5] กำลัง Upload ไปยัง ${port}…\n`;status.textContent=`5/5 · PlatformIO กำลัง Upload ไปยัง ${port}`;
     const {base}=await writeHardwareFiles(),result=await runPlatformioStream(base,chunk=>{output.textContent+=chunk;output.scrollTop=output.scrollHeight;if(/Uploading|Writing|wrote|Verify|Resetting/i.test(chunk))status.textContent=`5/5 · กำลังเขียน Firmware ไปยัง ${port}`;if(/FAILED|[A-Za-z]+Error\s*:|fatal error:/i.test(chunk)){setBuildStep('upload','error');status.textContent='✕ Upload พบข้อผิดพลาด';}}, {uploadPort:port});
     if(!result.ok){
-      const noBootResponse=/Failed to connect to ESP32|No serial data received|Wrong boot mode detected/i.test(result.log);
+      const noBootResponse=/Failed to connect to ESP32|No serial data received|Wrong boot mode detected/i.test(result.log),stm32NoBoot=$('controller-board').value==='stm32f103'&&/Failed to init device|Cannot initialize device|No response from the target/i.test(result.log);
       setBuildStep('upload','error');output.className='compile-output error';
       output.textContent+=`\n\n[UPLOAD ERROR] PlatformIO จบการทำงานด้วย code ${result.code}`;
       if(noBootResponse)output.textContent+='\n[ESP32 AUTO-BOOT] เปิด COM port ได้แล้ว แต่บอร์ดไม่ตอบสนองโหมด Download — ตรวจว่าสาย USB ส่งข้อมูลได้ และบอร์ด/USB-UART มี DTR→GPIO0, RTS→EN (หรือวงจร Auto-reset)';
-      status.textContent=noBootResponse?'✕ ESP32 ไม่เข้า Auto BOOT · ตรวจวงจร DTR/RTS และสาย USB':'✕ Upload ไม่สำเร็จ · ตรวจสาย, Boot mode และ COM port';return;
+      if(stm32NoBoot)output.textContent+='\n[STM32 BOOT] บอร์ดยังไม่ตอบ Bootloader: ตั้ง BOOT0=1, BOOT1=0 แล้วกด Reset ก่อน Upload · ตรวจ USB–UART TX→PA10, RX→PA9 และ GND ร่วมกัน';
+      status.textContent=stm32NoBoot?'✕ STM32 ยังไม่เข้า Bootloader · ตรวจ Jumper, Reset และสาย UART':noBootResponse?'✕ ESP32 ไม่เข้า Auto BOOT · ตรวจวงจร DTR/RTS และสาย USB':'✕ Upload ไม่สำเร็จ · ตรวจสาย, Boot mode และ COM port';return;
     }
-    setBuildStep('upload','done');output.className='compile-output ok';output.textContent+='\n\n[UPLOAD SUCCESS] เขียน Firmware ลงบอร์ดสำเร็จ';status.textContent=`✓ Upload สำเร็จ · ${port}`;
+    setBuildStep('upload','done');output.className='compile-output ok';output.textContent+='\n\n[UPLOAD SUCCESS] เขียน Firmware ลงบอร์ดสำเร็จ';if($('controller-board').value==='stm32f103')output.textContent+='\n[STM32] ตั้ง BOOT0 เป็น 0 แล้วกด Reset ก่อนเปิด Robot Tune';status.textContent=`✓ Upload สำเร็จ · ${port}${$('controller-board').value==='stm32f103'?' · ตั้ง BOOT0 = 0 แล้ว Reset':''}`;
   }catch(error){setBuildStep('upload','error');output.className='compile-output error';output.textContent+=`\n\n[UPLOAD ERROR] ${error.message}`;status.textContent='✕ Upload ไม่สำเร็จ';}
   finally{setPlatformioBusy(false);}
 }
@@ -852,8 +1144,8 @@ async function generateHardwareFiles(){
   button.disabled=true;status.className='status';status.textContent='กำลังสร้าง Hardware config, firmware และ Python Serial Bridge…';
   try{
     await writeHardwareFiles();status.className='status ok';status.textContent='✓ สร้าง config + firmware + roside_controller_bridge แล้ว';openCodeModal('generated');
-  }catch(error){status.className='status error';status.textContent='สร้างไฟล์ไม่สำเร็จ: '+error.message;}
-  finally{button.disabled=robotDesign.drive!=='diff2';}
+  }catch(error){status.className='status error';status.textContent='สร้างไฟล์ไม่สำเร็จ: '+error.message;if(isMecanumXY()){const card=$('hardware-assignments')?.closest('details');if(card){card.open=true;card.scrollIntoView({block:'nearest',behavior:'smooth'});}}}
+  finally{button.disabled=!hardwareSupported();}
 }
 
 function showLoadError(error){
@@ -864,7 +1156,7 @@ async function init(){
   try{
     await restoreRobotSession();
     const [model,odom]=await Promise.all([readWorkspaceJson('src/sim_robot_tf/tf_model.json'),readWorkspaceJson('src/sim_robot_odom/odom_config.json')]);
-    robotDesign=deriveRobotDesign(model,odom);applySavedOptions();updateMultiCombos();renderSummary();renderAssignments();renderDiagram();$('generate-button').disabled=robotDesign.drive!=='diff2';
+    robotDesign=deriveRobotDesign(model,odom);await restoreWorkspaceHardwareOptions();applySavedOptions();updateMultiCombos();renderSummary();renderAssignments();renderDiagram();$('generate-button').disabled=!hardwareSupported();
     const rerender=()=>{renderDiagram();if(!$('code-modal').hidden)refreshCodePreview();};$('controller-board').addEventListener('change',rerender);$('motor-driver').addEventListener('change',rerender);$('pid-control-enabled').addEventListener('change',()=>{updatePidControlFields();rerender();});$('upload-port').addEventListener('change',updateUploadAvailability);for(const id of ['bridge-serial-port','bridge-baud-rate','command-timeout-ms','motor-max-rpm','pid-kp','pid-ki','pid-kd'])$(id)?.addEventListener('change',()=>{if(id.startsWith('pid-'))tunedWheelPid=null;if(!$('code-modal').hidden)refreshCodePreview();});document.querySelectorAll('.device-option input').forEach(input=>input.addEventListener('change',()=>{updateMultiCombos();rerender();}));document.querySelectorAll('.code-tab').forEach(tab=>tab.addEventListener('click',()=>{activeCodeFile=tab.dataset.codeFile;refreshCodePreview();}));document.querySelectorAll('.multi-combo').forEach(combo=>combo.addEventListener('toggle',()=>{if(combo.open)document.querySelectorAll('.multi-combo[open]').forEach(other=>{if(other!==combo)other.open=false;});}));document.querySelectorAll('.sidebar-card').forEach(card=>card.addEventListener('toggle',()=>{if(card.open)document.querySelectorAll('.sidebar-card[open]').forEach(other=>{if(other!==card)other.open=false;});}));document.addEventListener('click',event=>{if(!event.target.closest('.multi-combo'))document.querySelectorAll('.multi-combo[open]').forEach(combo=>combo.open=false);});document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!$('code-modal').hidden)closeCodeModal();});window.addEventListener('resize',()=>requestAnimationFrame(drawPinoutLines));refreshSerialPorts();
   }catch(error){showLoadError(error);}
 }

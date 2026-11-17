@@ -1,0 +1,12 @@
+{
+  "parameters": {
+    "base": "http://127.0.0.1:8001",
+    "kp": 3.5,
+    "kd": 0.2,
+    "max_wz": 1.2,
+    "angle_deg": 90.0,
+    "run": true
+  },
+  "fault": "0_to_90: XY drift exceeded 12 cm",
+  "samples": 43
+}

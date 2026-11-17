@@ -1,0 +1,54 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),os=require('node:os'),{spawn}=require('node:child_process'),WebSocket=require('ws');
+const read=file=>fs.readFileSync(path.join(__dirname,'..',file),'utf8');
+test('sequence page edits, orders, saves and runs steps without sending the next goal from the browser',{skip:process.env.ROSIDE_TEST_BROWSER!=='1',timeout:30000},async()=>{
+  const profile=fs.mkdtempSync(path.join(os.tmpdir(),'roside-nav-sequence-'));
+  const chrome=spawn('/usr/bin/google-chrome',['--headless=new','--no-sandbox','--disable-dev-shm-usage','--disable-background-networking','--remote-debugging-port=0','--user-data-dir='+profile,'about:blank'],{stdio:['ignore','ignore','pipe']});let socket;
+  try{
+    const url=await new Promise((resolve,reject)=>{let output='';const timer=setTimeout(()=>reject(Error('Chrome startup timeout')),8000);chrome.stderr.on('data',data=>{output+=data;const match=output.match(/DevTools listening on (ws:\/\/\S+)/);if(match){clearTimeout(timer);resolve(match[1]);}});chrome.once('error',reject);});
+    socket=new WebSocket(url);await new Promise((resolve,reject)=>{socket.once('open',resolve);socket.once('error',reject);});let seq=0;const pending=new Map();
+    socket.on('message',raw=>{const result=JSON.parse(raw),entry=pending.get(result.id);if(entry){pending.delete(result.id);result.error?entry.reject(Error(JSON.stringify(result.error))):entry.resolve(result.result);}});
+    const send=(method,params={},sessionId)=>new Promise((resolve,reject)=>{const id=++seq;pending.set(id,{resolve,reject});socket.send(JSON.stringify({id,method,params,sessionId}));});
+    const target=await send('Target.createTarget',{url:'about:blank'}),{sessionId}=await send('Target.attachToTarget',{targetId:target.targetId,flatten:true}),cdp=(method,params)=>send(method,params,sessionId);
+    await cdp('Page.enable');await cdp('Network.enable');await cdp('Network.setBlockedURLs',{urls:['http://*','https://*']});
+    await cdp('Emulation.setDeviceMetricsOverride',{width:1440,height:1080,deviceScaleFactor:1,mobile:false});
+    const {frameTree}=await cdp('Page.getFrameTree');
+    const evaluate=async expression=>{const result=await cdp('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true});if(result.exceptionDetails)throw Error(JSON.stringify(result.exceptionDetails));return result.result.value;};
+    const css=read('public/navigation.css').replace(/@import\s+url\([^)]*\);/g,'')+read('public/navigation-sequence.css');
+    const html=read('public/navigation-sequence.html').replace(/<script\b[^>]*>[\s\S]*?<\/script>/g,'').replace(/<link\b[^>]*>/g,'').replace('</head>',`<style>${css}</style></head>`);
+    await cdp('Page.setDocumentContent',{frameId:frameTree.frame.id,html});
+    await evaluate(`globalThis.saved=new Map();Object.defineProperty(globalThis,'localStorage',{value:{getItem:key=>saved.get(key)||null,setItem:(key,value)=>saved.set(key,value)},configurable:true});function getAuthToken(){return 'test'};function authHeaders(){return {}};globalThis.commands=[];void 0;`);
+    await evaluate(read('public/real-scan-transform.js'));
+    let nav=read('public/navigation.js');const boot=nav.indexOf('(async()=>{if(!TOKEN)'),timer=nav.indexOf('setInterval(',boot);nav=nav.slice(0,boot)+nav.slice(timer);
+    await evaluate(nav);
+    await evaluate(read('public/navigation-sequence.js'));
+    await evaluate(`$('map-select').add(new Option('warehouse','warehouse'));$('map-select').value='warehouse';savedMapName='warehouse';sequenceMap='warehouse';mapData={width:100,height:100,resolution:.1,originX:-5,originY:-5,data:Array(10000).fill(0)};pose={x:0,y:0,yaw:0};lastPose=lastScan=lastNavDiagnosticAt=Date.now();socket={readyState:1,send:raw=>commands.push(JSON.parse(raw))};runtime(true);$('empty').hidden=true;sequenceLibrary();sequenceRender();void 0;`);
+    assert.equal(await evaluate('commands.length'),0);
+    await evaluate(`$('sequence-add').click();$('sequence-add').click();$('sequence-add').click();const x=$('route-list').querySelector('[data-sequence-index="0"][data-sequence-field="x"]');x.value='1.5';x.dispatchEvent(new Event('change',{bubbles:true}));const wait=$('route-list').querySelector('[data-sequence-index="0"][data-sequence-field="waitSeconds"]');wait.value='3';wait.dispatchEvent(new Event('change',{bubbles:true}));$('sequence-name').value='รอบส่งของ';sequenceSave();void 0;`);
+    assert.equal(await evaluate('routePoints.length'),3);assert.equal(await evaluate('routePoints[0].x'),1.5);assert.equal(await evaluate('sequencePlans().length'),1);
+    await evaluate(`$('route-list').querySelector('[data-sequence-action="down"][data-sequence-index="0"]').click();void 0;`);
+    assert.equal(await evaluate('routePoints[1].x'),1.5);
+    await evaluate(`sequenceLoad();void 0;`);assert.equal(await evaluate('routePoints[0].x'),1.5);
+    // Click on the map to append a real map-coordinate step.
+    await evaluate(`choose('route');const canvas=$('nav-canvas'),box=canvas.getBoundingClientRect();canvas.dispatchEvent(new PointerEvent('pointerdown',{pointerId:1,clientX:box.left+box.width*.7,clientY:box.top+box.height*.5,bubbles:true}));void 0;`);
+    assert.equal(await evaluate('routePoints.length'),4);
+    await evaluate(`lastPose=Date.now();$('run-route').click();void 0;`);
+    assert.equal(await evaluate('commands.at(-1).type'),'sequence');assert.equal(await evaluate('commands.at(-1).points[0].waitSeconds'),3);assert.equal(await evaluate('sequenceBusy'),true);
+    assert.equal(await evaluate('document.querySelectorAll(".sequence-step input:not(:disabled)").length'),0);
+    const count=await evaluate('commands.length');
+    await evaluate(`frame({nav:'active',sequence:{runId:sequenceRunId,total:4,completed:0,index:0,phase:'active',steps:['active','pending','pending','pending']}});void 0;`);
+    assert.match(await evaluate('$('+'"sequence-phase"'+').textContent'),/ขั้นตอน 1/);
+    await evaluate(`frame({nav:'waiting',sequence:{runId:sequenceRunId,total:4,completed:1,index:1,phase:'waiting',waitRemaining:2.2,steps:['succeeded','pending','pending','pending']}});void 0;`);
+    assert.equal(await evaluate('commands.length'),count,'browser must not advance goals itself');assert.match(await evaluate('$('+'"sequence-phase"'+').textContent'),/รอ 3/);
+    await evaluate(`frame({nav:'active',sequence:{runId:sequenceRunId,total:4,completed:1,index:1,phase:'active',steps:['succeeded','active','pending','pending']}});$('sequence-emergency').click();void 0;`);
+    assert.equal(await evaluate('commands.at(-1).command'),'CANCEL');
+    await evaluate(`frame({nav:'canceled',sequence:{runId:sequenceRunId,total:4,completed:1,index:1,phase:'canceled',steps:['succeeded','canceled','pending','pending']}});void 0;`);
+    assert.equal(await evaluate('sequenceBusy'),false);
+    await evaluate(`lastPose=Date.now();sequenceStart();frame({nav:'aborted',sequence:{runId:sequenceRunId,total:4,completed:0,index:0,phase:'aborted',steps:['aborted','pending','pending','pending']}});new Promise(r=>setTimeout(r,80));`);
+    assert.equal(await evaluate('sequenceBusy'),false);assert.match(await evaluate('$('+'"goal-info"'+').textContent'),/หยุดที่ขั้นตอน 1/);
+    const capture=async name=>{const shot=await cdp('Page.captureScreenshot',{format:'png'}),file=path.join(profile,name+'.png');fs.writeFileSync(file,Buffer.from(shot.data,'base64'));console.log('Sequence screenshot:',file);};
+    await capture('sequence-desktop');
+    await cdp('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:false});await evaluate(`document.documentElement.dataset.theme='light';new Promise(r=>setTimeout(r,50))`);
+    assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true);await capture('sequence-mobile');
+  }finally{socket?.close();chrome.kill('SIGTERM');}
+});

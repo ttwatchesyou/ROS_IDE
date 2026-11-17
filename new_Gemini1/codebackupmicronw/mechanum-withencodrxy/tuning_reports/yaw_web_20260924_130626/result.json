@@ -1,0 +1,21 @@
+{
+  "parameters": {
+    "base": "http://127.0.0.1:8001",
+    "kp": 4.4,
+    "kd": 1.4,
+    "max_wz": 2.5,
+    "angle_deg": 90,
+    "return_to_zero": false,
+    "absolute_cycle": true,
+    "run": true,
+    "timeout": 20.0
+  },
+  "prehome": {
+    "time_s": 1.1737322799999674,
+    "peak_yaw_rate_radps": 0.003999999999994554,
+    "overshoot_deg": 0.0,
+    "final_error_deg": -0.687549354156988
+  },
+  "fault": "Outside 0..90 test envelope: 91.04 deg",
+  "samples": 35
+}

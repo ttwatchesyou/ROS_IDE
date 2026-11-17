@@ -1,0 +1,14 @@
+{
+  "parameters": {
+    "base": "http://127.0.0.1:8001",
+    "kp": 2.0,
+    "kd": 1.2,
+    "max_wz": 3.0,
+    "angle_deg": 90.0,
+    "return_to_zero": false,
+    "absolute_cycle": true,
+    "run": true
+  },
+  "fault": "prehome_to_0: XY drift exceeded 12 cm",
+  "samples": 18
+}

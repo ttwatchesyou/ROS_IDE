@@ -1,0 +1,63 @@
+{
+  "parameters": {
+    "axis": "y",
+    "distance": 0.35,
+    "speed": 0.4,
+    "kp": 6.0,
+    "ki": 0.0,
+    "kd": 0.1,
+    "cross_kp": 5.0,
+    "cross_ki": 0.0,
+    "cross_kd": 0.1,
+    "yaw_kp": 9.5,
+    "yaw_kd": 0.4,
+    "yaw_max": 1.5,
+    "yaw_target": 0.0,
+    "firmware_defaults": false,
+    "base": "http://127.0.0.1:8001",
+    "run": true,
+    "robot_centered": true
+  },
+  "legs": [
+    {
+      "leg": "outbound",
+      "time_s": 7.573725983998884,
+      "final_position_error_m": 0.009843271813782233,
+      "peak_overshoot_m": 0.0,
+      "peak_yaw_error_deg": 0.4469070802020421,
+      "peak_off_axis_m": 0.005500000000000005,
+      "peak_measured_speed_mps": 0.32834839928465565,
+      "post_stop_drift_m": 0.00029999999999996696,
+      "post_stop_axis_shift_m": -0.00029999999999996696,
+      "post_stop_final_position_error_m": 0.010124228365658251
+    },
+    {
+      "leg": "return",
+      "time_s": 7.468821369999205,
+      "final_position_error_m": 0.00848115558164096,
+      "peak_overshoot_m": 0.0,
+      "peak_yaw_error_deg": 0.4469070802020421,
+      "peak_off_axis_m": 0.005199999999999982,
+      "peak_measured_speed_mps": 0.33679630159324364,
+      "post_stop_drift_m": 0.0009486832980504883,
+      "post_stop_axis_shift_m": -0.0008999999999999841,
+      "post_stop_final_position_error_m": 0.007993122043356992
+    }
+  ],
+  "fault": "STOP/restore command failed: {\"detail\":\"STM32 rejected command: T:ERR:COMMAND\",\"status\":\"error\"}\n",
+  "origin": {
+    "goal_x": 0.3672,
+    "goal_y": 0.1877,
+    "goal_yaw": 0.0,
+    "imu_ok": true,
+    "position_active": false,
+    "x": 0.3934,
+    "y": 0.1917,
+    "yaw": -0.0078
+  },
+  "last_target": {
+    "x": 0.3934,
+    "y": 0.1917,
+    "yaw": 0.0
+  }
+}

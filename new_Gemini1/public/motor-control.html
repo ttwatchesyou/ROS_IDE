@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="th" data-theme="dark"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ควบคุมมอเตอร์ทีละตัว · ROS IDE</title><script src="/theme.js"></script><script src="/auth-storage.js"></script><link rel="stylesheet" href="/motor-control.css?v=20261114-encoder-signals"></head>
+<body>
+<header><a href="/app">← ROS Wizard</a><div><strong>ควบคุมมอเตอร์ทีละตัว</strong><small>เครื่องมือเสริมสำหรับตรวจช่องมอเตอร์และทิศหมุน</small></div><button type="button" onclick="toggleTheme()" aria-label="เปลี่ยนธีม">◐</button></header>
+<main>
+<section class="connection"><div><h1>เชื่อมต่อ Controller</h1><p id="robot-description">กำลังอ่าน Hardware Config…</p></div><div class="port-controls"><label>พอร์ต<select id="motor-port" disabled><option value="">กำลังค้นหา…</option></select></label><label>Baud rate<input id="motor-baud" type="number" min="9600" max="3000000" value="115200"></label><button id="motor-refresh" type="button" disabled>ค้นหาพอร์ต</button><button id="motor-connect" class="primary" type="button" disabled>เชื่อมต่อ</button></div><p id="connection-status" role="status" aria-live="polite">กำลังคืนค่าการเชื่อมต่อหุ่นยนต์…</p></section>
+<div class="test-note">ยกล้อให้พ้นพื้นก่อนทดสอบ · กดค้างเพื่อหมุนเฉพาะมอเตอร์ที่เลือก · ปล่อยปุ่มหรือกด Space เพื่อหยุดทั้งหมด</div>
+<section class="motor-grid" id="motor-cards" aria-label="การ์ดควบคุมมอเตอร์"><p>กำลังอ่านมอเตอร์…</p></section>
+<section class="command-panel"><div><span>คำสั่งที่ส่งล่าสุด</span><code id="motor-command">—</code></div><button type="button" id="motor-stop" class="stop">■ หยุดทุกมอเตอร์ <kbd>Space</kbd></button></section>
+<details class="telemetry"><summary>ข้อมูลจาก Controller</summary><pre id="motor-log">ยังไม่เชื่อมต่อ</pre></details>
+<p class="tool-footnote">ชื่อล้ออ้างอิงจาก Hardware Config ให้ตรวจว่าล้อจริงตรงกับชื่อบนการ์ด · <a href="/hardware">แก้การแมพใน Hardware Wiring</a></p>
+</main><script src="/real-drive-motion.js?v=20261114-channel-order"></script><script src="/motor-control.js?v=20261114-encoder-signals"></script></body></html>

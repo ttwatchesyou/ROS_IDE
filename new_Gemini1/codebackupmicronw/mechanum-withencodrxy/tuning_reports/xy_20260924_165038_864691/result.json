@@ -1,0 +1,57 @@
+{
+  "parameters": {
+    "axis": "y",
+    "distance": 0.1,
+    "speed": 0.2,
+    "kp": 3.0,
+    "ki": 0.0,
+    "kd": 0.1,
+    "cross_kp": 2.0,
+    "cross_ki": 0.0,
+    "cross_kd": 0.1,
+    "yaw_kp": 9.5,
+    "yaw_kd": 0.4,
+    "yaw_max": 1.5,
+    "yaw_target": null,
+    "firmware_defaults": false,
+    "base": "http://127.0.0.1:8001",
+    "run": true
+  },
+  "legs": [
+    {
+      "leg": "outbound",
+      "time_s": 5.659919302001072,
+      "final_position_error_m": 0.028125611104472027,
+      "peak_overshoot_m": 0.0,
+      "peak_yaw_error_deg": 1.6673071838306956,
+      "peak_off_axis_m": 0.02410000000000001,
+      "peak_measured_speed_mps": 0.12762444906832157,
+      "post_stop_drift_m": 0.0015000000000000013
+    },
+    {
+      "leg": "return",
+      "time_s": 2.5864158010008396,
+      "final_position_error_m": 0.029374308502499252,
+      "peak_overshoot_m": 0.0,
+      "peak_yaw_error_deg": 1.4553127996322912,
+      "peak_off_axis_m": 0.024700000000000007,
+      "peak_measured_speed_mps": 0.156588633048516,
+      "post_stop_drift_m": 0.0
+    }
+  ],
+  "origin": {
+    "goal_x": 0.056,
+    "goal_y": 0.0169,
+    "goal_yaw": 0.0296,
+    "imu_ok": true,
+    "position_active": false,
+    "x": 0.0734,
+    "y": 0.0428,
+    "yaw": 0.0434
+  },
+  "last_target": {
+    "x": 0.0734,
+    "y": 0.0428,
+    "yaw": 0.0434
+  }
+}

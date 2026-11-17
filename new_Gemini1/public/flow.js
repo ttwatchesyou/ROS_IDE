@@ -2140,8 +2140,10 @@ async function flowSaveAndBuild(){
   closeModal('modal-flow-code');
   
   const src=rosInfo?.setupBash||'/opt/ros/humble/setup.bash';
-  // คำสั่งสำหรับ Build และรันทันที (เพิ่ม pkill -9 -f เข้าไปเพื่อ Kill process เดิม)
-  const cmd = `pkill -9 -f "${exeName}" 2>/dev/null; pkill -9 -f "ros2 run ${pkg} ${exeName}" 2>/dev/null; cd ${wsPath} && source ${src} && colcon build --packages-select ${pkg} && source install/setup.bash && echo -e "\\n[OK] Build done!" && echo "[RUN] ros2 run ${pkg} ${exeName}" && ros2 run ${pkg} ${exeName}`;
+  // Kill only the installed executable from this workspace. A generic
+  // `pkill -f exeName` can stop another user's SIM when package/executable
+  // names happen to match.
+  const cmd = `cd ${wsPath} && FLOW_WS="$(pwd -P)" && FLOW_BIN="$FLOW_WS/install/${pkg}/lib/${pkg}/${exeName}" && pkill -9 -f "$FLOW_BIN" 2>/dev/null || true; cd ${wsPath} && source ${src} && colcon build --packages-select ${pkg} && source install/setup.bash && echo -e "\\n[OK] Build done!" && echo "[RUN] ros2 run ${pkg} ${exeName}" && ros2 run ${pkg} ${exeName}`;
   
   // ── เช็คและเปิด Terminal Tab ใหม่สำหรับแพ็กเกจนี้ ──
   if (typeof TERMS !== 'undefined' && typeof termCloseTab === 'function' && typeof termNewTab === 'function') {

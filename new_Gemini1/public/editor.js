@@ -10,7 +10,7 @@ async function openFilePath(fp) {
   sbMsg('Loading ' + fp.split('/').pop() + '...');
   const res = await API('/api/files/read', { sessionId, path: fp });
   if (!res.ok) { sbMsg('Error: ' + res.error, 3000); return; }
-  openTabs.push({ path: fp, content: res.content, modified: false });
+  openTabs.push({ path: fp, content: res.content, modified: false, ...(!isSimWorkspace&&res.revision!==undefined?{revision:res.revision}:{}) });
   renderTabs(); switchToTab(fp); switchPage('editor'); sbMsg('');
 }
 
@@ -89,7 +89,9 @@ async function saveCurrentFile() {
   const ta = document.getElementById('ed-textarea');
   const content = ta ? ta.value : tab.content;
   tab.content = content;
-  const res = await API('/api/files/write', { sessionId, path: currentPath, content });
+  const revisionTab=openTabs.find(t=>t.path===currentPath);
+  const res = await API('/api/files/write', { sessionId, path: currentPath, content, ...(!isSimWorkspace&&revisionTab?.revision!==undefined?{ifRevision:revisionTab.revision}:{}) });
+  if(res.ok&&res.revision!==undefined&&revisionTab)revisionTab.revision=res.revision;
   if (res.ok) {
     tab.modified = false; renderTabs();
     document.getElementById('ef-saved').textContent = 'Saved ✓';

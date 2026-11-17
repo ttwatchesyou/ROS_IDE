@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="th" data-theme="dark">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Mecha Rayong v5.0.0 — Robot Task Studio</title><script src="/theme.js"></script><script src="/auth-storage.js"></script><link rel="stylesheet" href="/task-studio.css?v=2"><link rel="stylesheet" href="/task-studio-v3.css?v=1"><link rel="stylesheet" href="/task-studio-navigation.css?v=1"></head>
+<body>
+<div id="ts-main-nav" aria-label="แถบเมนูหลัก ROSIDE">
+  <a class="ts-shell-logo" href="/app?task_studio_page=dashboard" title="กลับ ROS Wizzard">MECHA<span>RAYONG</span><small>v5.0.0</small></a>
+  <nav class="ts-shell-menus" aria-label="เมนูหลัก">
+    <details><summary>Workspace ▾</summary><div class="ts-shell-dropdown">
+      <a href="/app?task_studio_page=dashboard">🧭 ROS Wizzard</a>
+      <a href="/app?task_studio_page=editor">📝 Code Editor</a>
+      <a href="/app?task_studio_page=flow">✦ Flow Editor</a>
+      <a href="/app?task_studio_page=transformation">🧩 Robot Config</a>
+      <a href="/app?task_studio_page=lidar">📡 LIDAR Setup &amp; Test</a>
+      <span class="ts-shell-current" aria-current="page" style="padding:8px 11px;border-radius:6px">🤖 Robot Task Studio · หน้านี้</span>
+    </div></details>
+    <details><summary>ROS Tools ▾</summary><div class="ts-shell-dropdown">
+      <a href="/app?task_studio_page=monitor">📡 Monitor Topics</a>
+      <a href="/app?task_studio_page=run">▷ Run Manager</a>
+      <a href="/app?task_studio_page=rviz">🖥 RViz 3D</a>
+      <a href="/app?task_studio_page=status">▥ สถานะระบบ</a>
+    </div></details>
+    <a class="ts-shell-terminal" href="/app?task_studio_page=terminal" title="เปิด Terminal ใน Workspace ตามสิทธิ์ของบัญชี">Terminal</a>
+  </nav>
+  <div class="ts-shell-actions">
+    <span id="ts-shell-robot" class="ts-shell-action ts-shell-robot ts-shell-extra" role="img" aria-label="รอยืนยันเซสชันหุ่นยนต์">🤖</span>
+    <span id="ts-shell-connection" class="ts-shell-action ts-shell-connection" role="status" aria-label="ยังไม่ยืนยันเซสชันหุ่นยนต์"><i></i></span>
+    <a class="ts-shell-action ts-shell-wizard" href="/app?task_studio_page=dashboard" title="ROS Wizzard" aria-label="เปิด ROS Wizzard"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 1.4 4.1L17.5 8.5l-4.1 1.4L12 14l-1.4-4.1-4.1-1.4 4.1-1.4L12 3ZM18.5 14l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2Z"/></svg></a>
+    <a class="ts-shell-action" href="/app?task_studio_page=status" title="สถานะระบบ" aria-label="เปิดหน้าสถานะระบบ"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V10M10 19V5M16 19v-7M22 19H2"/></svg></a>
+    <a class="ts-shell-action ts-shell-build ts-shell-extra" href="/app?task_studio_page=run" title="เปิด Run Manager เพื่อจัดการ Build / Run" aria-label="เปิด Run Manager เพื่อจัดการ Build และ Run"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5 5 5M12 3l9 9M17 2l5 5M16 10 5 21l-3-3L13 7"/></svg></a>
+    <button id="ts-shell-theme" class="ts-shell-action" type="button" title="เปลี่ยนธีม" aria-label="เปลี่ยนธีม"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></svg></button>
+    <button id="ts-shell-help" class="ts-shell-action" type="button" title="คู่มือ Robot Task Studio" aria-label="เปิดคู่มือ Robot Task Studio">?</button>
+    <details class="ts-shell-profile"><summary class="ts-shell-action" title="บัญชีผู้ใช้" aria-label="เมนูบัญชีผู้ใช้">👤</summary><div class="ts-shell-dropdown"><div class="ts-shell-account">บัญชีที่ใช้งาน<strong id="ts-shell-user">ผู้ใช้ปัจจุบัน</strong></div><a href="/robots">🤖 หุ่นยนต์ของฉัน</a><a href="/applications">▦ แอปพลิเคชันของฉัน</a><a href="/app?task_studio_page=dashboard">← กลับ Workspace</a></div></details>
+  </div>
+</div>
+<dialog id="ts-nav-help" aria-labelledby="ts-nav-help-title"><h2 id="ts-nav-help-title">🤖 Robot Task Studio</h2><p>เมนูหลักด้านบนอยู่ทั้งหน้าภาพรวมและหน้าต่อบล็อก กด <b>← ROS Wizzard</b> เพื่อกลับหน้าภารกิจ หรือเลือก Workspace / ROS Tools / Terminal เพื่อเปิดเครื่องมือเดิม</p><ol><li>เลือกแอป แล้วกด “ต่อบล็อก” บนการ์ด Node</li><li>ลากบล็อกมาต่อใต้ธง แล้วทดลองดูผลบนเว็บ</li><li>กด “บันทึก” ก่อนออก หรือส่งออก JSON เพื่อเก็บสำเนา</li></ol><p>การเปลี่ยนหน้าจะออกจากการทดลองบนเว็บ ไม่ใช่ปุ่มหยุดฉุกเฉินของหุ่นยนต์ ระบบจะแจ้งเตือนหากยังมีงานไม่บันทึก</p><form method="dialog"><button type="submit">เข้าใจแล้ว</button></form></dialog>
+<div id="ts-app"></div>
+<!-- Retained legacy controller DOM for physical-session auth and read-only ROS
+     monitoring. Only the new standalone frontend is visible and editable. -->
+<section id="ts-legacy" hidden>
+<header class="studio-header">
+<a href="/app" class="back" title="กลับ Workspace" aria-label="กลับ Workspace">←</a><div class="brand"><i>▧</i><h1>Robot Task Studio</h1></div>
+<nav class="view-tabs" aria-label="มุมมอง"><button id="view-code" class="active">▧ ต่อบล็อก</button><button id="view-graph">⌘ ภาพรวมแอป</button></nav>
+<div class="document-actions"><span id="save-state"></span><button id="save">บันทึก</button><button id="import">เปิดไฟล์</button><input id="import-file" type="file" accept="application/json,.json" hidden><details class="export-menu"><summary>↓ ส่งออก</summary><div><button id="export-app">แอปทั้งหมด .zip</button><button id="export">Package นี้ .zip</button><button id="export-python">Node นี้ .py + flow</button><button id="json">ไฟล์แก้ไขแอป .json</button></div></details></div>
+<span id="connection">กำลังตรวจสอบ…</span><details class="studio-help"><summary title="วิธีใช้งาน" aria-label="วิธีใช้งาน">?</summary><div class="help-content"><h2>เริ่มสร้างงานให้หุ่นยนต์</h2><ol><li><b>ต่อบล็อก</b> — เลือกสี แล้วลากมาต่อใต้ธงเริ่ม แตะช่องเพื่อแก้ค่า</li><li><b>ทดลอง</b> — ดูทีละขั้นบนเว็บ โดยไม่ขยับหุ่นยนต์</li><li><b>ส่งออก</b> — เก็บเป็น Node, Package หรือทั้งแอป</li></ol><p>ใช้ตัวอย่างด้านล่างพื้นที่บล็อกเพื่อเริ่มได้เร็วขึ้น · ภาพรวมแอปใช้เชื่อม Node ผ่าน Topic</p></div></details><button id="theme" aria-label="เปลี่ยนธีม">◐</button>
+</header>
+<section class="studio-controls" aria-label="เลือก Node และสถานะ">
+<div class="node-toolbar"><label><span>Node</span><select id="unit-choice" aria-label="เลือก Package และ Node"></select></label><button id="add-node" title="เพิ่ม Node">＋ Node</button><button id="add-package" title="เพิ่ม Package">＋ Package</button><details><summary title="ตั้งชื่อแอป Package และไฟล์">ชื่อและไฟล์</summary><div class="metadata"><label>ชื่อแอป <input id="app-name" maxlength="40"></label><label>Package <input id="package-name" maxlength="48"></label><label>ไฟล์ Python <input id="node-file" maxlength="48"></label><button id="delete-node" class="danger">ลบ Node นี้</button></div></details><label hidden>Legacy name <input id="program-name"></label></div>
+<div id="notice" role="status" aria-live="polite">ทดลองบนเว็บ ไม่ขยับหุ่นยนต์ · กด ? เพื่อดูวิธีใช้</div>
+</section>
+<main id="editor-mode">
+<aside class="library legacy-ui" hidden><div id="palette"></div><div id="function-list"></div></aside>
+<section class="workspace"><div class="code-heading"><nav id="tabs" aria-label="โปรแกรมหลักและฟังก์ชัน"></nav><button id="new-function">＋ ชุดคำสั่งของฉัน</button></div><details id="params-details"><summary>ตัวแปรรับเข้า / ตั้งค่าชุดคำสั่ง</summary><div id="function-settings"></div></details><div class="canvas-caption"><span>เลือกสีทางซ้าย → ลากมาต่อใต้ธง → แตะช่องเพื่อแก้ค่า</span><div><button id="refresh-block-topics" title="ค้นหา Topics จากหุ่นยนต์ (อ่านอย่างเดียว)" aria-label="ค้นหา Topics จากหุ่นยนต์" style="font-size:11px;padding:2px 6px">⟳ Topics</button><button id="block-undo" title="ย้อนกลับ" aria-label="ย้อนกลับ">↶</button><button id="block-redo" title="ทำซ้ำ" aria-label="ทำซ้ำ">↷</button><button id="block-delete" title="ลบบล็อกที่เลือก" aria-label="ลบบล็อกที่เลือก">⌫</button><button id="zoom-out" aria-label="ย่อบล็อก">−</button><button id="zoom-in" aria-label="ขยายบล็อก">＋</button></div></div><div id="blockly-canvas" aria-label="พื้นที่ต่อบล็อกจิ๊กซอ"></div><div class="canvas-bottom"><span id="block-count"></span><span id="puzzle-state">ต่อบล็อกใต้ธงเริ่ม</span><select id="starter" aria-label="เริ่มจากตัวอย่าง"><option value="">✨ เริ่มจากตัวอย่าง</option><option value="hello">พูดทักทาย + ทำซ้ำ</option><option value="parallel">งาน A / B ช่วยกัน</option><option value="topics">สอง Node ส่งข้อความถึงกัน</option></select></div><div id="steps" hidden></div></section>
+<aside class="inspector"><div class="debug-heading"><span class="eyebrow">ลองแล้วเรียนรู้</span><h2>▶ ทดลอง Node นี้</h2><p>ไม่สั่งให้หุ่นยนต์วิ่ง และไม่ส่ง Topic จริง</p></div><div class="debug-actions"><button id="run" class="primary">▶ ทดลองเล่น</button><button id="stop" class="danger">■ หยุด</button><button id="step">ทีละขั้น</button><button id="pause">พัก</button><button id="check">✓ ตรวจบล็อก</button></div><div id="debug-state" role="status">พร้อมเมื่อเราอยากลอง</div><div id="call-stack">Main</div><details><summary>ดูตัวแปร</summary><pre id="variables">{}</pre></details><ol id="debug-log"></ol><div class="learning-card"><b>⑂ สองงานพร้อมกัน</b><p>วางงานในช่อง A และ B แล้วโปรแกรมจะรอให้เสร็จทั้งคู่ ก่อนทำบล็อกถัดไป</p><small>บล็อกวิ่งต้องอยู่นอก A/B เพื่อไม่แย่งกันสั่งล้อ</small></div><div id="properties" hidden></div></aside>
+</main>
+<section id="graph-mode" hidden><div class="graph-heading"><div><h2>ทุก Node ร่วมงานกันอย่างไร?</h2><p>ลากหัวการ์ดเพื่อจัดตำแหน่ง · ลากจากจุดส่งไปจุดรับ หรือแตะทีละจุดเพื่อเชื่อม Topic</p></div><button id="graph-fit">จัดเรียงใหม่</button></div><div class="graph-scroll"><div id="graph-canvas"><svg id="graph-wires" aria-hidden="true"></svg><div class="ros-hub"><i>◎</i><b>ROS Graph</b><span>DDS · ค้นพบและสื่อสารกัน</span><small>ROS 2 ไม่มี roscore กลาง</small></div><div id="graph-nodes"></div></div></div><div id="graph-status" role="status">เพิ่มบล็อกส่ง / รอข้อมูลใน Node เพื่อสร้างจุดเชื่อม</div><details class="connections"><summary>จัดการสายเชื่อม</summary><div id="graph-links"></div></details><div class="external-topics"><label>Topic จากหุ่นยนต์ <select id="external-choice"><option value="">กดค้นหา Topics ด้านล่างก่อน</option></select></label><button id="add-topic">＋ วางในภาพรวม</button><small>เส้นเชื่อมกำหนดชื่อ Topic ให้บล็อกรับจริง ไม่ใช่สายควบคุมหุ่นยนต์</small></div></section>
+<details class="live-panel"><summary>📡 ดูข้อมูลจากหุ่นยนต์จริง <span>สำหรับขั้นต่อไป · อ่านอย่างเดียว</span></summary><div class="live-head"><div><h2>ROS Topic & Runtime Monitor</h2><p>ข้อมูลเป็นตัวอย่างช่วงสั้น ไม่ใช่การบันทึกทุกข้อความ</p></div><button id="discover">ค้นหา Topics</button><button id="monitor">เริ่มติดตาม</button></div><div class="live-controls"><select id="topic-choice" aria-label="เลือก Topic"><option value="">ค้นหา Topic ก่อน</option></select><button id="watch">＋ เพิ่ม Watch</button><button id="runtime-watch">ติดตาม Node นี้</button><span id="live-state">ยังไม่อ่านข้อมูล</span></div><div id="topic-cards"></div><div id="runtime-state" role="status">สถานะ ROS Package: ยังไม่ได้รับข้อมูล</div></details>
+<footer>Package เริ่มด้วย dry_run เสมอ · การวิ่งจริงต้องให้ผู้ใหญ่ตรวจระบบ safety บนหุ่นยนต์ก่อน · ODOM ไม่ใช่ระบบหลบสิ่งกีดขวาง · ปุ่มหยุดในเว็บไม่ใช่ E-stop</footer>
+</section>
+<script src="/task-studio-model.js?v=4-topics"></script><script src="/task-studio-application.js?v=4-topics"></script><script src="/task-blockly.js?v=12.4.1"></script><script src="/task-blockly-th.js?v=12.4.1"></script><script src="/task-blockly-standard.js?v=12.4.1"></script><script src="/task-blockly-javascript.js?v=12.4.1"></script><script src="/task-blockly-python.js?v=12.4.1"></script><script src="/task-studio-standard.js?v=1"></script><script src="/task-studio-projects.js?v=1"></script><script src="/task-studio-preview.js?v=1"></script><script src="/task-studio.js?v=5-standard"></script><script src="/task-studio-v3.js?v=1"></script>
+<script src="/task-studio-navigation.js?v=1"></script>
+</body></html>

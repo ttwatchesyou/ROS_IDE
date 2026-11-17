@@ -1,0 +1,31 @@
+/* Real-robot Hardware Wiring only; fixed 3D projections, readable flat pin labels. */
+.diagram-scroll{background:radial-gradient(circle at 50% 40%,color-mix(in srgb,var(--blue) 5%,var(--panel)),var(--panel2));background-image:radial-gradient(var(--line) .7px,transparent .7px);background-size:18px 18px}
+.wiring-board{min-width:780px}
+.pinout-stage{grid-template-columns:minmax(210px,1fr) 230px minmax(210px,1fr);gap:48px;align-items:center;padding:22px 8px;min-height:590px}
+.pinout-side{gap:16px}
+.pinout-card{padding:12px;border-radius:15px;background:var(--panel);box-shadow:0 5px 18px #0b153212}
+.pinout-card-head{margin:0 0 8px;align-items:flex-start}.pinout-card-head strong{font-size:11px;overflow-wrap:anywhere}.pinout-card-head small{font-size:9px;margin-top:3px;line-height:1.5}
+.pinout-card-head>span{width:7px;height:7px;border-radius:50%;background:var(--wire);font-size:0;flex:none;margin-top:5px}
+.hw-device-scene{display:flex;align-items:center;justify-content:center;height:112px;margin:0 0 10px;border-radius:10px;background:radial-gradient(ellipse at center,color-mix(in srgb,var(--wire,var(--blue)) 7%,var(--panel2)),var(--panel2));overflow:hidden}
+.hw-device-art{display:block;width:100%;height:100%;max-width:200px;filter:drop-shadow(0 7px 4px #09152932);pointer-events:none;user-select:none}
+.hw-controller{position:relative;z-index:3;align-self:center;min-width:0;padding:18px 12px;text-align:center;border:1px solid var(--line);border-radius:20px;background:var(--panel);box-shadow:0 14px 35px #09152916}
+.hw-controller .hw-device-scene{height:278px;margin:14px -2px;background:radial-gradient(ellipse at center,color-mix(in srgb,var(--blue) 9%,var(--panel)),var(--panel));overflow:visible}
+.hw-controller .hw-device-art{max-width:220px}
+.hw-controller-kicker{display:inline-flex;gap:6px;align-items:center;padding:4px 8px;border:1px solid var(--line);border-radius:6px;color:var(--blue);font:700 9px var(--mono);letter-spacing:.8px}
+.hw-controller strong{display:block;font:700 12px/1.5 var(--mono);overflow-wrap:anywhere}.hw-controller small{display:block;margin-top:6px;color:var(--muted);font:8px/1.6 var(--mono)}
+.hw-controller-foot{margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:9px;color:var(--dim);line-height:1.7}
+.pinout-pins{gap:5px}.pinout-pin{padding:6px 4px}.pinout-pin small{font-size:8px}.pinout-pin b{font-size:10px;overflow-wrap:anywhere;color:color-mix(in srgb,var(--wire) 65%,var(--fg))}
+.pinout-wire{stroke-width:2;filter:none;opacity:.8}.pinout-dot{stroke-width:2}
+.hw-view-note{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 17px;border-bottom:1px solid var(--line);background:var(--panel2);color:var(--muted);font-size:10px;line-height:1.6}
+.hw-view-note b{color:var(--blue);font:700 9px var(--mono);padding:3px 6px;border:1px solid var(--line);border-radius:5px;white-space:nowrap}
+@media(max-width:1000px){.pinout-stage{grid-template-columns:minmax(190px,1fr) 210px minmax(190px,1fr);gap:40px}.hw-controller .hw-device-scene{height:248px}}
+@media(prefers-reduced-motion:reduce){.hw-device-art{animation:none;transition:none}}
+
+/* Pin selectors replace the original pin value inside each device card. */
+.pinout-pin .hardware-pin-select{display:block;width:100%;min-width:0;padding:2px 12px 2px 3px;border:0;border-radius:4px;background:var(--panel2);color:var(--wire,var(--fg));font:700 10px var(--mono,monospace);cursor:pointer;text-align:center}
+.pinout-pin .hardware-pin-select:focus-visible{outline:2px solid var(--wire,var(--blue));outline-offset:2px}
+.pinout-pin .hardware-pin-select:disabled{opacity:.7;cursor:default}
+.pinout-pin .hardware-pin-select option{background:var(--panel);color:var(--fg)}
+
+.hardware-wheel-role{display:flex;align-items:center;gap:8px;margin:0 0 10px;font-size:10px;color:var(--muted)}
+.hardware-wheel-role small{flex:none}.hardware-wheel-role select{flex:1;min-width:0;border:1px solid var(--line);border-radius:6px;background:var(--panel2);color:var(--fg);padding:5px;font:inherit}

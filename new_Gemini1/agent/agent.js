@@ -1,4 +1,8 @@
 'use strict';
+const runtimePath=['agent-runtime.js','../agent-runtime.js'].map(file=>require('path').join(__dirname,file)).find(file=>require('fs').existsSync(file));
+if(runtimePath){
+  require(runtimePath).start().catch(error=>{console.error('[AGENT]',error.message);process.exitCode=1;});
+}else{
 const WebSocket=require('ws');
 const pty=require('node-pty');
 const fs=require('fs').promises;
@@ -12,23 +16,38 @@ async function loadConfig(){
   catch{return{robot_key:process.env.ROBOT_KEY||'UNREGISTERED',cloud_url:process.env.CLOUD_URL||'ws://localhost:3001/ws/agent'};}
 }
 
-let ws=null,reconnMs=3000,reconnecting=false;
+let ws=null,reconnMs=500,reconnecting=false;
 const terminals=new Map();
+const ptyOutputBuffers=new Map();
+let ptyFlushTimer=null;
 
 function resolvePath(p=''){
   if(p.startsWith('~/'))return path.join(os.homedir(),p.slice(2));
   if(p==='~')return os.homedir(); return p;
 }
-function send(obj){if(ws&&ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify(obj));}
+function send(obj){if(ws&&ws.readyState===WebSocket.OPEN){if(ws.bufferedAmount>8*1024*1024){ws.terminate();return;}ws.send(JSON.stringify(obj));}}
+function flushPtyOutput(){
+  ptyFlushTimer=null;
+  for(const[termId,data]of ptyOutputBuffers){ptyOutputBuffers.delete(termId);send({type:'pty_output',termId,data:Buffer.from(data).toString('base64')});}
+}
+function queuePtyOutput(termId,data){
+  const next=(ptyOutputBuffers.get(termId)||'')+data;ptyOutputBuffers.set(termId,next);
+  if(Buffer.byteLength(next)>64*1024)return flushPtyOutput();
+  if(!ptyFlushTimer)ptyFlushTimer=setTimeout(flushPtyOutput,4);
+}
+function closeTerminals(){
+  if(ptyFlushTimer){clearTimeout(ptyFlushTimer);ptyFlushTimer=null;}ptyOutputBuffers.clear();
+  terminals.forEach((_,id)=>killPty(id));
+}
 
 async function connect(){
   if(reconnecting)return; reconnecting=true;
   const cfg=await loadConfig();
   console.log(`[AGENT] Connecting to ${cfg.cloud_url} ...`);
-  ws=new WebSocket(cfg.cloud_url);
-  ws.on('open',()=>{console.log(`[AGENT] ✅ Connected (Key: ${cfg.robot_key})`);reconnMs=3000;reconnecting=false;send({type:'auth',robotKey:cfg.robot_key,username:os.userInfo().username});});
+  ws=new WebSocket(cfg.cloud_url,{perMessageDeflate:false,handshakeTimeout:10000});
+  ws.on('open',()=>{console.log(`[AGENT] ✅ Connected (Key: ${cfg.robot_key})`);reconnMs=500;reconnecting=false;ws._socket?.setNoDelay(true);ws._socket?.setKeepAlive(true,30000);send({type:'auth',robotKey:cfg.robot_key,username:os.userInfo().username});});
   ws.on('message',raw=>{let msg;try{msg=JSON.parse(raw);}catch{return;}handleMsg(msg);});
-  ws.on('close',code=>{reconnecting=false;console.log(`[AGENT] ❌ Retry in ${reconnMs/1000}s`);setTimeout(connect,reconnMs);reconnMs=Math.min(reconnMs*1.5,30000);});
+  ws.on('close',code=>{reconnecting=false;closeTerminals();const delay=Math.round(reconnMs*(.85+Math.random()*.3));console.log(`[AGENT] ❌ Retry in ${delay/1000}s`);setTimeout(connect,delay);reconnMs=Math.min(reconnMs*1.7,30000);});
   ws.on('error',err=>{console.error('[AGENT]',err.message);reconnecting=false;ws.terminate();});
 }
 
@@ -61,14 +80,15 @@ async function handleAction(action,payload={}){
 function startPty(termId,cols=120,rows=30){
   if(terminals.has(termId))return;
   const p=pty.spawn(process.env.SHELL||'/bin/bash',['-i'],{name:'xterm-256color',cols,rows,cwd:os.homedir(),env:{...process.env,TERM:'xterm-256color',COLORTERM:'truecolor'}});
-  p.onData(data=>send({type:'pty_output',termId,data:Buffer.from(data).toString('base64')}));
+  p.onData(data=>queuePtyOutput(termId,data));
   p.onExit(({exitCode})=>{terminals.delete(termId);send({type:'pty_closed',termId});console.log(`[AGENT] PTY closed: ${termId} (${exitCode})`);});
   terminals.set(termId,p);
   console.log(`[AGENT] PTY: ${termId} (${cols}x${rows})`);
 }
 function killPty(id){const t=terminals.get(id);if(t){try{t.kill();}catch{}terminals.delete(id);}}
 
-process.on('SIGINT',()=>{terminals.forEach((_,id)=>killPty(id));if(ws)ws.close();process.exit(0);});
-process.on('SIGTERM',()=>{terminals.forEach((_,id)=>killPty(id));if(ws)ws.close();process.exit(0);});
+process.on('SIGINT',()=>{closeTerminals();if(ws)ws.close();process.exit(0);});
+process.on('SIGTERM',()=>{closeTerminals();if(ws)ws.close();process.exit(0);});
 
 connect();
+}

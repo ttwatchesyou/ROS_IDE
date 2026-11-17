@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Mecha Rayong Learing Workspace — Robots</title>
+<title>Mecha Rayong v5.0.0 — Robots</title>
 <script src="/theme.js"></script>
 <script src="/auth-storage.js"></script>
 <link href="/youtube-help.css?v=20260814-5" rel="stylesheet">
@@ -56,6 +56,7 @@ button,input{font:inherit}button:focus-visible,input:focus-visible{outline:3px s
 .hero h1{margin-top:13px;font-family:'Mitr','Nunito',sans-serif;font-size:clamp(27px,3.2vw,42px);line-height:1.22;font-weight:600;letter-spacing:-.6px}.hero h1 span{color:var(--cyan)}
 .hero p{max-width:570px;margin-top:9px;color:var(--mt);font-family:'Mitr','Nunito',sans-serif;font-size:14px;line-height:1.75}.hero-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:20px}.hero-actions .btn{min-height:44px;padding:10px 18px;font-size:13px}
 .quota-note{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}.quota-chip{padding:5px 9px;border:1px solid var(--brd);border-radius:999px;background:color-mix(in srgb,var(--bg3) 82%,transparent);color:var(--mt);font:800 10px var(--mono)}.quota-chip.full{border-color:color-mix(in srgb,var(--red) 38%,var(--brd));color:var(--red)}
+.client-network{display:inline-flex;flex-wrap:wrap;gap:5px;align-items:center;max-width:100%;margin-top:10px;padding:7px 10px;border:1px solid var(--brd);border-radius:10px;background:var(--bg3);color:var(--mt);font-size:11px;font-weight:800}.client-network code{color:var(--cyan);font:800 11px var(--mono)}
 .hero-robot{position:absolute;right:7%;top:29px;width:190px;height:174px;display:grid;place-items:center;filter:drop-shadow(0 18px 22px rgba(20,16,80,.27));animation:floatBot 3.5s ease-in-out infinite}
 .robot-head{position:relative;width:146px;height:112px;border:7px solid rgba(255,255,255,.9);border-radius:42px;background:linear-gradient(145deg,#8178ff,#5348cf);box-shadow:inset 0 -11px 25px rgba(35,25,108,.22)}
 .robot-head::before{content:"";position:absolute;width:7px;height:28px;background:#fff;left:63px;top:-31px;border-radius:8px}.robot-head::after{content:"";position:absolute;width:17px;height:17px;background:var(--amb);left:58px;top:-42px;border:4px solid #fff;border-radius:50%}
@@ -76,10 +77,14 @@ button,input{font:inherit}button:focus-visible,input:focus-visible{outline:3px s
 .rc-head{display:flex;align-items:flex-start;gap:13px;margin-bottom:16px}.rc-icon{width:50px;height:50px;display:grid;place-items:center;flex-shrink:0;border-radius:16px;background:linear-gradient(145deg,rgba(108,99,255,.19),rgba(50,213,242,.11));font-size:27px}
 .rc-title{font-size:16px;line-height:1.25;font-weight:900;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rc-desc{min-height:17px;margin-top:4px;color:var(--dim);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rc-status{display:flex;align-items:center;gap:6px;padding:5px 9px;border-radius:999px;font-size:10px;font-weight:900}.rc-status.online{color:var(--grn);background:rgba(62,213,152,.12)}.rc-status.offline{color:var(--dim);background:rgba(126,133,166,.12)}
+.rc-state-stack{display:flex;flex-direction:column;align-items:flex-end;gap:5px}.rc-presence{display:flex;align-items:center;gap:4px;padding:4px 8px;border-radius:999px;background:rgba(50,213,242,.1);color:var(--cyan);font:800 9px var(--mono);white-space:nowrap}.rc-presence.zero{color:var(--dim);background:rgba(126,133,166,.1)}
 .dot{width:7px;height:7px;border-radius:50%}.dot.on{background:var(--grn);box-shadow:0 0 0 4px rgba(62,213,152,.11)}.dot.off{background:var(--dim)}
 .rc-meta{display:grid;grid-template-columns:1fr 1fr;gap:8px;color:var(--dim);font-size:11px}.rc-meta>span{min-width:0;display:flex;align-items:center;gap:7px;padding:8px 9px;border-radius:10px;background:var(--bg3);overflow:hidden}.rc-meta .meta-wide{grid-column:1/-1}.rc-meta code{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rc-meta .rc-agent-row{justify-content:space-between;overflow:visible}.rc-agent-version{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rc-update-button{flex-shrink:0;min-height:29px;padding:4px 9px;border:1px solid var(--acc);border-radius:8px;background:rgba(108,99,255,.12);color:var(--acc2);font-size:11px;font-weight:900;cursor:pointer}.rc-update-button:hover:not(:disabled){background:rgba(108,99,255,.22)}.rc-update-button:disabled{opacity:.45;cursor:not-allowed}
+.agent-update-status{margin:12px 0;color:var(--mt);font-size:13px;line-height:1.6}.agent-update-notes{margin:8px 0 14px 20px;color:var(--mt);font-size:12px;line-height:1.6}.agent-update-safety{display:flex;align-items:flex-start;gap:9px;padding:11px;border:1px solid var(--brd);border-radius:10px;background:var(--bg3);font-size:12px;line-height:1.6}.agent-update-safety input{width:auto;margin-top:3px;flex-shrink:0}.agent-update-progress{margin-top:14px}.agent-update-progress progress{width:100%;height:10px;accent-color:var(--acc)}
 .rc-progress{margin:14px 0 2px;padding:12px;border:1px solid var(--brd);border-radius:13px;background:var(--bg3)}.rc-progress-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;font-size:11px;font-weight:900}.rc-progress-head span{color:var(--mt)}.rc-progress-head b{color:var(--acc2);font-family:var(--mono);font-size:12px}.rc-progress-track{height:9px;overflow:hidden;border-radius:99px;background:color-mix(in srgb,var(--dim) 18%,transparent);box-shadow:inset 0 1px 2px rgba(0,0,0,.12)}.rc-progress-fill{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--acc),var(--cyan),var(--grn));box-shadow:0 0 12px color-mix(in srgb,var(--cyan) 38%,transparent)}.rc-progress-detail{display:flex;justify-content:space-between;gap:8px;margin-top:7px;color:var(--dim);font-size:9px;font-weight:800}.rc-progress.unavailable .rc-progress-head b{color:var(--dim)}.rc-progress.unavailable .rc-progress-fill{width:0!important;background:var(--dim)}
 .rc-owner{color:var(--acc2)!important;background:rgba(108,99,255,.11)!important;font-weight:800}.rc-actions{display:grid;grid-template-columns:1fr 42px 42px;gap:7px;margin-top:15px;padding-top:15px;border-top:1px solid var(--brd)}.rc-actions.has-disconnect{grid-template-columns:1fr 42px 42px 42px}.rc-actions .btn{padding:7px;min-height:40px}.btn-open.online-action{border-color:rgba(62,213,152,.35);background:linear-gradient(135deg,rgba(62,213,152,.16),rgba(50,213,242,.12));color:var(--grn)}.btn-disconnect{color:var(--amb);background:var(--adm2,rgba(255,191,91,.1))}
+.rc-route-choices{margin-top:12px}.rc-route-label{display:block;margin-bottom:6px;color:var(--mt);font-size:11px;font-weight:900}.rc-route-select-wrap{position:relative}.rc-route-select-wrap::after{content:'⌄';position:absolute;right:13px;top:50%;transform:translateY(-58%);color:var(--acc2);font-size:20px;font-weight:900;pointer-events:none}.rc-route-select{appearance:none;width:100%;min-height:43px;padding:9px 36px 9px 12px;border:1px solid var(--brd);border-radius:11px;background:var(--bg3);color:var(--fg);font:800 11px var(--mono);cursor:pointer;box-shadow:0 3px 10px rgba(5,7,30,.06)}.rc-route-select:hover,.rc-route-select:focus{border-color:var(--acc2)}.rc-route-select:focus-visible{outline:3px solid rgba(108,99,255,.22);outline-offset:2px}.rc-route-select option{background:var(--bg2);color:var(--fg)}
 .empty{grid-column:1/-1;padding:55px 20px;text-align:center;border:2px dashed var(--brd);border-radius:24px;background:rgba(108,99,255,.045);color:var(--dim)}.empty-icon{width:84px;height:84px;margin:0 auto 15px;display:grid;place-items:center;border-radius:28px;background:linear-gradient(145deg,rgba(108,99,255,.18),rgba(50,213,242,.13));font-size:43px;animation:floatBot 3.5s ease-in-out infinite}.empty-title{margin-bottom:7px;color:var(--fg);font-size:17px;font-weight:900}.empty-desc{max-width:350px;margin:0 auto 19px;font-size:12px;line-height:1.6}
 .site-credit{margin-top:42px;padding-top:19px;border-top:1px solid var(--brd);display:flex;align-items:center;justify-content:space-between;gap:18px;color:var(--dim);font-size:10px;line-height:1.7}.site-credit strong{color:var(--mt)}.site-credit .slogan{color:var(--acc2);font-weight:900}
 
@@ -98,10 +103,11 @@ button,input{font:inherit}button:focus-visible,input:focus-visible{outline:3px s
 
 <!-- Topbar -->
 <div class="topbar">
-  <div class="topbar-logo"><span class="logo-bot">⚙️</span><span class="topbar-brand-copy"><strong>Mecha Rayong</strong><small>Learing Workspace</small></span></div>
+  <div class="topbar-logo"><span class="logo-bot">⚙️</span><span class="topbar-brand-copy"><strong>Mecha Rayong v5.0.0</strong><small>Learing Workspace</small></span></div>
   <div class="topbar-nav">
     <div class="tnav" onclick="location.href='/applications'">← แอปพลิเคชัน</div>
     <div class="tnav active" onclick="location.href='/robots'">🤖 ห้องหุ่นยนต์</div>
+    <div class="tnav" id="nav-clusters" onclick="location.href='/cluster-admin'" style="display:none">🖥️ จัดการ Cluster</div>
     <div class="tnav" id="nav-ide" onclick="goToIDE()" style="display:none">เปิด IDE</div>
   </div>
   <div class="topbar-right">
@@ -127,8 +133,14 @@ button,input{font:inherit}button:focus-visible,input:focus-visible{outline:3px s
     <div class="hero-actions">
       <button class="btn btn-acc" data-quota-kind="simulation" onclick="addSimRobot()" title="ทดลองได้ทันทีโดยไม่ต้องมีหุ่นยนต์จริง">🧪 ลองหุ่นยนต์จำลอง</button>
       <button class="btn" data-quota-kind="real" onclick="showAddModal()">＋ เพิ่มหุ่นยนต์จริง</button>
+      <a class="btn btn-environment" href="/image-tools.html" title="เตรียม SD ใหม่ด้วย Ubuntu 24.04 + ROS 2 Jazzy พร้อม RViz2, Python และเครื่องมือพื้นฐาน · ดาวน์โหลดและ Flash บนคอม"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2v8" />
+  <path d="m16 6-4 4-4-4" />
+  <rect width="20" height="8" x="2" y="14" rx="2" />
+  <path d="M6 18h.01" />
+  <path d="M10 18h.01" /></svg> โหลด Image / Flash SD</a>
     </div>
     <div class="quota-note" id="robot-quota-note" aria-live="polite"></div>
+    <div class="client-network" role="status">🌐 IP เครื่องที่เปิดเว็บ (Cloud เห็น): <code id="client-network-ip">กำลังตรวจ…</code></div>
     <div class="hero-robot" aria-hidden="true">
       <div class="bot-shadow"></div>
       <div class="robot-head">
@@ -290,6 +302,28 @@ button,input{font:inherit}button:focus-visible,input:focus-visible{outline:3px s
   </div>
 </div>
 
+<!-- Agent update from the Cloud robot selector -->
+<div class="modal" id="modal-sim-cluster" role="dialog" aria-modal="true" aria-labelledby="sim-cluster-title">
+  <div class="modal-box" style="width:420px"><div class="modal-hdr"><h3 id="sim-cluster-title">เลือกเครื่องรัน Sim</h3><button class="modal-close" onclick="closeModal('modal-sim-cluster')" aria-label="ปิด">✕</button></div>
+    <div class="modal-body"><p style="color:var(--mt);margin-bottom:12px">Master ยังรัน Sim ได้เหมือนเดิม เลือก Cluster เมื่อมีเครื่องเชื่อมต่อพร้อมใช้งาน</p><label for="sim-cluster-select">เครื่องรัน ROS Sim</label><select id="sim-cluster-select"></select></div>
+    <div class="modal-foot"><button class="btn" onclick="closeModal('modal-sim-cluster')">ยกเลิก</button><button class="btn btn-acc" onclick="createSimRobot()">สร้าง Sim</button></div>
+  </div>
+</div>
+
+<!-- Agent update from the Cloud robot selector -->
+<div class="modal" id="modal-agent-update" role="dialog" aria-modal="true" aria-labelledby="agent-update-title">
+  <div class="modal-box" style="width:480px">
+    <div class="modal-hdr"><h3 id="agent-update-title">อัปเดต Agent</h3><button class="modal-close" onclick="closeModal('modal-agent-update')" aria-label="ปิด">✕</button></div>
+    <div class="modal-body">
+      <p class="agent-update-status" id="agent-update-status" role="status" aria-live="polite">กำลังตรวจสอบเวอร์ชัน…</p>
+      <ul class="agent-update-notes" id="agent-update-notes"></ul>
+      <label class="agent-update-safety"><input type="checkbox" id="agent-update-safe" onchange="renderAgentUpdateModal()"><span>ยืนยันว่ามอเตอร์ปิดและห้ามรับคำสั่งตลอดช่วงอัปเดต และปิด Terminal/งานที่กำลังทำแล้ว</span></label>
+      <div class="agent-update-progress" id="agent-update-progress" hidden><div id="agent-update-stage" role="status" aria-live="polite"></div><progress id="agent-update-bar" max="100" value="0"></progress></div>
+    </div>
+    <div class="modal-foot"><button class="btn" onclick="closeModal('modal-agent-update')">ปิด</button><button class="btn btn-acc" id="agent-update-start" onclick="startAgentUpdate()" disabled>อัปเดต Agent</button></div>
+  </div>
+</div>
+
 <!-- Notification -->
 <div class="notif" id="notif"></div>
 
@@ -314,8 +348,22 @@ const api = (url, opts={}) => fetch(url, {
 // ── Realtime status ────────────────────────────────────────────
 let robots = [];
 let statusWs = null;
+let robotProgressTimer = null;
+let robotProgressGeneration = 0;
+let routePreviewGeneration = 0;
+const routeChoiceByRobot=new Map();
+let latestAgentVersion=null;
+let selectedUpdateRobotId=null,agentUpdateState=null,agentUpdateJob=null,agentUpdateTimer=null,agentUpdateStarting=false,agentUpdateError='';
 let isAdmin = USER.role === 'admin';
 let robotQuota={limits:{simulation:2,real:2,activeConnections:2},unlimited:{simulation:false,real:false,activeConnections:false},used:{simulation:0,real:0,activeConnections:0},remaining:{simulation:2,real:2,activeConnections:2}};
+let availableClusters=[];
+async function refreshClusters(){
+  try{const result=await api('/api/clusters');if(!result.ok)return;availableClusters=result.clusters.filter(cluster=>cluster.enabled);document.getElementById('nav-clusters').style.display=result.masterAdmin||result.clusters.some(cluster=>cluster.membership_role==='admin')?'':'none';}
+  catch(error){console.warn('Cluster list:',error);}
+}
+
+function showClientIp(ip){document.getElementById('client-network-ip').textContent=ip||'ไม่สามารถระบุได้ผ่าน proxy';}
+async function refreshClientIp(){try{const result=await api('/api/client-network');if(result.ok)showClientIp(result.browserIp);}catch{const label=document.getElementById('client-network-ip');if(label.textContent==='กำลังตรวจ…')showClientIp(null);}}
 
 function connectStatusWs() {
   if (statusWs && (statusWs.readyState === WebSocket.OPEN || statusWs.readyState === WebSocket.CONNECTING)) return;
@@ -324,11 +372,14 @@ function connectStatusWs() {
   statusWs.onmessage = e => {
     const d = JSON.parse(e.data);
     if (d.type === 'snapshot') {
-      robots.forEach(r => { r.online = d.status[r.robot_key] === 'online' || d.status[r.robot_key] === true; });
-      renderGrid();
+      robots.forEach(r => { r.online = d.status[r.robot_key] === 'online' || d.status[r.robot_key] === true;if(d.presence)r.onlineUsers=Number(d.presence[r.robot_key])||0;updateCardStatus(r); });
+      refreshRoutePreviews();
     } else if (d.type === 'status') {
       const r = robots.find(x => x.robot_key === d.robot_key);
-      if (r) { r.online = d.online; updateCardStatus(r); }
+      if (r) { r.online = d.online;if(d.agentVersion)r.agentVersion=d.agentVersion;updateCardStatus(r);if(!r.robot_key.startsWith('SIM-'))refreshRoutePreview(r); }
+    } else if (d.type === 'presence') {
+      const r = robots.find(x => x.robot_key === d.robot_key);
+      if (r) { r.onlineUsers=Number(d.onlineUsers)||0;updateCardStatus(r); }
     }
   };
   statusWs.onclose = () => setTimeout(connectStatusWs, 3000);
@@ -340,28 +391,64 @@ function updateCardStatus(r) {
   card.className = 'robot-card ' + (r.online ? 'online' : 'offline');
   const dot  = card.querySelector('.dot');
   const stat = card.querySelector('.rc-status');
+  const presence=card.querySelector('.rc-presence');
   if (dot)  { dot.className  = 'dot ' + (r.online ? 'on' : 'off'); }
   if (stat) { stat.className = 'rc-status ' + (r.online ? 'online' : 'offline');
               stat.querySelector('span').textContent = r.online ? 'พร้อมใช้งาน' : 'ออฟไลน์'; }
+  if(presence){presence.classList.toggle('zero',!r.onlineUsers);presence.textContent=`👥 ${Number(r.onlineUsers)||0} ออนไลน์`;}
+  if(!r.online)r.routePreview=null;
+  syncRouteChoices(r.id);
+  const version=card.querySelector('.rc-agent-version');if(version)version.textContent=agentVersionLabel(r);
+  const update=card.querySelector('.rc-update-button');if(update)update.disabled=agentIsLatest(r);
   const openBtn = card.querySelector('.btn-open');
   if (openBtn) {
     openBtn.disabled = !r.online;
     openBtn.classList.toggle('online-action', r.online);
-    openBtn.textContent = r.online ? '🚀 เริ่มภารกิจ' : '🚀 รอเชื่อมต่อ';
+    openBtn.textContent = r.online ? '🚀 เริ่มภารกิจ · '+routeChoiceLabel(r) : '🚀 รอเชื่อมต่อ';
   }
   updateStats();
 }
 
 // ── Load robots ────────────────────────────────────────────────
 async function loadRobots() {
+  const generation=++robotProgressGeneration;
+  if(robotProgressTimer){clearTimeout(robotProgressTimer);robotProgressTimer=null;}
   const d = await api('/api/robots');
   if (!d.ok) { notif(d.error, 'err'); return; }
   robots = d.robots;
+  ++routePreviewGeneration;
   isAdmin = d.isAdmin === true;
   if(d.quota)robotQuota=d.quota;
   renderGrid();
+  refreshLatestAgentVersion();
+  refreshClusters();
+  refreshRoutePreviews();
   renderQuota();
   connectStatusWs();
+  refreshRobotProgress(generation);
+}
+
+async function refreshRobotProgress(generation){
+  if(generation!==robotProgressGeneration)return;
+  const pending=robots.filter(robot=>robot.wizardProgress?.pending).map(robot=>robot.id);
+  if(!pending.length)return;
+  try{
+    const result=await api('/api/robots/progress',{method:'POST',body:{robotIds:pending}});
+    if(generation!==robotProgressGeneration||!result?.ok)return;
+    let changed=false;
+    for(const update of result.robots||[]){
+      const robot=robots.find(item=>item.id===update.id);if(!robot)continue;
+      const before=JSON.stringify(robot.wizardProgress),wasOnline=robot.online,onlineUsers=robot.onlineUsers;
+      Object.assign(robot,update);
+      if(wasOnline!==robot.online||onlineUsers!==robot.onlineUsers)updateCardStatus(robot);
+      if(before===JSON.stringify(robot.wizardProgress))continue;
+      changed=true;
+      const progress=document.querySelector(`#rc-${robot.id} .rc-progress`);
+      if(progress)progress.outerHTML=renderRobotProgress(robot);
+    }
+    if(changed)updateStats();
+  }catch{}
+  if(generation===robotProgressGeneration&&robots.some(robot=>robot.wizardProgress?.pending))robotProgressTimer=setTimeout(()=>refreshRobotProgress(generation),1200);
 }
 
 function renderGrid() {
@@ -375,6 +462,11 @@ function renderGrid() {
       <div style="display:flex;justify-content:center;flex-wrap:wrap;gap:8px">
         <button class="btn btn-acc" data-quota-kind="simulation" onclick="addSimRobot()">🧪 ลองตัวจำลอง</button>
         <button class="btn" data-quota-kind="real" onclick="showAddModal()">＋ เพิ่มหุ่นยนต์จริง</button>
+      <a class="btn btn-environment" href="/image-tools.html" title="เตรียม SD ใหม่ด้วย Ubuntu 24.04 + ROS 2 Jazzy พร้อม RViz2, Python และเครื่องมือพื้นฐาน · ดาวน์โหลดและ Flash บนคอม"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2v8" />
+  <path d="m16 6-4 4-4-4" />
+  <rect width="20" height="8" x="2" y="14" rx="2" />
+  <path d="M6 18h.01" />
+  <path d="M10 18h.01" /></svg> โหลด Image / Flash SD</a>
       </div>
     </div></div></section>`;
     renderQuota();
@@ -392,6 +484,22 @@ function renderRobotGroup(id,tag,title,subtitle,items,allowAdd){
   return `<section class="robot-group ${id==='others'?'other-robots':''}" aria-labelledby="robot-group-${id}"><div class="page-header"><div><div class="section-tag">${tag}</div><div style="display:flex;align-items:center;gap:9px"><div class="page-title" id="robot-group-${id}">${title}</div><span class="robot-group-count">${items.length}</span></div><div class="page-sub">${subtitle}</div></div>${allowAdd?'<button class="btn btn-acc" data-quota-kind="real" onclick="showAddModal()">＋ เพิ่มหุ่นยนต์</button>':''}</div><div class="robot-grid">${cards}</div></section>`;
 }
 
+function agentIsLatest(r){return !!latestAgentVersion&&r.agentVersion===latestAgentVersion;}
+function agentVersionLabel(r){return `🧩 Agent ${r.agentVersion||'Legacy / ยังไม่รายงานเวอร์ชัน'}${agentIsLatest(r)?' · เวอร์ชันล่าสุด':''}${r.online?'':' · พบล่าสุด'}`;}
+async function refreshLatestAgentVersion(){
+  try{
+    const response=await fetch('/agent-release.json',{cache:'no-store'});
+    if(!response.ok)return;
+    const release=await response.json();
+    if(!/^\d+\.\d+\.\d+$/.test(release.version||''))return;
+    latestAgentVersion=release.version;
+    for(const robot of robots){
+      const card=document.getElementById('rc-'+robot.id);
+      const version=card?.querySelector('.rc-agent-version');if(version)version.textContent=agentVersionLabel(robot);
+      const update=card?.querySelector('.rc-update-button');if(update)update.disabled=agentIsLatest(robot);
+    }
+  }catch(error){console.warn('Agent release version:',error);}
+}
 function renderRobotCard(r){return `
     <div class="robot-card ${r.online?'online':'offline'}" id="rc-${r.id}">
       <div class="rc-head">
@@ -400,22 +508,24 @@ function renderRobotCard(r){return `
           <div class="rc-title">${escH(r.name)}</div>
           <div class="rc-desc">${escH(r.description||'เพื่อนหุ่นยนต์พร้อมทำภารกิจ')}</div>
         </div>
-        <div class="rc-status ${r.online?'online':'offline'}">
-          <div class="dot ${r.online?'on':'off'}"></div>
-          <span>${r.online?'พร้อมใช้งาน':'ออฟไลน์'}</span>
+        <div class="rc-state-stack">
+          <div class="rc-status ${r.online?'online':'offline'}"><div class="dot ${r.online?'on':'off'}"></div><span>${r.online?'พร้อมใช้งาน':'ออฟไลน์'}</span></div>
+          ${r.robot_key.startsWith('SIM-')?'':`<div class="rc-presence${r.onlineUsers?'':' zero'}">👥 ${Number(r.onlineUsers)||0} ออนไลน์</div>`}
         </div>
       </div>
       <div class="rc-meta">
         <span title="Robot Key">🔑 <code>${escH(r.robot_key.slice(0,18))}…</code></span>
         <span title="ผู้ใช้ SSH">👤 ${escH(r.ssh_user||'ubuntu')}</span>
         <span class="meta-wide" title="Workspace">📁 ${escH(r.workspace||'~/ros2_ws')}</span>
+        ${r.robot_key.startsWith('SIM-')?'':`<span class="meta-wide rc-agent-row"><span class="rc-agent-version" title="${r.online?'Agent ที่เชื่อมต่อ':'เวอร์ชันที่พบล่าสุด'}">${escH(agentVersionLabel(r))}</span><button class="rc-update-button" type="button" onclick="openAgentUpdate(${r.id})" aria-label="ตรวจสอบและอัปเดต Agent ของ ${escH(r.name)}" ${agentIsLatest(r)?'disabled':''}>อัปเดต</button></span>`}
         ${r.added_by_name?`<span class="rc-owner meta-wide" title="เจ้าของหุ่นยนต์">🪪 ผู้ดูแล: ${escH(r.added_by_name)}</span>`:''}
         ${r.last_connected?`<span class="meta-wide">🕐 พบล่าสุด ${new Date(r.last_connected).toLocaleString('th-TH',{dateStyle:'short',timeStyle:'short'})}</span>`:''}
       </div>
       ${renderRobotProgress(r)}
+      ${renderRouteChoices(r)}
       <div class="rc-actions${r.connected?' has-disconnect':''}">
         <button class="btn btn-open ${r.online?'online-action':''}" ${r.online?'':'disabled'} onclick="openIDE(${r.id})">
-          🚀 ${r.online?'เริ่มภารกิจ':'รอเชื่อมต่อ'}
+          🚀 ${r.online?'เริ่มภารกิจ · '+routeChoiceLabel(r):'รอเชื่อมต่อ'}
         </button>
         ${r.connected?`<button class="btn btn-disconnect" onclick="disconnectRobot(${r.id})" title="ตัดการเชื่อมต่อ" aria-label="ตัดการเชื่อมต่อ ${escH(r.name)}">⏏</button>`:''}
         <button class="btn" onclick="showEditModal(${r.id})" title="แก้ไขข้อมูล" aria-label="แก้ไขข้อมูล ${escH(r.name)}">✏️</button>
@@ -426,6 +536,7 @@ function renderRobotCard(r){return `
 const WIZARD_STEP_NAMES={hardware:'เชื่อมฮาร์ดแวร์',safety:'ระบบหยุดฉุกเฉิน',urdf:'ประกอบหุ่น',tf:'เชื่อมชิ้นส่วน',control:'ควบคุมการเคลื่อนที่',odom:'จำเส้นทาง',imu:'รับรู้การเอียงและหมุน',lidar:'เปิดตา LiDAR',diagnostics:'ตรวจสุขภาพระบบ',calibration:'ปรับเทียบเซนเซอร์',localization:'ระบุตำแหน่ง',mapping:'วาดแผนที่',navigation:'นำทางอัตโนมัติ',automation:'จัดลำดับภารกิจ',deployment:'พร้อมใช้งานหน้างาน',camera:'ติดตั้งกล้อง',perception:'การมองเห็นและตรวจจับ',manipulation:'ควบคุมแขนกล'};
 function renderRobotProgress(robot){
   const progress=robot.wizardProgress||{available:false,total:7,completed:0,percent:0},total=Math.max(1,Number(progress.total)||7),completed=Math.max(0,Math.min(total,Number(progress.completed)||0)),percent=Math.max(0,Math.min(100,Number(progress.percent)||0));
+  if(progress.pending)return `<div class="rc-progress unavailable" aria-busy="true"><div class="rc-progress-head"><span>🗺️ ROS Wizzard</span><b>…</b></div><div class="rc-progress-track"><i class="rc-progress-fill"></i></div><div class="rc-progress-detail"><span>รายการหุ่นโหลดแล้ว · กำลังตรวจภารกิจเบื้องหลัง</span></div></div>`;
   if(!progress.available)return `<div class="rc-progress unavailable"><div class="rc-progress-head"><span>🗺️ ROS Wizzard</span><b>รอตรวจ</b></div><div class="rc-progress-track"><i class="rc-progress-fill"></i></div><div class="rc-progress-detail"><span>${robot.online?'ตรวจ workspace ไม่สำเร็จ':'เชื่อมต่อหุ่นยนต์เพื่อดูความคืบหน้า'}</span></div></div>`;
   const next=progress.next?`ด่านถัดไป: ${escH(WIZARD_STEP_NAMES[progress.next]||progress.next)}`:'ทำครบทุกด่านแล้ว 🎉';
   const optional=Number(progress.optionalTotal)>0?` · เสริม ${Number(progress.optionalCompleted)||0}/${Number(progress.optionalTotal)}`:'';
@@ -449,22 +560,202 @@ function quotaExhausted(kind){return robotQuota.unlimited?.[kind]!==true&&Number
 
 function escH(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
+function routeCandidateUrls(robot){
+  const route=robot.routePreview;
+  return [...new Set([...(Array.isArray(route?.localUrls)?route.localUrls:[]),route?.localUrl].filter(url=>/^http:\/\/\d{1,3}(?:\.\d{1,3}){3}:\d+\/$/.test(url||'')))].sort((a,b)=>Number(isVpnRoute(a))-Number(isVpnRoute(b)));
+}
+function isVpnRoute(url){const ip=String(url||'').match(/^http:\/\/(\d{1,3})\.(\d{1,3})\./);return !!ip&&Number(ip[1])===100&&Number(ip[2])>=64&&Number(ip[2])<=127;}
+function selectedRouteUrl(robot){
+  const urls=routeCandidateUrls(robot),choice=routeChoiceByRobot.get(robot.id);
+  if(choice==='cloud')return 'cloud';
+  if(urls.includes(choice))return choice;
+  if(urls.includes(robot.routePreview?.localUrl))return robot.routePreview.localUrl;
+  if(/^100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(robot.routePreview?.browserIp||''))return urls.find(isVpnRoute)||urls[0]||'cloud';
+  return urls[0]||'cloud';
+}
+function routeChoiceLabel(robot){const url=selectedRouteUrl(robot);return url==='cloud'?'Cloud':isVpnRoute(url)?'VPN':'Local';}
+function routeChoiceKey(robot){
+  const route=robot.routePreview;
+  return JSON.stringify([selectedRouteUrl(robot),routeCandidateUrls(robot).map(url=>[url,route?.localUrl===url&&Number.isFinite(route.pingMs)?route.pingMs.toFixed(0):null])]);
+}
+function renderRouteChoices(robot){
+  if(robot.robot_key.startsWith('SIM-'))return '';
+  const selected=selectedRouteUrl(robot),urls=routeCandidateUrls(robot);
+  const options=urls.map(url=>{const ip=new URL(url).hostname,kind=isVpnRoute(url)?'VPN':'Local',ping=robot.routePreview?.localUrl===url&&Number.isFinite(robot.routePreview?.pingMs)?` · ${robot.routePreview.pingMs.toFixed(0)} ms`:'';return `<option value="${escH(url)}"${selected===url?' selected':''}>${kind} ${ip}${ping}</option>`;}).join('');
+  return `<div class="rc-route-choices" data-route-key="${escH(routeChoiceKey(robot))}"><label class="rc-route-label" for="rc-route-select-${robot.id}">เชื่อมต่อด้วย</label><div class="rc-route-select-wrap"><select class="rc-route-select" id="rc-route-select-${robot.id}" onchange="setRobotRouteChoice(${robot.id},this.value)" onblur="syncRouteChoices(${robot.id})">${options}<option value="cloud"${selected==='cloud'?' selected':''}>Cloud</option></select></div></div>`;
+}
+function syncRouteChoices(robotId){
+  const robot=robots.find(item=>item.id===robotId),choices=document.querySelector(`#rc-${robotId} .rc-route-choices`);
+  if(!robot||!choices||choices.dataset.routeKey===routeChoiceKey(robot))return;
+  if(document.activeElement===choices.querySelector('select'))return;
+  choices.outerHTML=renderRouteChoices(robot);
+}
+function setRobotRouteChoice(robotId,choice){
+  const robot=robots.find(item=>item.id===robotId);if(!robot||choice!=='cloud'&&!routeCandidateUrls(robot).includes(choice))return;
+  routeChoiceByRobot.set(robotId,choice);
+  syncRouteChoices(robotId);
+  const start=document.querySelector(`#rc-${robotId} .btn-open`);
+  if(start&&robot.online)start.textContent='🚀 เริ่มภารกิจ · '+routeChoiceLabel(robot);
+}
+
+function refreshRoutePreviews(){
+  const generation=routePreviewGeneration;
+  for(const robot of robots)if(robot.online&&!robot.robot_key.startsWith('SIM-'))refreshRoutePreview(robot,generation);
+}
+
+async function refreshRoutePreview(robot,generation=routePreviewGeneration){
+  if(!robot.online||robot.routePreviewPending)return;
+  robot.routePreviewPending=true;
+  const checkVersion=robot.routeCheckVersion||0;
+  try{
+    const route=await api(`/api/robots/${robot.id}/route`,{method:'POST',body:{preview:true}});
+    if(generation!==routePreviewGeneration||checkVersion!==(robot.routeCheckVersion||0)||!robots.includes(robot)||!robot.online)return;
+    if(route.browserIp)showClientIp(route.browserIp);
+    robot.routePreview=route.ok?route:{route:'cloud',reason:'unavailable'};
+    syncRouteChoices(robot.id);
+    const start=document.querySelector(`#rc-${robot.id} .btn-open`);
+    if(start)start.textContent='🚀 เริ่มภารกิจ · '+routeChoiceLabel(robot);
+  }catch{}finally{robot.routePreviewPending=false;}
+}
+
+function renderAgentUpdateModal(){
+  const status=document.getElementById('agent-update-status'),notes=document.getElementById('agent-update-notes');
+  const safe=document.getElementById('agent-update-safe'),start=document.getElementById('agent-update-start');
+  const progress=document.getElementById('agent-update-progress');
+  if(!selectedUpdateRobotId)return;
+  const robot=robots.find(item=>item.id===selectedUpdateRobotId);
+  const latest=agentUpdateState?.latestVersion;
+  if(agentUpdateError)status.textContent=agentUpdateError;
+  else if(agentUpdateJob?.active)status.textContent=`${robot?.name||'หุ่นยนต์'} · กำลังอัปเดตเป็น v${agentUpdateJob.targetVersion||latest||'ล่าสุด'}`;
+  else if(agentUpdateJob?.stage==='succeeded'&&!agentUpdateState?.updateAvailable)status.textContent=`อัปเดตสำเร็จ · Agent v${agentUpdateJob.targetVersion} เชื่อมกลับมาแล้ว`;
+  else if(agentUpdateJob?.stage==='failed')status.textContent=`อัปเดตไม่สำเร็จ · ${agentUpdateJob.message||'กรุณาลองอีกครั้ง'}`;
+  else if(!robot?.online)status.textContent='หุ่นยนต์ออฟไลน์ · เชื่อม Agent กับ Cloud ก่อนจึงจะอัปเดตได้';
+  else if(agentUpdateState)status.textContent=`Agent ${agentUpdateState.version||robot?.agentVersion||'ไม่ทราบ'} → รุ่นล่าสุด ${latest||'ไม่ทราบ'}${agentUpdateState.updateAvailable?' · มีอัปเดต'+(safe.checked?' · พร้อมกดอัปเดต':' · ติ๊กยืนยันด้านล่างเพื่อเปิดปุ่ม'):' · เป็นรุ่นล่าสุด'}`;
+  else status.textContent='กำลังตรวจสอบเวอร์ชัน…';
+  notes.replaceChildren();
+  for(const line of agentUpdateState?.releaseNotes||[]){const item=document.createElement('li');item.textContent=line;notes.append(item);}
+  progress.hidden=!agentUpdateJob||agentUpdateJob.stage==='succeeded'&&!!agentUpdateState?.updateAvailable;
+  if(agentUpdateJob){document.getElementById('agent-update-stage').textContent=`${agentUpdateJob.progress}% · ${agentUpdateJob.message}`;document.getElementById('agent-update-bar').value=agentUpdateJob.progress;}
+  safe.disabled=!robot?.online||agentUpdateStarting||!!agentUpdateJob?.active||agentUpdateJob?.stage==='succeeded'&&!agentUpdateState?.updateAvailable;
+  start.disabled=agentUpdateStarting||!safe.checked||!!agentUpdateJob?.active||!robot?.online||(!agentUpdateState?.updateAvailable&&agentUpdateJob?.stage!=='failed');
+  start.textContent=agentUpdateStarting||agentUpdateJob?.active?'กำลังอัปเดต…':agentUpdateJob?.stage==='failed'?'ลองอัปเดตอีกครั้ง':'อัปเดต Agent';
+}
+
+async function openAgentUpdate(robotId){
+  const robot=robots.find(item=>item.id===robotId);
+  if(!robot||robot.robot_key.startsWith('SIM-'))return;
+  if(agentUpdateTimer){clearTimeout(agentUpdateTimer);agentUpdateTimer=null;}
+  selectedUpdateRobotId=robotId;agentUpdateState=null;agentUpdateJob=null;agentUpdateError='';
+  document.getElementById('agent-update-title').textContent=`อัปเดต Agent · ${robot.name}`;
+  document.getElementById('agent-update-safe').checked=false;
+  openModal('modal-agent-update');renderAgentUpdateModal();
+  if(!robot.online)return;
+  try{
+    const result=await api(`/api/robots/${robotId}/agent/status`,{method:'POST',body:{}});
+    if(!result.ok)throw new Error(result.error||'ตรวจสอบ Agent ไม่สำเร็จ');
+    if(selectedUpdateRobotId!==robotId)return;
+    agentUpdateState=result;agentUpdateJob=result.update||null;renderAgentUpdateModal();
+    if(agentUpdateJob?.active)pollAgentUpdate(robotId);
+  }catch(error){if(selectedUpdateRobotId===robotId){agentUpdateError=error.message;renderAgentUpdateModal();}}
+}
+
+async function startAgentUpdate(){
+  const robotId=selectedUpdateRobotId;
+  if(!robotId||agentUpdateStarting||!document.getElementById('agent-update-safe').checked)return;
+  agentUpdateStarting=true;renderAgentUpdateModal();
+  try{
+    const result=await api(`/api/robots/${robotId}/agent/update`,{method:'POST',body:{confirm:true}});
+    if(!result.ok)throw new Error(result.error||'เริ่มอัปเดตไม่สำเร็จ');
+    if(selectedUpdateRobotId!==robotId)return;
+    agentUpdateError='';agentUpdateJob=result.update;pollAgentUpdate(robotId);
+  }catch(error){if(selectedUpdateRobotId===robotId)agentUpdateError=error.message;}
+  finally{agentUpdateStarting=false;renderAgentUpdateModal();}
+}
+
+async function pollAgentUpdate(robotId){
+  if(agentUpdateTimer)clearTimeout(agentUpdateTimer);
+  if(selectedUpdateRobotId!==robotId)return;
+  try{
+    const result=await api(`/api/robots/${robotId}/agent/update-status`,{method:'POST',body:{}});
+    if(!result.ok)throw new Error(result.error||'อ่านสถานะอัปเดตไม่สำเร็จ');
+    if(selectedUpdateRobotId!==robotId)return;
+    agentUpdateError='';agentUpdateJob=result.update;renderAgentUpdateModal();
+    if(agentUpdateJob?.stage==='succeeded'){
+      await loadRobots();
+      const latest=await api(`/api/robots/${robotId}/agent/status`,{method:'POST',body:{}});
+      if(latest.ok&&selectedUpdateRobotId===robotId){agentUpdateState=latest;agentUpdateJob=latest.update;renderAgentUpdateModal();}
+      return;
+    }
+    if(!agentUpdateJob?.active)return;
+  }catch(error){if(selectedUpdateRobotId===robotId){agentUpdateError=`กำลังรอตรวจสถานะอีกครั้ง: ${error.message}`;renderAgentUpdateModal();}}
+  agentUpdateTimer=setTimeout(()=>pollAgentUpdate(robotId),2500);
+}
+
 // ── Open IDE ───────────────────────────────────────────────────
+async function openDirectLocal(event,robotId,localUrl){
+  event.preventDefault();
+  const tab=window.open('about:blank','_blank');
+  if(tab){tab.opener=null;tab.document.body.textContent='กำลังยืนยันสิทธิ์และเปิด Local IDE…';}
+  try{
+    const route=await api(`/api/robots/${robotId}/route`,{method:'POST',body:{preferredLocalUrl:localUrl}});
+    if(!route.ok||route.route!=='local'||route.localUrl!==localUrl||!/^[A-Za-z0-9_-]{43}$/.test(route.handoff||''))throw new Error(route.error||'ไม่สามารถยืนยันสิทธิ์เข้า Local ได้');
+    const destination=`${localUrl}#handoff=${route.handoff}`;
+    if(tab&&!tab.closed)tab.location.replace(destination);
+    else window.location.assign(destination);
+  }catch(error){
+    if(tab&&!tab.closed)tab.close();
+    notif(error.message||'เปิด Local ไม่สำเร็จ','err');
+  }
+}
+
 async function openIDE(robotId) {
-  notif('กำลังเชื่อมต่อกับหุ่นยนต์...', 'ok');
+  const robot=robots.find(item=>item.id===robotId);
+  const choice=robot&&!robot.robot_key.startsWith('SIM-')?(routeChoiceByRobot.has(robotId)||routeCandidateUrls(robot).length?selectedRouteUrl(robot):null):null;
+  notif(choice==='cloud'?'กำลังเข้า Cloud...':choice?'กำลังเปิด '+routeChoiceLabel(robot)+' ผ่าน '+new URL(choice).hostname+'...':'กำลังตรวจ Local และ VPN ด้วย ping...', 'ok');
+  let cloudFallback=choice==='cloud';
+  if(robot&&!robot.robot_key.startsWith('SIM-')){
+    if(choice!=='cloud'){
+      robot.routeCheckVersion=(robot.routeCheckVersion||0)+1;
+      try{
+        const route=await api(`/api/robots/${robotId}/route`,{method:'POST',body:choice?{preferredLocalUrl:choice}:{}});
+        if(!route.ok){notif(route.error||'ยังไม่สามารถเลือกเส้นทางควบคุมได้','err');return;}
+        showClientIp(route.browserIp);
+        robot.routePreview={...robot.routePreview,...route};
+        if(route.route==='local'&&(!choice||route.localUrl===choice)&&/^[A-Za-z0-9_-]{43}$/.test(route.handoff||'')&&/^http:\/\/\d{1,3}(?:\.\d{1,3}){3}:\d+\/$/.test(route.localUrl||'')){
+          window.location.assign(`${route.localUrl}#handoff=${route.handoff}`);
+          return;
+        }
+        if(choice){notif('IP ที่เลือกยังไม่พร้อม กรุณาเลือก IP อื่นหรือ Cloud','err');return;}
+      }catch(error){if(choice){notif(error.message||'เปิด IP ที่เลือกไม่สำเร็จ','err');return;}console.warn('LAN route check:',error);}
+      cloudFallback=true;
+      notif(robot?.routePreview?.reason==='local_handoff_unavailable'?'Local พร้อม แต่ Agent ต้องอัปเดตเพื่อเข้า Local อัตโนมัติ กำลังใช้ Cloud':'ยังตรวจ Local/VPN ไม่ผ่าน กำลังใช้ Cloud; สามารถเลือกปุ่ม IP บนการ์ดหุ่นยนต์ได้','err');
+    }
+  }
   const d = await api('/api/connect', { method:'POST', body:{ robotId } });
   if (!d.ok) { notif(d.error, 'err'); return; }
+  if(cloudFallback){
+    try{
+      const status=await api('/api/real/agent/status',{method:'POST',body:{sessionId:d.sessionId}});
+      if(status.ok&&status.mode==='local'){
+        const selected=await api('/api/real/agent/mode',{method:'POST',body:{sessionId:d.sessionId,confirm:true}});
+        if(!selected.ok)throw new Error(selected.error||'ไม่สามารถเปลี่ยนเป็น Cloud ได้');
+      }
+    }catch(error){notif(`เชื่อม Cloud ได้ แต่สลับโหมดควบคุมไม่สำเร็จ: ${error.message}`,'err');return;}
+    sessionStorage.setItem('roside_cloud_route_warning',d.robotKey||'1');
+  }else sessionStorage.removeItem('roside_cloud_route_warning');
   // Store session
   localStorage.setItem('ros2ide_session', d.sessionId);
+  localStorage.setItem('ros2ide_connection_route','cloud');
   localStorage.setItem('ros2ide_robotid', String(d.robotId || robotId));
   localStorage.setItem('ros2ide_rosinfo', JSON.stringify(d.rosInfo));
   localStorage.setItem('ros2ide_workspace', d.workspace);
   localStorage.setItem('ros2ide_username', d.username);
   localStorage.setItem('ros2ide_robotname', d.robotName);
+  localStorage.setItem('ros2ide_robotkey', d.robotKey||'');
   localStorage.setItem('ros2ide_is_sim', String(d.isSim === true));
   window.location.replace('/app');
 }
-function goToIDE(){ window.location.href = '/app'; }
+function goToIDE(){const id=Number(localStorage.getItem('ros2ide_robotid'));if(robots.some(robot=>robot.id===id))openIDE(id);else window.location.href='/app';}
 
 // ── Add/Edit Modal ─────────────────────────────────────────────
 function showAddModal(){ if(quotaExhausted('real'))return notif('เพิ่มหุ่นยนต์จริงได้สูงสุด 2 ตัว กรุณาลบตัวเดิมก่อน','err');openModal('modal-install');setInstallCmd(); }
@@ -489,10 +780,10 @@ async function addRobotFromInstall(){
   err.style.display = 'none';
   if (!key || !name) { err.textContent='กรุณากรอก Robot Key และชื่อหุ่นยนต์'; err.style.display='block'; return; }
   // Normalize key: trim whitespace and any accidental chars
-  const cleanKey = key.trim().replace(/[^a-f0-9-]/gi,'');
+  const cleanKey = key.trim().replace(/[^A-Za-z0-9_-]/g,'');
   const d = await api('/api/robots', { method:'POST', body:{ robot_key:cleanKey, name, ssh_user:user||'ubuntu', ssh_pass:pass, workspace:ws||'~/ros2_ws' }});
   if (!d.ok) { err.textContent=d.error; err.style.display='block'; return; }
-  notif('เพิ่มเพื่อนหุ่นยนต์เข้าทีมแล้ว!', 'ok');
+  notif(d.attached?'เพิ่มสิทธิ์ใช้หุ่นยนต์ร่วมกันแล้ว!':'เพิ่มเพื่อนหุ่นยนต์เข้าทีมแล้ว!', 'ok');
   closeModal('modal-install');
   loadRobots();
 }
@@ -509,6 +800,8 @@ function showEditModal(id){
   document.getElementById('f-pass').value  = '';
   document.getElementById('f-ws').value    = r.workspace || '~/ros2_ws';
   document.getElementById('f-desc').value  = r.description || '';
+  for(const fieldId of ['f-user','f-pass','f-ws','f-desc'])document.getElementById(fieldId).disabled=r.canManage===false;
+  if(r.canManage===false){const err=document.getElementById('robot-err');err.textContent='บัญชีนี้แก้ชื่อเรียกของหุ่นได้ ส่วนค่าเชื่อมต่อกลางจัดการโดยผู้ดูแลหุ่นยนต์';err.style.display='block';}
   openModal('modal-robot');
 }
 
@@ -531,7 +824,7 @@ async function saveRobot(){
     d = await api('/api/robots', { method:'POST', body:{ robot_key:key, name, ssh_user:user, ssh_pass:pass, workspace:ws, description:desc }});
   }
   if (!d.ok) { err.textContent=d.error; err.style.display='block'; return; }
-  notif(id ? 'บันทึกข้อมูลใหม่แล้ว!' : 'เพิ่มหุ่นยนต์แล้ว!', 'ok');
+  notif(id ? 'บันทึกข้อมูลใหม่แล้ว!' : d.attached?'เพิ่มหุ่นยนต์ที่ใช้ร่วมกันเข้าทีมแล้ว!':'เพิ่มหุ่นยนต์แล้ว!', 'ok');
   closeModal('modal-robot');
   loadRobots();
 }
@@ -546,11 +839,25 @@ function uuid(){
 }
 async function addSimRobot(){
   if(quotaExhausted('simulation'))return notif('สร้าง Simulation ได้สูงสุด 2 ตัว กรุณาลบตัวเดิมก่อน','err');
-  const key  = 'SIM-' + uuid();
+  await refreshClusters();
+  const select=document.getElementById('sim-cluster-select');select.replaceChildren();
+  for(const cluster of availableClusters){
+    if(cluster.kind==='worker'&&!cluster.connected)continue;
+    const option=document.createElement('option');option.value=String(cluster.id);option.textContent=`${cluster.name} · ${cluster.kind==='master'?'Master':'Cluster'} · รับ Sim ได้ ${cluster.max_sims} งานพร้อมกัน`;select.append(option);
+  }
+  if(!select.options.length)return notif('ยังไม่มีเครื่องสำหรับรัน Sim ที่พร้อมใช้งาน','err');
+  if(select.options.length===1)return createSimRobot();
+  openModal('modal-sim-cluster');
+}
+async function createSimRobot(){
+  const clusterId=Number(document.getElementById('sim-cluster-select').value);
+  if(!Number.isSafeInteger(clusterId)||clusterId<=0)return notif('กรุณาเลือก Cluster','err');
+  const key  = clusterId===1?'SIM-'+uuid():`SIM-C${clusterId}-`+uuid();
   const name = 'SIM Robot ' + key.slice(4, 10);
   const d = await api('/api/robots', { method:'POST',
-    body:{ robot_key:key, name, ssh_user:'sim', ssh_pass:'', workspace:'~/ros2_ws' }});
+    body:{ robot_key:key, name, ssh_user:'sim', ssh_pass:'', workspace:'~/ros2_ws',clusterId }});
   if (!d.ok) { notif(d.error, 'err'); return; }
+  closeModal('modal-sim-cluster');
   notif('สร้างเพื่อนหุ่นยนต์จำลองแล้ว — พร้อมออกทำภารกิจ!', 'ok');
   loadRobots();
 }
@@ -586,6 +893,7 @@ function closeModal(id){ document.getElementById(id).classList.remove('show');
   document.getElementById('edit-robot-id').value = '';
   document.getElementById('modal-title').textContent = 'แก้ไขข้อมูลหุ่นยนต์';
   document.getElementById('btn-save-robot').textContent = 'บันทึกข้อมูล';
+  for(const fieldId of ['f-user','f-pass','f-ws','f-desc'])document.getElementById(fieldId).disabled=false;
 }
 
 document.addEventListener('keydown', e => {
@@ -613,6 +921,9 @@ async function logout(){
 
 // ── Init ───────────────────────────────────────────────────────
 loadRobots();
+refreshClientIp();
+setInterval(refreshRoutePreviews,60000);
+setInterval(refreshClientIp,60000);
 </script>
 <script src="/youtube-help.js?v=20260814-5"></script>
 </body>

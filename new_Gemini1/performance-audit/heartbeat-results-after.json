@@ -1,0 +1,7 @@
+{
+  "pulses": 20,
+  "links": 2,
+  "packets": 40,
+  "wireBytes": 8848,
+  "baselineBytesFor20Pulses": 25720
+}

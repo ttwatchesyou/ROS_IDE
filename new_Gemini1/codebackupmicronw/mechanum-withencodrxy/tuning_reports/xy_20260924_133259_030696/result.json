@@ -1,0 +1,36 @@
+{
+  "parameters": {
+    "axis": "x",
+    "distance": 0.5,
+    "speed": 0.5,
+    "kp": 1.5,
+    "ki": 0.2,
+    "kd": 0.3,
+    "cross_kp": 1.5,
+    "cross_ki": 0.2,
+    "cross_kd": 0.3,
+    "yaw_kp": 8.0,
+    "yaw_kd": 0.4,
+    "yaw_max": 1.5,
+    "yaw_target": 0.0,
+    "base": "http://127.0.0.1:8001",
+    "run": true
+  },
+  "legs": [],
+  "fault": "outbound did not settle in 20 s",
+  "origin": {
+    "goal_x": 0.2124,
+    "goal_y": 0.01,
+    "goal_yaw": 0.0,
+    "imu_ok": true,
+    "position_active": false,
+    "x": 0.2013,
+    "y": 0.0123,
+    "yaw": -0.0148
+  },
+  "last_target": {
+    "x": 0.7013,
+    "y": 0.0123,
+    "yaw": 0.0
+  }
+}

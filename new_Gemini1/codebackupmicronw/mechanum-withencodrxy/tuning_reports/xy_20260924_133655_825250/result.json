@@ -1,0 +1,36 @@
+{
+  "parameters": {
+    "axis": "x",
+    "distance": 0.5,
+    "speed": 1.0,
+    "kp": 2.0,
+    "ki": 0.0,
+    "kd": 0.1,
+    "cross_kp": 2.0,
+    "cross_ki": 0.0,
+    "cross_kd": 0.1,
+    "yaw_kp": 9.5,
+    "yaw_kd": 0.4,
+    "yaw_max": 1.5,
+    "yaw_target": 0.0,
+    "base": "http://127.0.0.1:8001",
+    "run": true
+  },
+  "legs": [],
+  "fault": "Yaw drift exceeded 8 deg: 8.19",
+  "origin": {
+    "goal_x": 0.7326,
+    "goal_y": 0.0147,
+    "goal_yaw": 0.0,
+    "imu_ok": true,
+    "position_active": false,
+    "x": 0.7259,
+    "y": 0.0038,
+    "yaw": -0.0132
+  },
+  "last_target": {
+    "x": 1.2259,
+    "y": 0.0038,
+    "yaw": 0.0
+  }
+}

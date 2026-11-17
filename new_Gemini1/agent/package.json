@@ -1,12 +1,16 @@
 {
   "name": "ros2-ide-agent",
-  "version": "2.0.0",
+  "version": "2.4.24",
   "description": "ROS2 IDE — Robot Agent (runs on Ubuntu robot)",
   "main": "agent.js",
   "scripts": {
     "start": "node agent.js"
   },
   "dependencies": {
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.6",
+    "express": "^4.22.2",
+    "mysql2": "^3.23.0",
     "node-pty": "^1.0.0",
     "ws": "^8.21.3"
   }

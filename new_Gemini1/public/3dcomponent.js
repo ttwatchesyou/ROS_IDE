@@ -11,13 +11,13 @@
 function dc_r2t(x, y, z) { return new THREE.Vector3(y, z, x); }
 function dcRosToQuat(rDeg, pDeg, yDeg) {
   const r = THREE.MathUtils.degToRad(rDeg), p = THREE.MathUtils.degToRad(pDeg), y = THREE.MathUtils.degToRad(yDeg);
-  const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(r, p, y, 'XYZ'));
+  const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(r, p, y, 'ZYX'));
   return new THREE.Quaternion(q.y, q.z, q.x, q.w).normalize();
 }
 function dcT2RPos(p) { return { x: p.z, y: p.x, z: p.y }; }
 function dcT2RRpy(q) {
   const rq = new THREE.Quaternion(q.z, q.x, q.y, q.w);
-  const e = new THREE.Euler().setFromQuaternion(rq, 'XYZ');
+  const e = new THREE.Euler().setFromQuaternion(rq, 'ZYX');
   return { r: THREE.MathUtils.radToDeg(e.x), p: THREE.MathUtils.radToDeg(e.y), y: THREE.MathUtils.radToDeg(e.z) };
 }
 
@@ -65,7 +65,8 @@ function dcLoadLibrary() {
   try { const a = JSON.parse(localStorage.getItem(dcCustomKey())); return Array.isArray(a) ? a : []; } catch (e) { return []; }
 }
 function dcSaveLibrary(arr) {
-  try { localStorage.setItem(dcCustomKey(), JSON.stringify(arr || [])); } catch (e) {}
+  try { localStorage.setItem(dcCustomKey(), JSON.stringify(arr || [])); return true; }
+  catch (e) { alert('บันทึกคลังไม่ได้ พื้นที่จัดเก็บของเบราว์เซอร์อาจเต็ม กรุณาเก็บงานเดิมไว้แล้วลองอีกครั้ง'); return false; }
 }
 
 // ── geometry ──
@@ -877,7 +878,7 @@ function dcSaveComponent() {
   const lib = dcLoadLibrary();
   const idx = lib.findIndex(x => x.id === def.id);
   if (idx >= 0) lib[idx] = def; else lib.push(def);
-  dcSaveLibrary(lib);
+  if(!dcSaveLibrary(lib))return;
   dc.editingId = def.id;
 
   // ให้ transformation.js เห็นทันทีถ้าเปิดอยู่
@@ -902,7 +903,7 @@ function dcEditLibrary(id) {
       params: JSON.parse(JSON.stringify(sp.params || {})),
       pos: Object.assign({ x: 0, y: 0, z: 0 }, sp.pos),
       rpy: Object.assign({ r: 0, p: 0, y: 0 }, sp.rpy),
-      color: sp.color || 0x4f8ef7, _grp: null,
+      color: sp.color ?? 0x4f8ef7, _grp: null,
     });
   });
   dc.editingId = def.id;
@@ -916,7 +917,7 @@ function dcDeleteLibrary(id) {
   const def = lib.find(x => x.id === id); if (!def) return;
   if (!window.confirm('ลบ "' + def.name + '" ออกจาก Library ?')) return;
   const next = lib.filter(x => x.id !== id);
-  dcSaveLibrary(next);
+  if(!dcSaveLibrary(next))return;
   if (dc.editingId === id) dc.editingId = null;
   if (typeof tf !== 'undefined') { tf.userComps = next; if (typeof tfRenderAddGrid === 'function') try { tfRenderAddGrid(); } catch (e) {} }
   dcRenderLibrary();

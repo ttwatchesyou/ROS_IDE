@@ -1,0 +1,37 @@
+{
+  "parameters": {
+    "axis": "x",
+    "distance": -0.3,
+    "speed": 0.5,
+    "kp": 2.5,
+    "ki": 0.0,
+    "kd": 0.2,
+    "cross_kp": 3.0,
+    "cross_ki": 0.0,
+    "cross_kd": 0.1,
+    "yaw_kp": 9.5,
+    "yaw_kd": 0.4,
+    "yaw_max": 1.5,
+    "yaw_target": null,
+    "firmware_defaults": false,
+    "base": "http://127.0.0.1:8001",
+    "run": true
+  },
+  "legs": [],
+  "fault": "Goal overshoot exceeded 4 cm: 0.041 m",
+  "origin": {
+    "goal_x": 0.489,
+    "goal_y": 0.0742,
+    "goal_yaw": 0.0246,
+    "imu_ok": true,
+    "position_active": false,
+    "x": 0.4667,
+    "y": 0.0685,
+    "yaw": 0.0301
+  },
+  "last_target": {
+    "x": 0.16670000000000001,
+    "y": 0.0685,
+    "yaw": 0.0301
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "target": {
+    "x": 0.0,
+    "y": 0.0,
+    "yaw": 0.0
+  },
+  "samples": [],
+  "start": {
+    "goal_x": 0.0,
+    "goal_y": 0.0,
+    "goal_yaw": 0.0,
+    "imu_ok": true,
+    "position_active": false,
+    "x": 2.1155,
+    "y": 0.1046,
+    "yaw": 0.0901
+  },
+  "fault": "HTTP Error 422: UNPROCESSABLE ENTITY"
+}

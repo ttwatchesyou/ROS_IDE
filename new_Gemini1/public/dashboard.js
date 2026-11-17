@@ -1,20 +1,59 @@
 // ══ DASHBOARD — stats, nodes, processes ══
 let dashLoading = false;
 let dashInterval = null;
+let projectScanLoading = false;
+
+async function finishProjectScan() {
+  if(!isSimWorkspace&&window.rosideAgentUpdating)return;
+  if (!sessionId || projectScanLoading) return;
+  projectScanLoading = true;
+  try {
+    const project = await API('/api/dashboard/project', { sessionId });
+    if (!project?.ok) throw new Error(project?.error || 'อ่านผลตรวจ source code ไม่สำเร็จ');
+    renderProjectCapabilities(project);
+  } catch (error) {
+    renderProjectScanFailure(error.message);
+  } finally {
+    projectScanLoading = false;
+  }
+}
+
+function renderProjectScanFailure(message) {
+  const title = document.getElementById('project-summary-title');
+  const meta = document.getElementById('project-summary-meta');
+  const note = document.getElementById('project-scan-note');
+  const grid = document.getElementById('project-capabilities-grid');
+  const detail = String(message || 'ไม่สามารถติดต่อระบบตรวจสอบโปรเจกต์ได้');
+  if (title) title.textContent = 'ตรวจสอบ source code ไม่สำเร็จ';
+  if (meta) meta.textContent = detail;
+  if (note) note.textContent = 'ตรวจการเชื่อมต่อหุ่นยนต์ แล้วลองตรวจสอบอีกครั้ง';
+  if (grid) grid.innerHTML = '<div class="empty-state">⚠️ โหลดข้อมูลภารกิจไม่ได้ <button type="button" class="btn" onclick="loadDashboard(true)">ลองใหม่</button></div>';
+}
 
 async function loadDashboard(forceProjectScan = false) {
-  if (!sessionId) return;
+  if(!isSimWorkspace&&window.rosideAgentUpdating)return;
+  if (!sessionId) {
+    renderProjectScanFailure('ยังไม่มี session ที่เชื่อมต่ออยู่');
+    return;
+  }
   if (dashLoading) return;
   dashLoading = true;
+  let requestTimeout = null;
   const buttons = ['btn-refresh-status'].map(id=>document.getElementById(id)).filter(Boolean);
   buttons.forEach(btn=>{ btn.disabled=true; btn.innerHTML='<span class="spin-icon">↻</span> กำลังอัปเดต…'; });
 
   try {
     // ดึงทั้ง ROS graph (nodes/topics) และ OS processes ที่เจาะจงกับ workspace ของ sim นี้
     // (backend กรองเฉพาะ root ของ sim → ไม่ปน node ของ sim อื่น และไม่ใช่แค่ grep "~/ros2_ws" ที่จับไม่ได้)
-    const res = await API('/api/dashboard', { sessionId, forceProjectScan });
+    const res = await Promise.race([
+      API('/api/dashboard', { sessionId, forceProjectScan }),
+      new Promise((_, reject) => {
+        requestTimeout = setTimeout(() => reject(new Error('หมดเวลารอการตรวจสอบ (20 วินาที)')), 20000);
+      }),
+    ]);
 
     if (!res.ok) {
+      renderProjectScanFailure(res.error || 'Dashboard API ตอบกลับไม่สำเร็จ');
       if (typeof sbMsg === 'function') sbMsg('Dashboard error: ' + res.error, 3000);
       return;
     }
@@ -22,8 +61,10 @@ async function loadDashboard(forceProjectScan = false) {
     res.processes = res.processes || [];
     renderDashboard(res);
   } catch(e) {
+    renderProjectScanFailure(e.message);
     if (typeof sbMsg === 'function') sbMsg('Dashboard error: ' + e.message, 3000);
   } finally {
+    if (requestTimeout) clearTimeout(requestTimeout);
     dashLoading = false;
     buttons.forEach(btn=>{ btn.disabled=false; btn.textContent='↻ อัปเดต'; });
   }
@@ -156,6 +197,7 @@ function renderRobotHealth({ cpu, memPct, nodeCount, processCount }) {
 }
 
 const PROJECT_CAPABILITY_META = {
+  system:     { icon:'🧰', name:'ตรวจความพร้อมระบบ', tech:'Mission 0 · Ubuntu + ROS 2', desc:'ตรวจระบบปฏิบัติการ เลือก ROS 2 รุ่นที่ตรงกับ Ubuntu และเตรียมเครื่องมือก่อนเริ่มสร้างหุ่นยนต์จริง', requirements:['ใช้ Ubuntu 22.04 LTS (Jammy) สำหรับ ROS 2 Humble หรือ Ubuntu 24.04 LTS (Noble) สำหรับ Jazzy','ใช้สถาปัตยกรรม amd64 หรือ arm64 และติดตั้งคำสั่ง ros2 ให้พร้อม','เตรียม colcon, rosdep, Git และ curl สำหรับภารกิจถัดไป'], page:null, systemCheck:true, action:'ตรวจสอบระบบอีกครั้ง' },
   hardware:   { icon:'🔌', name:'ออกแบบและเชื่อมฮาร์ดแวร์', tech:'Hardware Builder', desc:'อ่านฐานล้อและมิติจาก Robot Model/ODOM แล้วเลือกบอร์ด MCU, driver และอุปกรณ์จริงให้ตรงกับแบบ', requirements:['บันทึก Robot Model, TF และ ODOM ให้เรียบร้อย','ตรวจ wiring diagram ของ STM32F103C8T6 ที่สร้างจากแบบ','สร้าง config และ firmware template ลง workspace'], page:null, hardwareBuilder:true, action:'เปิด Hardware Builder' },
   pid:        { icon:'🎛️', name:'จูนระบบหุ่นยนต์', tech:'Wheel PID Tuning', desc:'เชื่อมต่อ Controller ตรวจ Serial protocol จริง จูน PID แยกล้อ และทดสอบเดินหน้าอย่างปลอดภัย', requirements:['เลือก COM port และต้องได้รับ RPM/ODOM/PID จากบอร์ดตาม protocol','จูน Kp, Ki และ Kd แยกล้อซ้าย/ขวา','ทดสอบเดินหน้าแบบกดค้าง แล้วบันทึกค่าลง ROS bridge'], page:null, robotTune:true, action:'เปิดหน้าจูนหุ่นยนต์' },
   custom_package:{ icon:'🐍', name:'สร้างโปรแกรมหุ่นยนต์', tech:'Custom Python Package', desc:'ประกอบ ROS 2 node ด้วยบล็อก แล้วใส่ Python Code Block สำหรับตรรกะเฉพาะของหุ่นยนต์', requirements:['สร้าง ament_python package และ executable','เพิ่ม Python Code Block อย่างน้อยหนึ่งบล็อก','Generate, Save & Build จน package ทำงานได้'], page:'flow', action:'เปิด Flow Editor' },
@@ -182,7 +224,7 @@ const PROJECT_CAPABILITY_META = {
 const SIMULATION_WIZARD_ORDER = ['urdf','lidar','control','mapping','navigation'];
 // Real navigation commissioning order: design first, then hardware/PID,
 // motion and sensors, state estimation, mapping, and finally Nav2.
-const REAL_ROBOT_WIZARD_ORDER = ['urdf','lidar','hardware','pid','control','mapping','navigation'];
+const REAL_ROBOT_WIZARD_ORDER = ['system','urdf','lidar','hardware','pid','control','mapping','navigation'];
 const REAL_ROBOT_OPTIONAL_ORDER = [];
 function getActiveWizardOrder(){ return isSimWorkspace ? SIMULATION_WIZARD_ORDER : REAL_ROBOT_WIZARD_ORDER; }
 function getOptionalWizardOrder(){ return isSimWorkspace ? [] : REAL_ROBOT_OPTIONAL_ORDER; }
@@ -208,16 +250,17 @@ function applyAgvWizardDependencies(capabilities, simulationEnabled = isSimWorks
         capability.dependencyMessage=message;
       }
     };
+    block('urdf',['system'],'ต้องผ่านภารกิจ 0 และเตรียม Ubuntu กับ ROS 2 Humble/Jazzy รุ่นที่ตรงกันให้พร้อมก่อนเริ่มประกอบหุ่น');
     const pid=capabilities.find(capability=>capability.id==='pid');
-    if(pid&&pid.tuneVerified!==true){pid.sourceDetected=pid.detected===true;pid.detected=false;pid.resultCheck=true;pid.validationMessage='ยังไม่ได้เชื่อมต่อและยืนยัน Serial protocol จากบอร์ดในหน้าจูนหุ่นยนต์';}
+    if(pid){pid.skipped=true;pid.resultCheck=true;pid.validationMessage='ข้ามภารกิจ 4 ได้ — ไปภารกิจ 5 ฝึกบังคับหุ่นยนต์หลังเตรียม Hardware เสร็จ และกลับมาจูนภายหลังได้';if(pid.tuneVerified!==true){pid.sourceDetected=pid.detected===true;pid.detected=false;}}
     const mapping=capabilities.find(capability=>capability.id==='mapping');
     if(mapping&&mapping.mappingVerified!==true){mapping.sourceDetected=mapping.detected===true;mapping.detected=false;mapping.resultCheck=true;mapping.validationMessage='ยังไม่ได้บันทึกแผนที่จริงเป็น PGM + YAML ในหน้าเก็บแผนที่ SLAM';}
     block('lidar',['urdf'],'ประกอบหุ่นและตั้งค่า Robot Model, TF และ ODOM ให้ครบก่อนติดตั้งและทดสอบ LIDAR');
     block('pid',['hardware'],'สร้าง Firmware และเชื่อมต่อ Hardware ให้เสร็จก่อนเริ่มจูนค่า PID ของมอเตอร์');
     block('custom_package',['hardware'],'สร้าง Hardware config ให้เสร็จก่อนสร้าง Custom Python Package สำหรับหุ่นยนต์');
-    block('control',['hardware','pid'],'เชื่อมต่อ Hardware และจูนค่า PID หรือทดสอบโหมด Open-loop ให้ผ่านก่อนเปิดหน้าฝึกบังคับหุ่น');
+    block('control',['hardware'],'สร้าง Firmware และเชื่อมต่อ Hardware ให้เสร็จก่อนเปิดหน้าฝึกบังคับหุ่น');
     block('mapping',['control','lidar'],'เตรียม Motion Control และ LiDAR ให้พร้อมก่อนสร้างแผนที่');
-    block('navigation',['pid','mapping'],'ต้องทดสอบโหมดควบคุมมอเตอร์และสร้างแผนที่ก่อนเริ่ม Autonomous Navigation');
+    block('navigation',['mapping'],'ต้องสร้างแผนที่ก่อนเริ่ม Autonomous Navigation');
     return capabilities;
   }
   const lidar = capabilities.find(capability=>capability.id==='lidar');
@@ -313,6 +356,17 @@ function renderProjectCapabilities(project) {
   const optionalOrder = getOptionalWizardOrder();
   if (!grid || !title || !meta || !note) return;
 
+  if(project?.pending){
+    title.textContent='กำลังตรวจ source code เบื้องหลัง…';
+    meta.textContent='ข้อมูลสถานะระบบโหลดเสร็จแล้ว';
+    note.textContent='ผลภารกิจจะอัปเดตอัตโนมัติ โดยไม่ต้องรอหน้านี้';
+    if(progressBar) progressBar.setAttribute('aria-busy','true');
+    if(progressPercent && progressPercent.textContent==='0%') progressPercent.textContent='…';
+    if(!grid.children.length||grid.querySelector('.empty-state'))grid.innerHTML='<div class="empty-state">🔎 กำลังอ่านเฉพาะโฟลเดอร์ src เบื้องหลัง…</div>';
+    void finishProjectScan();
+    return;
+  }
+
   if (!project || project.ok === false) {
     title.textContent = 'ยังเปิดแผนที่ภารกิจไม่ได้';
     meta.textContent = project?.error || 'ยังไม่มีข้อมูลจาก workspace';
@@ -343,13 +397,14 @@ function renderProjectCapabilities(project) {
     [...requiredOrder,...optionalOrder].map(id=>({ ...(byId[id]||{id,detected:false,count:0,files:[]}),optional:optionalOrder.includes(id) }))
   );
   agvCapabilityState = Object.fromEntries(capabilities.map(capability=>[capability.id,capability]));
-  const requiredCapabilities = capabilities.filter(capability=>!capability.optional);
+  const requiredCapabilities = capabilities.filter(capability=>!capability.optional&&!capability.skipped);
   const found = requiredCapabilities.filter(capability => capability.detected).length;
   const optionalFound = capabilities.filter(capability=>capability.optional&&capability.detected).length;
   const packageText = `${project.packageCount || 0} แพ็กเกจ`;
   const fileText = `${project.fileCount || 0} ไฟล์โปรแกรม`;
   const languageText = project.languages?.length ? project.languages.join(' + ') : 'ไม่พบภาษาโปรแกรม';
   const percent = Math.round(found/requiredCapabilities.length*100);
+  if(progressBar) progressBar.removeAttribute('aria-busy');
   title.textContent = found === requiredCapabilities.length ? 'เยี่ยมมาก! หุ่นยนต์พร้อมออกเดินทางแล้ว' : `ผ่านแล้ว ${found} จาก ${requiredCapabilities.length} ด่าน`;
   meta.textContent = `${packageText} · ${fileText} · ${languageText}`;
   const nextMissing = requiredCapabilities.find(capability=>!capability.detected);
@@ -371,22 +426,23 @@ function renderProjectCapabilities(project) {
     const files = Array.isArray(capability.files) ? capability.files : [];
     const evidenceCount = Number.isFinite(Number(capability.count)) ? Math.max(0, Math.floor(Number(capability.count))) : files.length;
     const isNext = nextMissing?.id === capability.id;
-    const cardStatus = capability.detected ? 'ผ่านด่านแล้ว' : capability.optional ? 'ภารกิจเสริม' : capability.dependencyBlocked ? 'รอขั้นตอนก่อนหน้า' : isNext ? 'ภารกิจถัดไป' : 'รอทำภารกิจ';
+    const cardStatus = capability.detected ? 'ผ่านด่านแล้ว' : capability.skipped ? 'ข้ามภารกิจนี้' : capability.optional ? 'ภารกิจเสริม' : capability.dependencyBlocked ? 'รอขั้นตอนก่อนหน้า' : isNext ? 'ภารกิจถัดไป' : 'รอทำภารกิจ';
     const evidence = capability.dependencyBlocked
       ? `<div>🔒 ${escH(capability.dependencyMessage)}</div>`
-      : (capability.mapCheck || capability.resultCheck) && (isSimWorkspace || capability.id==='pid')
+      : (capability.mapCheck || capability.resultCheck) && (isSimWorkspace || ['pid','system'].includes(capability.id))
       ? `<div>${capability.detected ? '🗺️' : '💡'} ${escH(capability.validationMessage || 'เปิด Map Editor เพื่อสร้าง map.json')}</div>`
       : files.length ? `<div title="${files.map(escH).join(' · ')}">🔎 พบหลักฐาน ${evidenceCount} จุด</div>` : '<div>💡 เลือกเพื่อดูคำใบ้</div>';
-    return `<div class="capability-card agv-step-card${capability.detected ? ' detected' : ''}${isNext?' next-mission':''}${selectedAgvStep===capability.id?' selected':''}" data-agv-step="${capability.id}" role="button" tabindex="0" onclick="activateAgvWizardStep('${capability.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();activateAgvWizardStep('${capability.id}')}" aria-label="ด่าน ${index+1} ${escH(info.name)} ${cardStatus}">
+    const missionNumber=!isSimWorkspace&&capability.id==='system'?0:isSimWorkspace?index+1:index;
+    return `<div class="capability-card agv-step-card${capability.detected ? ' detected' : ''}${isNext?' next-mission':''}${selectedAgvStep===capability.id?' selected':''}" data-agv-step="${capability.id}" role="button" tabindex="0" onclick="activateAgvWizardStep('${capability.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();activateAgvWizardStep('${capability.id}')}" aria-label="ด่าน ${missionNumber} ${escH(info.name)} ${cardStatus}">
       <div class="capability-top">
-        <div class="agv-step-number">${capability.detected?'✓':index+1}</div>
+        <div class="agv-step-number">${capability.detected?'✓':missionNumber}</div>
         <div class="capability-icon">${escH(info.icon)}</div>
         <div class="capability-name">${escH(info.name)}<div style="font:500 9px var(--mono);color:var(--dim);margin-top:3px">${escH(info.tech||'')}</div></div>
       </div>
       <div class="agv-card-status">${cardStatus}</div>
       <div class="capability-desc">${escH(info.desc)}</div>
       <div class="capability-files">${evidence}</div>
-      <div class="capability-badge">${capability.detected ? '⭐ สำเร็จ' : capability.optional ? '➕ ไม่บังคับ' : capability.dependencyBlocked ? '🔒 ทำด่านก่อนหน้า' : isNext ? 'เริ่มด่านนี้' : 'ยังไม่ผ่าน'}</div>
+      <div class="capability-badge">${capability.detected ? '⭐ สำเร็จ' : capability.skipped ? '⏭ ข้ามได้ · จูนภายหลัง' : capability.optional ? '➕ ไม่บังคับ' : capability.dependencyBlocked ? '🔒 ทำด่านก่อนหน้า' : isNext ? 'เริ่มด่านนี้' : 'ยังไม่ผ่าน'}</div>
     </div>`;
   }).join('');
 }
@@ -414,12 +470,23 @@ function openAgvWizardStep(id) {
     : '';
   const action = dependencyBlocked
     ? '<button type="button" class="agv-action-btn pending" disabled><span class="agv-action-icon">🔒</span><span class="agv-action-copy"><small>ทำขั้นตอนก่อนหน้าให้เสร็จก่อน</small><strong>ยังเปิดเครื่องมือนี้ไม่ได้</strong></span><span class="agv-action-arrow">•</span></button>'
+    : info.systemCheck && !isSimWorkspace
+    ? `<div class="agv-system-actions"><button type="button" class="agv-action-btn" data-system-action onclick="runRealSystemCheck(false)"><span class="agv-action-icon">🔎</span><span class="agv-action-copy"><small>อ่านสถานะจาก Agent</small><strong>ตรวจสอบระบบอีกครั้ง</strong></span><span class="agv-action-arrow">↻</span></button>${!capability.detected&&capability.systemCheck?.canInstallRos?`<button type="button" class="agv-action-btn install" data-system-action onclick="runRealSystemCheck(true)"><span class="agv-action-icon">⬇️</span><span class="agv-action-copy"><small>ติดตั้งเฉพาะสิ่งที่ขาด</small><strong>ติดตั้ง ROS 2 ${escH(capability.systemCheck.targetDistroLabel||'รุ่นที่รองรับ')} และเครื่องมือ</strong></span><span class="agv-action-arrow">→</span></button>`:''}</div>`
     : info.simulationOnly && !isSimWorkspace
     ? ''
     : info.page || info.realTeleop || info.realMapping || info.realNavigation || info.hardwareBuilder || info.robotTune
     ? `<button type="button" class="agv-action-btn" onclick="goToAgvTool('${id}')"><span class="agv-action-icon">${info.realTeleop?'🎮':info.realMapping?'🗺️':info.realNavigation?'🏁':info.hardwareBuilder?'🔌':info.robotTune?'🎛️':'🧩'}</span><span class="agv-action-copy"><small>${info.realTeleop?'ควบคุมหุ่นยนต์จริง':info.realMapping?'เก็บแผนที่จากหุ่นยนต์จริง':info.realNavigation?'นำทางบน Saved Map':info.hardwareBuilder?'ออกแบบก่อนเขียนโค้ด':info.robotTune?'จูนจากข้อมูลบอร์ดจริง':'เปิดเครื่องมือประจำด่าน'}</small><strong>${escH(info.action)}</strong></span><span class="agv-action-arrow">→</span></button>`
     : '<button type="button" class="agv-action-btn pending" disabled><span class="agv-action-icon">🛠️</span><span class="agv-action-copy"><small>เครื่องมือประจำด่าน</small><strong>กำลังเตรียมพร้อม</strong></span><span class="agv-action-arrow">•</span></button>';
-  detail.innerHTML=`<div class="agv-detail-head"><div><div class="agv-detail-status${capability.detected?' done':''}">${capability.detected?'✓ ผ่านภารกิจแล้ว':dependencyBlocked?'🔒 รอขั้นตอนก่อนหน้า':'★ เป้าหมายของด่านนี้'}</div><div class="agv-detail-title">${escH(info.icon)} ${escH(info.name)} <span style="color:var(--dim);font:500 11px var(--mono)">· ${escH(info.tech||'')}</span></div><div class="agv-detail-text">${escH(info.desc)}</div></div>${action}</div>${explanation}<ul class="agv-detail-list">${info.requirements.map(item=>`<li>${escH(item)}</li>`).join('')}</ul><div class="agv-evidence">${dependencyBlocked?`🔒 ${escH(capability.dependencyMessage)}`:(capability.mapCheck||capability.resultCheck)&&(isSimWorkspace||capability.id==='pid')?`${capability.detected?'✓':'💡'} ${escH(capability.validationMessage||'ยังไม่พบไฟล์ผลลัพธ์ของภารกิจ')}`:files.length?`🔎 สิ่งที่ระบบค้นพบ: ${files.map(escH).join(' · ')}`:'💡 ยังไม่พบหลักฐานในโปรเจกต์ ลองทำตามรายการด้านบนทีละข้อ'}</div>`;
+  const system=capability.systemCheck;
+  const systemDetails=info.systemCheck&&system?`<div class="agv-system-checks">${[
+    ['Ubuntu ที่รองรับ',system.ubuntuSupported,system.prettyName],
+    ['Architecture',system.architectureSupported,system.architecture||'ไม่ทราบ'],
+    ['APT',system.aptAvailable,system.aptAvailable?'พร้อมใช้งาน':'ไม่พบ apt-get'],
+    [`ROS 2 ${system.targetDistroLabel||'Humble/Jazzy'}`,system.rosInstalled,system.rosInstalled?'พร้อมใช้งาน':'ยังไม่ได้ติดตั้ง'],
+    ['colcon',system.tools?.colcon,system.tools?.colcon?'พร้อมใช้งาน':'ยังขาด'],
+    ['rosdep',system.tools?.rosdep,system.tools?.rosdep?'พร้อมใช้งาน':'ยังขาด'],
+  ].map(([label,ok,value])=>`<div class="agv-system-check ${ok?'ok':'bad'}"><span>${ok?'✓':'!'}</span><div><strong>${escH(label)}</strong><small>${escH(value)}</small></div></div>`).join('')}</div>`:'';
+  detail.innerHTML=`<div class="agv-detail-head"><div><div class="agv-detail-status${capability.detected?' done':''}">${capability.detected?'✓ ผ่านภารกิจแล้ว':dependencyBlocked?'🔒 รอขั้นตอนก่อนหน้า':'★ เป้าหมายของด่านนี้'}</div><div class="agv-detail-title">${escH(info.icon)} ${escH(info.name)} <span style="color:var(--dim);font:500 11px var(--mono)">· ${escH(info.tech||'')}</span></div><div class="agv-detail-text">${escH(info.desc)}</div></div>${action}</div>${explanation}${systemDetails}<ul class="agv-detail-list">${info.requirements.map(item=>`<li>${escH(item)}</li>`).join('')}</ul><div class="agv-evidence" id="agv-system-result">${dependencyBlocked?`🔒 ${escH(capability.dependencyMessage)}`:(capability.mapCheck||capability.resultCheck)&&(isSimWorkspace||['pid','system'].includes(capability.id))?`${capability.detected?'✓':'💡'} ${escH(capability.validationMessage||'ยังไม่พบไฟล์ผลลัพธ์ของภารกิจ')}`:files.length?`🔎 สิ่งที่ระบบค้นพบ: ${files.map(escH).join(' · ')}`:'💡 ยังไม่พบหลักฐานในโปรเจกต์ ลองทำตามรายการด้านบนทีละข้อ'}</div>`;
   detail.classList.add('show');
   modal.classList.remove('hidden');
   requestAnimationFrame(()=>modal.classList.add('open'));
@@ -433,6 +500,32 @@ function closeAgvMission() {
   modal.classList.add('hidden');
   if(agvMissionTrigger?.focus) agvMissionTrigger.focus();
   agvMissionTrigger=null;
+}
+
+let realSystemCheckBusy=false;
+async function runRealSystemCheck(install=false){
+  if(isSimWorkspace||!sessionId||realSystemCheckBusy)return;
+  const targetLabel=agvCapabilityState.system?.systemCheck?.targetDistroLabel||'รุ่นที่รองรับ';
+  if(install&&!window.confirm(`ติดตั้ง ROS 2 ${targetLabel} และเครื่องมือที่ขาดบนหุ่นยนต์จริงตอนนี้หรือไม่? การติดตั้งต้องใช้อินเทอร์เน็ตและอาจใช้เวลาหลายนาที`))return;
+  realSystemCheckBusy=true;
+  const buttons=[...document.querySelectorAll('[data-system-action]')],resultBox=document.getElementById('agv-system-result');
+  buttons.forEach(button=>button.disabled=true);
+  if(resultBox)resultBox.textContent=install?`⏳ กำลังติดตั้ง ROS 2 ${targetLabel} บนหุ่นยนต์ กรุณาอย่าปิดเครื่อง…`:'🔎 กำลังตรวจ Ubuntu และ ROS 2 จาก Robot Agent…';
+  try{
+    const result=await API('/api/real/system-check',{sessionId,install});
+    if(!result?.ok)throw Object.assign(new Error(result?.error||'ตรวจสอบระบบไม่สำเร็จ'),{requiresSudo:result?.requiresSudo});
+    if(resultBox)resultBox.textContent=result.system?.validationMessage||'ตรวจสอบระบบเรียบร้อย';
+    if(typeof sbMsg==='function')sbMsg(result.system?.detected?'✅ ภารกิจ 0 ผ่านแล้ว':'ตรวจระบบแล้ว ยังมีรายการที่ต้องแก้ไข',5000);
+    await loadDashboard(true);
+    if(!document.getElementById('agv-mission-modal')?.classList.contains('hidden'))openAgvWizardStep('system');
+  }catch(error){
+    const message=error.requiresSudo?`${error.message} · กรุณาตรวจรหัสผ่านของ Robot Connection`:error.message;
+    if(resultBox)resultBox.textContent='⚠️ '+message;
+    if(typeof sbMsg==='function')sbMsg('⚠️ '+message,7000);
+  }finally{
+    realSystemCheckBusy=false;
+    document.querySelectorAll('[data-system-action]').forEach(button=>button.disabled=false);
+  }
 }
 
 async function goToAgvTool(id) {
@@ -488,7 +581,7 @@ const HARDWARE_DRIVES={
 const HARDWARE_ACCESSORIES={
   mpu6050:{name:'MPU6050 IMU',connections:[['VCC','3V3'],['GND','GND'],['SCL','PB6'],['SDA','PB7']],color:'#9f7aea'},
   bno055:{name:'BNO055 IMU',connections:[['VIN','3V3'],['GND','GND'],['SCL','PB6'],['SDA','PB7']],color:'#c96ee8'},
-  hcsr04:{name:'HC-SR04',connections:[['VCC','5V'],['GND','GND'],['TRIG','PB0'],['ECHO','PB1 via divider']],color:'#38b2ac'},
+  hcsr04:{name:'HC-SR04',connections:[['VCC','5V'],['GND','GND'],['TRIG','PA11'],['ECHO','PA12 via divider']],color:'#38b2ac'},
   servo:{name:'Servo',connections:[['V+','External 5V'],['GND','GND'],['PWM','PB9']],color:'#f5a623'},
   rplidar:{name:'RPLIDAR A1',connections:[['USB','Host computer'],['PORT','/dev/ttyUSB0']],color:'#3ecf8e'},
 };
@@ -507,7 +600,7 @@ function hardwareMotorConnections(){
   const driver=document.getElementById('hardware-motor-driver')?.value||'tb6612';
   const pins=[
     ['Motor L / M1',driver==='tb6612'?'AIN1 PB12 · AIN2 PB13 · PWM PA8':'IN1 PB12 · IN2 PB13 · ENA PA8'],
-    ['Motor R / M2',driver==='tb6612'?'BIN1 PB14 · BIN2 PB15 · PWM PA9':'IN3 PB14 · IN4 PB15 · ENB PA9'],
+    ['Motor R / M2',driver==='tb6612'?'BIN1 PB14 · BIN2 PB15 · PWM PB0':'IN3 PB14 · IN4 PB15 · ENB PB0'],
     ['Encoder L / M1','A PA0 · B PA1'],['Encoder R / M2','A PA2 · B PA3'],
   ];
   if(HARDWARE_DRIVES[hardwareDrive].motors===4)pins.push(
@@ -656,8 +749,8 @@ function closeHardwareBuilder(){
 
 function hardwareFirmwareSource(config){
   const motorPins=config.motorCount===2
-    ? [['LEFT','PB12','PB13','PA8'],['RIGHT','PB14','PB15','PA9']]
-    : [['FRONT_LEFT','PB12','PB13','PA8'],['FRONT_RIGHT','PB14','PB15','PA9'],['REAR_LEFT','PB3','PB4','PA6'],['REAR_RIGHT','PB5','PB8','PA7']];
+    ? [['LEFT','PB12','PB13','PA8'],['RIGHT','PB14','PB15','PB0']]
+    : [['FRONT_LEFT','PB12','PB13','PA8'],['FRONT_RIGHT','PB14','PB15','PB0'],['REAR_LEFT','PB3','PB4','PA6'],['REAR_RIGHT','PB5','PB8','PA7']];
   const declarations=motorPins.map((pins,index)=>`constexpr MotorPin MOTOR_${index+1} = {${pins[1]}, ${pins[2]}, ${pins[3]}, "${pins[0]}"};`).join('\n');
   const init=motorPins.map((_,index)=>`  initMotor(MOTOR_${index+1});`).join('\n');
   const stop=motorPins.map((_,index)=>`  setMotor(MOTOR_${index+1}, 0);`).join('\n');
@@ -665,7 +758,7 @@ function hardwareFirmwareSource(config){
   const accessoryDeclarations=[
     accessories.has('mpu6050')?'constexpr uint8_t IMU_I2C_ADDRESS = 0x68; // MPU6050 on PB6 SCL / PB7 SDA':'',
     accessories.has('bno055')?'constexpr uint8_t IMU_I2C_ADDRESS = 0x28; // BNO055 on PB6 SCL / PB7 SDA':'',
-    accessories.has('hcsr04')?'constexpr uint32_t ULTRASONIC_TRIG = PB0;\nconstexpr uint32_t ULTRASONIC_ECHO = PB1; // 5V echo MUST pass through divider':'',
+    accessories.has('hcsr04')?'constexpr uint32_t ULTRASONIC_TRIG = PA11;\nconstexpr uint32_t ULTRASONIC_ECHO = PA12; // 5V echo MUST pass through divider':'',
     accessories.has('servo')?'constexpr uint32_t SERVO_PWM = PB9; // Servo uses an external 5V supply':'',
   ].filter(Boolean).join('\n');
   const accessoryInit=[usesI2c?'  Wire.begin();':'',accessories.has('hcsr04')?'  pinMode(ULTRASONIC_TRIG,OUTPUT); pinMode(ULTRASONIC_ECHO,INPUT);':'',accessories.has('servo')?'  pinMode(SERVO_PWM,OUTPUT); analogWrite(SERVO_PWM,0);':''].filter(Boolean).join('\n');
@@ -699,7 +792,9 @@ async function hardwareGenerateFiles(){
 }
 
 let realTeleopBound=false,realTeleopTrigger=null,realControllerSocket=null,realLidarSocket=null,realControllerConnected=false,realLidarRunning=false,realDriveTimer=null;
-let realDriveKeys=new Set(),realDriveHardware={},realOdom={x:0,y:0,yaw:0,vx:0,vy:0,wz:0},realOdomTrail=[],realDriveScan=null;
+let realControllerPending=null,realLidarPending=null,realControllerPort='',realLidarPort='',realDriveLidar={};
+let realDriveKeys=new Set(),realDriveHardware={},realDriveTfModel=[],realOdom={x:0,y:0,yaw:0,vx:0,vy:0,wz:0},realOdomTrail=[],realDriveScan=null;
+let realTeleopMapExtent=9;
 
 function realTeleopUpdateStatus(message,live=false){
   const status=document.getElementById('real-teleop-status');
@@ -717,68 +812,125 @@ function realTeleopApplySpeed(){
 }
 
 function realTeleopStop(message='หุ่นยนต์หยุดแล้ว — พร้อมรับคำสั่ง'){
+  if(realDriveTimer)clearInterval(realDriveTimer);realDriveTimer=null;
   realDriveKeys.clear();document.querySelectorAll('#real-teleop-modal .real-teleop-btn.on').forEach(button=>button.classList.remove('on'));
   realTeleopSendSerial('S');
   realTeleopUpdateStatus(message,false);
 }
 
 function realTeleopSetState(id,message,live=false){const node=document.getElementById(id);if(node){node.textContent=message;node.classList.toggle('live',live);}}
-function realTeleopSendSerial(command){if(realControllerSocket?.readyState===WebSocket.OPEN)realControllerSocket.send(JSON.stringify({type:'command',command,motorCount:Number(realDriveHardware.motorCount)||2}));}
+function realTeleopSendSerial(command){if(realControllerSocket?.readyState!==WebSocket.OPEN)return;realControllerSocket.send(JSON.stringify({type:'command',command,motorCount:Number(realDriveHardware.motorCount)||2}));const output=document.getElementById('real-teleop-command');if(output)output.textContent=command;}
+function realTeleopIsMecanum(){
+  return realDriveHardware.drive==='mecanum4'||realDriveHardware.kinematics==='mecanum'||realDriveHardware.robotDesign?.pattern==='mecanum'||realDriveHardware.robotDesign?.hardwareTemplate==='mecanum_xy';
+}
+function realTeleopMecanumRpmCommand(vx,vy,wz){return RealDriveMotion.rpmCommand(realDriveHardware,vx,vy,wz);}
+function realTeleopUpdateDriveLayout(){
+  const mecanum=realTeleopIsMecanum(),pad=document.querySelector('#real-teleop-modal .real-teleop-pad');
+  if(pad)pad.classList.toggle('mecanum',mecanum);
+  document.querySelectorAll('#real-teleop-modal [data-mecanum-only]').forEach(node=>node.hidden=!mecanum);
+  const mode=document.getElementById('real-teleop-drive-mode');if(mode)mode.textContent=mecanum?'Mecanum · เดินตรง / เลื่อนข้าง / หมุนตัว':'Differential · เดินตรง / หมุนตัว';
+  const help=document.getElementById('real-teleop-key-help');if(help)help.textContent=mecanum?'W / ↑ เดินหน้า · S / ↓ ถอย · A / D เลื่อนซ้าย/ขวา · Q / E หรือ ← / → หมุนซ้าย/ขวา · Space หยุด':'W / ↑ เดินหน้า · S / ↓ ถอย · A / ← หมุนซ้าย · D / → หมุนขวา · Space หยุด';
+}
+function realTeleopKeyDirection(key){
+  const map={w:'fwd',arrowup:'fwd',s:'back',arrowdown:'back',arrowleft:'left',arrowright:'right',a:realTeleopIsMecanum()?'strafe-left':'left',d:realTeleopIsMecanum()?'strafe-right':'right'};
+  if(realTeleopIsMecanum()){map.q='left';map.e='right';}
+  return map[String(key).toLowerCase()];
+}
 function realTeleopSendDrive(){
-  if(!realControllerConnected)return realTeleopUpdateStatus('กรุณาเชื่อมต่อ Controller ก่อน',false);
+  if(!realControllerConnected){realTeleopUpdateStatus('กรุณาเชื่อมต่อ Controller ก่อน',false);return false;}
   const linear=Math.max(.05,Math.min(.8,Number(document.getElementById('real-teleop-linear')?.value)||.2)),angular=Math.max(.2,Math.min(2,Number(document.getElementById('real-teleop-angular')?.value)||.8));
   const vx=(realDriveKeys.has('fwd')?linear:0)-(realDriveKeys.has('back')?linear:0),wz=(realDriveKeys.has('left')?angular:0)-(realDriveKeys.has('right')?angular:0);
-  realTeleopSendSerial(`V ${vx.toFixed(4)} 0 ${wz.toFixed(4)}`);
+  const vy=realTeleopIsMecanum()?((realDriveKeys.has('strafe-left')?linear:0)-(realDriveKeys.has('strafe-right')?linear:0)):0;
+  if(realTeleopIsMecanum()&&(wz!==0||vy!==0)){
+    try{realTeleopSendSerial(realTeleopMecanumRpmCommand(vx,vy,wz));return true;}
+    catch(error){realTeleopStop(error.message);return false;}
+  }
+  realTeleopSendSerial(`V ${vx.toFixed(4)} 0 ${wz.toFixed(4)}`);return true;
 }
 function realTeleopSetDirection(direction,active){
+  if(!['fwd','back','left','right','strafe-left','strafe-right'].includes(direction))return false;
+  if(direction.startsWith('strafe-')&&!realTeleopIsMecanum())return false;
   if(active)realDriveKeys.add(direction);else realDriveKeys.delete(direction);
   document.querySelectorAll(`#real-teleop-modal .real-teleop-btn[data-dir="${direction}"]`).forEach(button=>button.classList.toggle('on',active));
-  if(realDriveKeys.size){realTeleopSendDrive();if(!realDriveTimer)realDriveTimer=setInterval(realTeleopSendDrive,100);realTeleopUpdateStatus('กำลังส่งคำสั่งความเร็วไปยัง Controller',true);}
-  else{if(realDriveTimer)clearInterval(realDriveTimer);realDriveTimer=null;realTeleopStop('ปล่อยปุ่มแล้ว — หุ่นยนต์หยุด');}
+  if(realDriveKeys.size){if(!realTeleopSendDrive())return false;if(!realDriveTimer)realDriveTimer=setInterval(realTeleopSendDrive,100);const labels={fwd:'เดินหน้า',back:'ถอยหลัง',left:'หมุนซ้าย',right:'หมุนขวา','strafe-left':'เลื่อนซ้าย','strafe-right':'เลื่อนขวา'};realTeleopUpdateStatus('ส่งคำสั่ง '+[...realDriveKeys].map(key=>labels[key]).join(' + ')+' · ปล่อยปุ่มเพื่อหยุด',true);}
+  else realTeleopStop('ปล่อยปุ่มแล้ว — หุ่นยนต์หยุด');
+  return true;
 }
 
 async function realTeleopLoadHardware(){
+  realDriveHardware={};realDriveLidar={};realTeleopUpdateDriveLayout();
+  realDriveTfModel=await RealScanTF.load(sessionId,wsPath,API);
   try{const root=String(wsPath||'~/ros2_ws').replace(/\/$/,'');const result=await API('/api/files/read',{sessionId,path:`${root}/.roside/hardware.json`});if(result?.ok)realDriveHardware=JSON.parse(result.content);}catch(_){realDriveHardware={};}
+  try{const root=String(wsPath||'~/ros2_ws').replace(/\/$/,'');const result=await API('/api/files/read',{sessionId,path:`${root}/src/roside_lidar_setup/config/selected_lidar.json`});if(result?.ok)realDriveLidar=JSON.parse(result.content);}catch(_){}
+  const model=document.getElementById('real-lidar-model');if(model&&realDriveLidar.modelId&&[...model.options].some(option=>option.value===realDriveLidar.modelId))model.value=realDriveLidar.modelId;
   const baud=document.getElementById('real-controller-baud');if(baud)baud.value=realDriveHardware.baudRate||115200;
+  realTeleopUpdateDriveLayout();realTeleopDrawMap();
 }
 async function realTeleopRefreshPorts(){
   if(!sessionId)return;realTeleopSetState('real-controller-state','กำลังค้นหา COM port…');
   try{const result=await API('/api/serial/ports',{sessionId});if(!result?.ok)throw new Error(result?.error||'ค้นหา COM port ไม่สำเร็จ');const ports=(result.ports||[]).filter(item=>item.path);
-    for(const [id,preferred] of [['real-controller-port',realDriveHardware.serialPort],['real-lidar-port',null]]){const select=document.getElementById(id);if(!select)continue;const previous=select.value;select.innerHTML=ports.length?'':'<option value="">ไม่พบ COM port</option>';for(const port of ports)select.add(new Option(`${port.accessible===false?'○':'●'} ${port.path} · ${port.label||port.path}`,port.path));select.value=ports.some(port=>port.path===(previous||preferred))?(previous||preferred):(ports.find(port=>port.accessible!==false)?.path||ports[0]?.path||'');}
-    realTeleopSetState('real-controller-state',ports.length?`พบ ${ports.length} COM port · เลือกพอร์ต Controller แล้วกดเชื่อมต่อ`:'ไม่พบ COM port',false);realTeleopLidarModelChanged(false);
+    for(const [id,preferred,active] of [['real-controller-port',realDriveHardware.serialPort,realControllerPort],['real-lidar-port',realDriveLidar.port,realLidarPort]]){
+      const select=document.getElementById(id);if(!select||active)continue;
+      const otherValue=id==='real-lidar-port'?document.getElementById('real-controller-port')?.value:(realLidarPort||realDriveLidar.port);
+      const other=ports.find(port=>port.path===otherValue||port.aliases?.includes(otherValue))?.path||otherValue;
+      const previous=select.value,candidates=ports.filter(port=>port.path!==other&&(id!=='real-lidar-port'||/^\/dev\/(?:tty(?:USB|ACM)\d+|serial\/by-id\/)/.test(port.path)));
+      select.innerHTML='<option value="">เลือก COM port</option>';
+      for(const port of ports)select.add(new Option(`${port.accessible===false?'○':'●'} ${port.path} · ${port.label||port.path}`,port.path));
+      const saved=[previous,preferred].map(value=>candidates.find(port=>port.path===value||port.aliases?.includes(value))?.path).find(Boolean);
+      const available=candidates.filter(port=>port.accessible!==false&&!port.consoleInUse&&port.kind!=='debug-uart');
+      select.value=saved||available.find(port=>port.kind==='uart')?.path||available[0]?.path||'';
+    }
+    realTeleopSetState('real-controller-state',result.uartHint||(ports.length?`พบ ${ports.length} USB/UART port · เลือกพอร์ต Controller แล้วกดเชื่อมต่อ`:'ไม่พบ USB/UART port'),false);realTeleopLidarModelChanged(false);
   }catch(error){realTeleopSetState('real-controller-state',error.message,false);}
 }
 async function realTeleopToggleController(){
-  if(realControllerConnected||realControllerSocket){realTeleopStop();try{realControllerSocket?.close();}catch(_){}realControllerSocket=null;realControllerConnected=false;document.getElementById('real-controller-connect').textContent='เชื่อมต่อ Controller';realTeleopSetState('real-controller-state','ตัดการเชื่อมต่อแล้ว');return;}
+  if(realControllerPending)return;
+  if(realControllerConnected||realControllerSocket){realTeleopStop();try{realControllerSocket?.close();}catch(_){}realControllerSocket=null;realControllerConnected=false;realControllerPort='';document.getElementById('real-controller-connect').textContent='เชื่อมต่อ Controller';realTeleopSetState('real-controller-state','ตัดการเชื่อมต่อแล้ว');return;}
   const port=document.getElementById('real-controller-port')?.value,baud=Math.trunc(Number(document.getElementById('real-controller-baud')?.value)),motorCount=Math.max(1,Math.min(8,Math.trunc(Number(realDriveHardware.motorCount)||2)));if(!port)return realTeleopSetState('real-controller-state','กรุณาเลือก COM port');
-  realTeleopSetState('real-controller-state','กำลังเตรียมสิทธิ์และเปิดพอร์ต…');const prepared=await API('/api/serial/prepare',{sessionId,port}).catch(error=>({ok:false,error:error.message}));if(!prepared?.ok)return realTeleopSetState('real-controller-state',prepared?.error||'เตรียม COM port ไม่สำเร็จ');
+  if(port===realLidarPort||port===realLidarPending?.port)return realTeleopSetState('real-controller-state','Controller และ LiDAR ต้องใช้คนละ COM port');
+  const pending={port};realControllerPending=pending;realControllerPort=port;
+  realTeleopSetState('real-controller-state','กำลังเตรียมสิทธิ์และเปิดพอร์ต…');const prepared=await API('/api/serial/prepare',{sessionId,port}).catch(error=>({ok:false,error:error.message}));realControllerPending=null;
+  if(pending.cancelled||!prepared?.ok){realControllerPort='';if(!pending.cancelled)realTeleopSetState('real-controller-state',prepared?.error||'เตรียม COM port ไม่สำเร็จ');return;}
   const proto=location.protocol==='https:'?'wss:':'ws:',socket=new WebSocket(`${proto}//${location.host}/ws/controller-tune`,['ros2ide',getAuthToken()]);realControllerSocket=socket;
+  let failure='';const fail=message=>{failure=message;realTeleopSetState('real-controller-state',message);socket.close();};
   socket.onopen=()=>socket.send(JSON.stringify({type:'start',sessionId,port,baud,motorCount}));
-  socket.onmessage=event=>{let message;try{message=JSON.parse(event.data);}catch(_){return;}if(message.type==='error')return realTeleopSetState('real-controller-state',message.message||'Controller error');if(message.type!=='telemetry')return;const data=message.data||{};if(data.event==='port_open'){realControllerConnected=true;document.getElementById('real-controller-connect').textContent='ตัดการเชื่อมต่อ';realTeleopSetState('real-controller-state',`${port} @ ${baud} · CONNECTED`,true);realTeleopUpdateStatus('พร้อมบังคับด้วยปุ่มหรือคีย์บอร์ด',true);}else if(data.event==='frame'&&data.kind==='ODOM'&&data.values?.length===6){[realOdom.x,realOdom.y,realOdom.yaw,realOdom.vx,realOdom.vy,realOdom.wz]=data.values;realOdomTrail.push({x:realOdom.x,y:realOdom.y});if(realOdomTrail.length>1500)realOdomTrail.shift();realTeleopUpdateOdom();realTeleopDrawMap();}else if(data.event==='frame'&&data.kind==='RPM'){document.getElementById('real-rpm-state').textContent=`${data.values.length/2} Motors`;}};
-  socket.onclose=()=>{if(realControllerSocket===socket)realControllerSocket=null;realControllerConnected=false;realTeleopStop('Controller หลุด — สั่งหยุดแล้ว');document.getElementById('real-controller-connect').textContent='เชื่อมต่อ Controller';realTeleopSetState('real-controller-state','DISCONNECTED');};socket.onerror=()=>realTeleopSetState('real-controller-state','เชื่อมต่อ Controller ไม่สำเร็จ');
+  socket.onmessage=event=>{if(realControllerSocket!==socket)return;let message;try{message=JSON.parse(event.data);}catch(_){return;}if(message.type==='error')return fail(message.message||'Controller error');if(message.type!=='telemetry')return;const data=message.data||{};if(data.event==='error'||data.event==='permission_denied')return fail(`${port} · ${data.message||data.event}`);if(data.event==='port_open'){realControllerConnected=true;document.getElementById('real-controller-connect').textContent='ตัดการเชื่อมต่อ';realTeleopSetState('real-controller-state',`${port} @ ${baud} · CONNECTED`,true);realTeleopUpdateStatus('พร้อมบังคับด้วยปุ่มหรือคีย์บอร์ด',true);}else if(data.event==='frame'&&data.kind==='ODOM'&&data.values?.length===6){[realOdom.x,realOdom.y,realOdom.yaw,realOdom.vx,realOdom.vy,realOdom.wz]=data.values;realOdomTrail.push({x:realOdom.x,y:realOdom.y});if(realOdomTrail.length>1500)realOdomTrail.shift();realTeleopUpdateOdom();realTeleopDrawMap();}else if(data.event==='frame'&&data.kind==='RPM'){document.getElementById('real-rpm-state').textContent=`${data.values.length/2} Motors`;}};
+  socket.onclose=()=>{if(realControllerSocket!==socket)return;realControllerSocket=null;realControllerConnected=false;realControllerPort='';realTeleopStop('Controller หลุด — หยุดการส่งคำสั่ง');document.getElementById('real-controller-connect').textContent='เชื่อมต่อ Controller';realTeleopSetState('real-controller-state',failure||'DISCONNECTED');};socket.onerror=()=>fail('เชื่อมต่อ Controller ไม่สำเร็จ');
 }
 function realTeleopUpdateOdom(){for(const [id,value,unit] of [['real-odom-x',realOdom.x,'m'],['real-odom-y',realOdom.y,'m'],['real-odom-yaw',realOdom.yaw*180/Math.PI,'°'],['real-odom-vx',realOdom.vx,'m/s'],['real-odom-wz',realOdom.wz,'rad/s']]){const node=document.getElementById(id);if(node)node.textContent=`${Number(value).toFixed(2)} ${unit}`;}}
 function realTeleopResetOdom(){realTeleopSendSerial('Z');realOdom={x:0,y:0,yaw:0,vx:0,vy:0,wz:0};realOdomTrail=[];realTeleopUpdateOdom();realTeleopDrawMap();}
 function realTeleopInitLidarModels(){const select=document.getElementById('real-lidar-model');if(!select||select.options.length)return;for(const item of (typeof LIDAR_MODELS==='undefined'?[]:LIDAR_MODELS))select.add(new Option(`${item.brand} · ${item.name}`,item.id));if(typeof lidarSelected==='string')select.value=lidarSelected;realTeleopLidarModelChanged(false);}
 function realTeleopLidarModelChanged(forcePort=true){const model=(typeof LIDAR_MODELS==='undefined'?[]:LIDAR_MODELS).find(item=>item.id===document.getElementById('real-lidar-model')?.value);const port=document.getElementById('real-lidar-port');if(model&&port&&forcePort&&[...port.options].some(option=>option.value===model.port))port.value=model.port;}
 async function realTeleopToggleLidar(){
-  if(realLidarRunning){realTeleopCloseLidarStream();const modelId=document.getElementById('real-lidar-model')?.value,port=document.getElementById('real-lidar-port')?.value;await API('/api/lidar/driver',{sessionId,modelId,port,action:'stop'}).catch(()=>null);realTeleopSetState('real-lidar-state','LiDAR หยุดแล้ว');return;}
-  const modelId=document.getElementById('real-lidar-model')?.value,model=(typeof LIDAR_MODELS==='undefined'?[]:LIDAR_MODELS).find(item=>item.id===modelId),port=document.getElementById('real-lidar-port')?.value||model?.port;if(!model)return realTeleopSetState('real-lidar-state','กรุณาเลือกรุ่น LiDAR');if(realControllerConnected&&port===document.getElementById('real-controller-port')?.value)return realTeleopSetState('real-lidar-state','Controller และ LiDAR ต้องใช้คนละ COM port');realTeleopSetState('real-lidar-state','กำลังเปิด Driver และ /scan…');
-  const result=await API('/api/lidar/driver',{sessionId,modelId,port,baud:Number(model.baud)||undefined,action:'start'}).catch(error=>({ok:false,error:error.message}));if(!result?.ok)return realTeleopSetState('real-lidar-state',result?.error||'เปิด LiDAR ไม่สำเร็จ');
-  const proto=location.protocol==='https:'?'wss:':'ws:',socket=new WebSocket(`${proto}//${location.host}/ws/lidar`,['ros2ide',getAuthToken()]);realLidarSocket=socket;realLidarRunning=true;document.getElementById('real-lidar-connect').textContent='ปิด LiDAR';socket.onopen=()=>socket.send(JSON.stringify({type:'start',sessionId}));socket.onmessage=event=>{let message;try{message=JSON.parse(event.data);}catch(_){return;}if(message.type==='scan'){realDriveScan=message.data;const count=message.data?.ranges?.filter(Number.isFinite).length||0;document.getElementById('real-map-lidar').textContent=`LiDAR: ${count} points`;realTeleopSetState('real-lidar-state',`LIVE /scan · ${Number(message.data?.hz||0).toFixed(1)} Hz`,true);realTeleopDrawMap();}else if(message.type==='error')realTeleopSetState('real-lidar-state',message.message||'LiDAR stream error');};socket.onclose=()=>{if(realLidarSocket===socket)realTeleopCloseLidarStream();};
+  if(realLidarPending)return;
+  if(realLidarRunning){const modelId=realLidarSocket?.modelId||document.getElementById('real-lidar-model')?.value,port=realLidarPort;realLidarPending={port};realTeleopCloseLidarStream();const result=await API('/api/lidar/driver',{sessionId,modelId,port,action:'stop'}).catch(error=>({ok:false,error:error.message}));realLidarPending=null;realTeleopSetState('real-lidar-state',result?.ok?'LiDAR หยุดแล้ว':result?.error||'หยุด LiDAR ไม่สำเร็จ');return;}
+  const modelId=document.getElementById('real-lidar-model')?.value,model=(typeof LIDAR_MODELS==='undefined'?[]:LIDAR_MODELS).find(item=>item.id===modelId),port=document.getElementById('real-lidar-port')?.value;if(!model)return realTeleopSetState('real-lidar-state','กรุณาเลือกรุ่น LiDAR');if(!port)return realTeleopSetState('real-lidar-state','กรุณาเลือก COM port ของ LiDAR');if(port===realControllerPort)return realTeleopSetState('real-lidar-state','Controller และ LiDAR ต้องใช้คนละ COM port');realTeleopSetState('real-lidar-state','กำลังเปิด Driver และ /scan…');
+  if(port===realControllerPending?.port)return realTeleopSetState('real-lidar-state','Controller และ LiDAR ต้องใช้คนละ COM port');
+  const pending={port,sessionId};realLidarPending=pending;realLidarPort=port;
+  const result=await API('/api/lidar/driver',{sessionId,modelId,port,baud:Number(realDriveLidar.modelId===modelId?realDriveLidar.baud:model.baud)||Number(model.baud)||undefined,frameId:realDriveLidar.frameId||'laser_frame',action:'start'}).catch(error=>({ok:false,error:error.message}));
+  if(pending.cancelled){await API('/api/lidar/driver',{sessionId:pending.sessionId,modelId,port,action:'stop'}).catch(()=>null);realLidarPending=null;realLidarPort='';return;}
+  realLidarPending=null;if(!result?.ok){realLidarPort='';return realTeleopSetState('real-lidar-state',[result?.stage&&`[${result.stage}]`,result?.error||'เปิด LiDAR ไม่สำเร็จ',result?.output?.slice(-3000)].filter(Boolean).join('\n'));}
+  if(result.frameId)realDriveLidar.frameId=result.frameId;
+  const proto=location.protocol==='https:'?'wss:':'ws:',socket=new WebSocket(`${proto}//${location.host}/ws/lidar`,['ros2ide',getAuthToken()]);realLidarSocket=socket;socket.modelId=modelId;realLidarRunning=true;document.getElementById('real-lidar-connect').textContent='ปิด LiDAR';socket.onopen=()=>socket.send(JSON.stringify({type:'start',sessionId}));socket.onmessage=event=>{let message;try{message=JSON.parse(event.data);}catch(_){return;}if(message.type==='scan'){realDriveScan=message.data;const count=message.data?.ranges?.filter(Number.isFinite).length||0;document.getElementById('real-map-lidar').textContent=`LiDAR: ${count} points`;realTeleopSetState('real-lidar-state',`LIVE /scan · ${Number(message.data?.hz||0).toFixed(1)} Hz`,true);realTeleopDrawMap();}else if(message.type==='error')realTeleopSetState('real-lidar-state',message.message||'LiDAR stream error');};socket.onclose=()=>{if(realLidarSocket===socket)realTeleopCloseLidarStream();};
 }
-function realTeleopCloseLidarStream(){try{realLidarSocket?.close();}catch(_){}realLidarSocket=null;realLidarRunning=false;const button=document.getElementById('real-lidar-connect');if(button)button.textContent='เปิด LiDAR';}
+function realTeleopCloseLidarStream(){const socket=realLidarSocket;realLidarSocket=null;try{socket?.close();}catch(_){}realLidarRunning=false;realLidarPort='';const button=document.getElementById('real-lidar-connect');if(button)button.textContent='เปิด LiDAR';}
+function realTeleopZoomMap(event){
+  event.preventDefault();
+  realTeleopMapExtent=Math.max(.5,Math.min(40,realTeleopMapExtent*(event.deltaY<0?1/1.2:1.2)));
+  realTeleopDrawMap();
+}
 function realTeleopDrawMap(){
   const canvas=document.getElementById('real-teleop-map');if(!canvas)return;const rect=canvas.getBoundingClientRect(),dpr=Math.min(devicePixelRatio||1,2),w=Math.max(320,rect.width),h=Math.max(360,rect.height);if(canvas.width!==Math.round(w*dpr)||canvas.height!==Math.round(h*dpr)){canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);}const ctx=canvas.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);ctx.fillStyle='#0b1220';ctx.fillRect(0,0,w,h);
-  const points=[...realOdomTrail,{x:realOdom.x,y:realOdom.y}],scanExtent=(realDriveScan?.ranges||[]).reduce((max,value)=>Number.isFinite(value)&&value>0?Math.max(max,value):max,0),extent=Math.max(2,...points.flatMap(p=>[Math.abs(p.x),Math.abs(p.y)]),scanExtent),scale=Math.min(w,h)*.42/extent,cx=w/2,cy=h/2;ctx.strokeStyle='#20314a';ctx.lineWidth=1;for(let m=-Math.ceil(extent);m<=Math.ceil(extent);m++){ctx.beginPath();ctx.moveTo(cx+m*scale,0);ctx.lineTo(cx+m*scale,h);ctx.stroke();ctx.beginPath();ctx.moveTo(0,cy-m*scale);ctx.lineTo(w,cy-m*scale);ctx.stroke();}
+  const extent=realTeleopMapExtent,scale=Math.min(w,h)*.42/extent,cx=w/2,cy=h/2;ctx.strokeStyle='#20314a';ctx.lineWidth=1;for(let m=-Math.ceil(extent);m<=Math.ceil(extent);m++){ctx.beginPath();ctx.moveTo(cx+m*scale,0);ctx.lineTo(cx+m*scale,h);ctx.stroke();ctx.beginPath();ctx.moveTo(0,cy-m*scale);ctx.lineTo(w,cy-m*scale);ctx.stroke();}
   if(realOdomTrail.length){ctx.strokeStyle='#4f8ef7';ctx.lineWidth=2;ctx.beginPath();realOdomTrail.forEach((p,i)=>{const x=cx+p.x*scale,y=cy-p.y*scale;i?ctx.lineTo(x,y):ctx.moveTo(x,y);});ctx.stroke();}
-  if(realDriveScan?.ranges?.length){ctx.fillStyle='#3ecf8e';const start=Number(realDriveScan.angleMin)||-Math.PI,inc=Number(realDriveScan.angleIncrement)||Math.PI*2/realDriveScan.ranges.length;for(let i=0;i<realDriveScan.ranges.length;i+=Math.max(1,Math.floor(realDriveScan.ranges.length/720))){const r=realDriveScan.ranges[i];if(!Number.isFinite(r)||r<=0||r>extent)continue;const a=realOdom.yaw+start+i*inc,x=cx+(realOdom.x+Math.cos(a)*r)*scale,y=cy-(realOdom.y+Math.sin(a)*r)*scale;ctx.fillRect(x-1,y-1,2,2);}}
-  ctx.save();ctx.translate(cx+realOdom.x*scale,cy-realOdom.y*scale);ctx.rotate(-realOdom.yaw);ctx.fillStyle='#ffb653';ctx.beginPath();ctx.moveTo(14,0);ctx.lineTo(-9,-8);ctx.lineTo(-9,8);ctx.closePath();ctx.fill();ctx.restore();const label=document.getElementById('real-map-scale');if(label)label.textContent=`ODOM path · ±${extent.toFixed(1)} m`;
+  if(realDriveScan?.ranges?.length){ctx.fillStyle='#3ecf8e';const start=Number.isFinite(realDriveScan.angleMin)?realDriveScan.angleMin:-Math.PI,inc=Number.isFinite(realDriveScan.angleIncrement)?realDriveScan.angleIncrement:Math.PI*2/realDriveScan.ranges.length,transform=RealScanTF.resolve(realDriveTfModel,realDriveScan.frame||realDriveLidar.frameId||'laser_frame');if(transform)for(let i=0;i<realDriveScan.ranges.length;i+=Math.max(1,Math.floor(realDriveScan.ranges.length/720))){const r=realDriveScan.ranges[i];if(!Number.isFinite(r)||r<=0)continue;const local=RealScanTF.point(transform,r,start+i*inc),world=RealScanTF.world(local,realOdom),x=cx+world.x*scale,y=cy-world.y*scale;ctx.fillRect(x-1,y-1,2,2);}}
+  ctx.save();ctx.translate(cx+realOdom.x*scale,cy-realOdom.y*scale);ctx.rotate(-realOdom.yaw);ctx.fillStyle='#ffb653';ctx.beginPath();ctx.moveTo(14,0);ctx.lineTo(-9,-8);ctx.lineTo(-9,8);ctx.closePath();ctx.fill();ctx.restore();const label=document.getElementById('real-map-scale');if(label)label.textContent=`ODOM path · ±${extent.toFixed(1)} m · ล้อเมาส์ซูม`;
 }
 
 function realTeleopBind(){
   if(realTeleopBound)return;
   realTeleopBound=true;
+  document.getElementById('real-teleop-map')?.addEventListener('wheel',realTeleopZoomMap,{passive:false});
   document.querySelectorAll('#real-teleop-modal .real-teleop-btn[data-dir]').forEach(button=>{
     const direction=button.dataset.dir;
     let heldPointer=null;
@@ -788,14 +940,12 @@ function realTeleopBind(){
       heldPointer=event.pointerId;
       try{button.setPointerCapture(event.pointerId);}catch(_){ }
       realTeleopSetDirection(direction,true);
-      realTeleopUpdateStatus('กำลังส่งคำสั่ง /cmd_vel — ปล่อยปุ่มเพื่อหยุด',true);
     };
     const up=event=>{
       if(heldPointer===null)return;
       event.preventDefault();
       heldPointer=null;
       realTeleopSetDirection(direction,false);
-      realTeleopUpdateStatus('ปล่อยปุ่มแล้ว — หุ่นยนต์หยุด',false);
     };
     button.addEventListener('pointerdown',down);
     button.addEventListener('pointerup',up);
@@ -809,25 +959,24 @@ function realTeleopBind(){
   document.addEventListener('visibilitychange',()=>{
     if(document.hidden&&!document.getElementById('real-teleop-modal')?.classList.contains('hidden'))realTeleopStop('เปลี่ยนหน้าจอ — สั่งหยุดอัตโนมัติ');
   });
-  const keyDirections={w:'fwd',arrowup:'fwd',s:'back',arrowdown:'back',a:'left',arrowleft:'left',d:'right',arrowright:'right'};
+
   window.addEventListener('keydown',event=>{
     if(document.getElementById('real-teleop-modal')?.classList.contains('hidden'))return;
-    const active=document.activeElement;
-    if(active&&/INPUT|SELECT|TEXTAREA/.test(active.tagName))return;
     if(event.code==='Space'){
       event.preventDefault();
       realTeleopStop('กด Space — หุ่นยนต์หยุดทันที');
       return;
     }
-    const direction=keyDirections[String(event.key).toLowerCase()];
+    const active=document.activeElement;
+    if(active&&/INPUT|SELECT|TEXTAREA/.test(active.tagName))return;
+    const direction=realTeleopKeyDirection(event.key);
     if(!direction||event.repeat)return;
     event.preventDefault();
     realTeleopSetDirection(direction,true);
-    realTeleopUpdateStatus('กำลังควบคุมด้วยคีย์บอร์ด — ปล่อยปุ่มเพื่อหยุด',true);
   });
   window.addEventListener('keyup',event=>{
     if(document.getElementById('real-teleop-modal')?.classList.contains('hidden'))return;
-    const direction=keyDirections[String(event.key).toLowerCase()];
+    const direction=realTeleopKeyDirection(event.key);
     if(!direction)return;
     event.preventDefault();
     realTeleopSetDirection(direction,false);
@@ -850,7 +999,9 @@ function openRealRobotTeleop(){
 
 function closeRealRobotTeleop(){
   realTeleopStop('ปิดรีโมตแล้ว — หุ่นยนต์หยุด');
-  const stopLidar=realLidarRunning,modelId=document.getElementById('real-lidar-model')?.value,port=document.getElementById('real-lidar-port')?.value;
+  if(realControllerPending)realControllerPending.cancelled=true;if(realLidarPending)realLidarPending.cancelled=true;
+  realControllerPort='';
+  const stopLidar=realLidarRunning,modelId=realLidarSocket?.modelId||document.getElementById('real-lidar-model')?.value,port=realLidarPort;
   try{realControllerSocket?.close();}catch(_){}realControllerSocket=null;realControllerConnected=false;realTeleopCloseLidarStream();if(stopLidar&&modelId)API('/api/lidar/driver',{sessionId,modelId,port,action:'stop'}).catch(()=>null);
   const modal=document.getElementById('real-teleop-modal');
   modal?.classList.remove('open');
@@ -910,7 +1061,7 @@ async function killNode(name) {
 // ══ Auto-refresh dashboard (ให้เห็น node ที่กำลังรันแบบ live) ══
 function startDashAutoRefresh() {
   if (!sessionId) return;
-  if (!dashInterval) dashInterval = setInterval(loadDashboard, 5000);
+  if (!dashInterval) dashInterval = setInterval(loadDashboard, 2500);
   loadDashboard();
 }
 function stopDashAutoRefresh() {

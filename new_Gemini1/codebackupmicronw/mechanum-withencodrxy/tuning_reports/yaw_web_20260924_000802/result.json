@@ -1,0 +1,24 @@
+{
+  "parameters": {
+    "base": "http://127.0.0.1:8001",
+    "kp": 5.0,
+    "kd": 0.2,
+    "max_wz": 1.2,
+    "angle_deg": 90.0,
+    "return_to_zero": false,
+    "absolute_cycle": true,
+    "run": true
+  },
+  "prehome": {
+    "time_s": 9.094005696002569,
+    "overshoot_deg": 2.039729750665728,
+    "final_error_deg": 0.8766254265501595
+  },
+  "outbound": {
+    "time_s": 5.596325821999926,
+    "overshoot_deg": 6.125129289098211,
+    "final_error_deg": -1.1461260494113592
+  },
+  "fault": "90_to_0: did not settle within 10 s",
+  "samples": 338
+}

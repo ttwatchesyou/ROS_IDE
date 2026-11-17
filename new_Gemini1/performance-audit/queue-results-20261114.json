@@ -1,0 +1,23 @@
+[
+  {
+    "queuedJobs": 20,
+    "positionLookups": 20,
+    "totalMs": 31.079888999999994,
+    "msPerLookup": 1.5539944499999998,
+    "readsPerLookup": 40
+  },
+  {
+    "queuedJobs": 100,
+    "positionLookups": 20,
+    "totalMs": 54.46745299999999,
+    "msPerLookup": 2.7233726499999995,
+    "readsPerLookup": 200
+  },
+  {
+    "queuedJobs": 230,
+    "positionLookups": 20,
+    "totalMs": 99.79315600000001,
+    "msPerLookup": 4.989657800000001,
+    "readsPerLookup": 460
+  }
+]

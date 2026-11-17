@@ -1,0 +1,56 @@
+{
+  "parameters": {
+    "axis": "x",
+    "distance": -0.9797,
+    "speed": 2.0,
+    "kp": 5.0,
+    "ki": 0.0,
+    "kd": 0.1,
+    "cross_kp": 6.0,
+    "cross_ki": 0.0,
+    "cross_kd": 0.1,
+    "yaw_kp": 9.5,
+    "yaw_kd": 0.4,
+    "yaw_max": 1.5,
+    "yaw_target": 0.0,
+    "firmware_defaults": false,
+    "allow_unattained_cap": true,
+    "base": "http://127.0.0.1:8001",
+    "run": true,
+    "robot_centered": false,
+    "workspace_origin_at_center": false,
+    "verified_corridor": true,
+    "one_way": true
+  },
+  "attainable_command_cap_mps": 0.6963117118072911,
+  "requested_cap_reached_by_envelope": false,
+  "legs": [
+    {
+      "leg": "outbound",
+      "time_s": 3.5184039040032076,
+      "final_position_error_m": 0.020012246250733574,
+      "peak_overshoot_m": 0.0,
+      "peak_yaw_error_deg": 1.4381240657783663,
+      "peak_off_axis_m": 0.0031999999999999997,
+      "peak_measured_speed_mps": 0.7540663100813748,
+      "post_stop_drift_m": 0.000899999999999998,
+      "post_stop_axis_shift_m": 0.000899999999999998,
+      "post_stop_final_position_error_m": 0.0209117192023994
+    }
+  ],
+  "origin": {
+    "goal_x": 1.0,
+    "goal_y": 0.0,
+    "goal_yaw": 0.0,
+    "imu_ok": true,
+    "position_active": false,
+    "x": 0.9797,
+    "y": -0.0019,
+    "yaw": 0.0148
+  },
+  "last_target": {
+    "x": 0.0,
+    "y": -0.0019,
+    "yaw": 0.0
+  }
+}

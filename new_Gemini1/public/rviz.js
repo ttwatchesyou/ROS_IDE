@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════
 //  RVIZ 3D — v5 (True TF Graph Implementation)
-//  - Realtime: persistent Python process stream ผ่าน /api/exec
+//  - Realtime: authenticated WebSocket stream ผ่าน /ws/rviz
 //  - Bidirectional TF: คำนวณ Fixed Frame ได้สมบูรณ์ 100% เหมือน RViz จริง
 //  - ROS→Three: r2t(rx,ry,rz) = (-ry, rz, -rx)
 // ═══════════════════════════════════════════════════════════════
@@ -22,7 +22,8 @@ const rvizCam={theta:Math.PI/4,phi:Math.PI/3,radius:8,
   target:{x:0,y:0,z:0},drag:false,rightDrag:false,lx:0,ly:0};
 const rvizToolState={name:'interact',start:null,preview:null,selection:null};
 
-let _live=false, _streamPid=null, _pingTimer=null, _pingFails=0;
+let _live=false, _rvizSocket=null, _rvizReconnectTimer=null, _rvizStreamEpoch=0, _rvizReconnectAttempt=0;
+let _rvizHealth={epoch:0,transport:false,runtime:false,tf:false,odom:false,scan:false,map:false,path:false,desc:false};
 let _setupBash='/opt/ros/humble/setup.bash';
 const _tfStore=new Map(), _texCache=new Map();
 let displayList=[], _nid=1;
@@ -62,7 +63,7 @@ function _resetVisuals(){
   });
   // dispose texture ของ label ทั้งหมด (ไม่ถูกอ้างอิงแล้วหลังลบ sprite) แล้วล้าง cache
   if(_texCache instanceof Map){ _texCache.forEach(t=>t.dispose&&t.dispose()); _texCache.clear(); }
-  rviz3d.worldTFs=new Map();
+  rviz3d.worldTFs=new Map();rviz3d.robotPos.received=false;
 }
 
 // ── ตัดการเชื่อมต่อเมื่อ backend หาย (node ดับ / session ตาย) ──
@@ -70,7 +71,7 @@ function _resetVisuals(){
 function _dropConnection(msg){
   if(!_live) return;
   _live=false;
-  clearInterval(_pingTimer); _pingTimer=null;
+  _closeRvizStream('connection-dropped');
   _resetVisuals();                 // ล้างแกน TF / โมเดล / เส้นทั้งหมด → ไม่ค้างภาพเก่า
   _badge('Disconnected','br','dr');
   const b=document.getElementById('btn-rviz-connect');
@@ -301,6 +302,12 @@ function _setRobotModelStatus(text){
   });
 }
 
+function _normalizeRobotDescription(urdf){
+  // Robot Config builds before 2026-09 stored XML attributes as \"value\".
+  // Repair only that legacy quote encoding; keep every other URDF byte intact.
+  return String(urdf||'').replace(/\\"/g,'"');
+}
+
 // ── ตัวช่วยคณิตศาสตร์ TF ในพิกัด ROS (x=หน้า, y=ซ้าย, z=ขึ้น) ──
 // คูณ pose (p=ตำแหน่ง, q=ควอเทอร์เนียน ROS) แบบ ROS: pa ∘ pb
 function _se3Compose(pa, qa, pb, qb) {
@@ -401,16 +408,31 @@ function _parseURDF(urdf){
           }
         }
       }
-      if(geo) visuals.push({ origin:_parseOrigin(oriEl), geo, mat });
+      if(geo) visuals.push({ name:v.getAttribute('name')||'', origin:_parseOrigin(oriEl), geo, mat });
     });
-    links[name] = { visuals };
+    let wheel=null;
+    const marker=visuals.map(v=>v.name.match(/^roside_wheel_(standard|omni|mecanum)_([\d.]+)_(-?1)$/)).find(Boolean);
+    if(marker){
+      wheel={radius:Number(marker[2]),axis:marker[1]==='standard'?[0,0,1]:[0,-1,0],hand:marker[1]==='mecanum'?Number(marker[3]):0};
+    }else if(/wheel|mecanum|omni/i.test(name)&&!/encoder|motor|sensor|laser|lidar|caster/i.test(name)){
+      // Older saved robots have no visual marker; use their cylinder envelope.
+      const collision=_localFirst(l,'collision'),cylinder=_localFirst(_localFirst(collision,'geometry'),'cylinder');
+      const visual=visuals.filter(v=>v.geo.type==='cylinder').sort((a,b)=>b.geo.radius-a.geo.radius)[0];
+      const radius=cylinder?Number(cylinder.getAttribute('radius')):visual?.geo.radius;
+      const origin=cylinder?_parseOrigin(_localFirst(collision,'origin')):visual?.origin;
+      if(radius>0&&origin){
+        const q=_rpyToQuat(origin.roll,origin.pitch,origin.yaw),axis=new THREE.Vector3(0,0,1).applyQuaternion(new THREE.Quaternion(...q));
+        wheel={radius,axis:[axis.x,axis.y,axis.z],hand:/mecanum/i.test(name)?(/(?:fl|rr)$/i.test(name)?-1:1):0};
+      }
+    }
+    links[name] = { visuals, wheel };
   });
   const joints = {};
   _localChildren(robot, 'joint').forEach(j => {
     const childEl  = _localFirst(j, 'child'), parentEl = _localFirst(j, 'parent');
     const child  = childEl  && childEl.getAttribute('link');
     const parent = parentEl && parentEl.getAttribute('link');
-    if(child && parent) joints[child] = { parent, origin:_parseOrigin(_localFirst(j, 'origin')) };
+    if(child && parent) joints[child] = { parent, type:j.getAttribute('type')||'fixed', origin:_parseOrigin(_localFirst(j, 'origin')) };
   });
   return { links, joints };
 }
@@ -435,8 +457,8 @@ function _linkPose(parsed, name) {
   let p = [0,0,0], q = [0,0,0,1];
   for (let i = 1; i < chain.length; i++) {
     const o = parsed.joints[chain[i]].origin;
-    const lp = _poseXYZRPY(o.x, o.y, o.z, o.roll, o.pitch, o.yaw);
-    const c = _se3Compose(p, q, lp.p, lp.q);
+    const [lp,lq] = _poseXYZRPY(o.x, o.y, o.z, o.roll, o.pitch, o.yaw);
+    const c = _se3Compose(p, q, lp, lq);
     p = c[0]; q = c[1];
   }
   return { p, q };
@@ -454,6 +476,15 @@ function _makeVisualMesh(geo, mat, alpha) {
   const op = baseOp * a;
   const color = (mat && mat.color) ? new THREE.Color(mat.color) : new THREE.Color(0x9aa0a6);
   const m = new THREE.MeshStandardMaterial({ color, roughness:0.7, metalness:0.1, transparent:op<1, opacity:op, side:THREE.DoubleSide });
+  if (geo.type === 'mesh' && typeof isSimWorkspace !== 'undefined' && isSimWorkspace === false && typeof RobotModelAssets !== 'undefined') {
+    const modelSession = sessionId;
+    const generated = RobotModelAssets.load(geo, m, THREE, {
+      sessionId:modelSession, workspace:typeof wsPath === 'string' ? wsPath : '~/ros2_ws', read:API,
+      isCurrent:()=>sessionId === modelSession && isSimWorkspace === false,
+      onError:error=>_setRobotModelStatus('⚠️ โหลดรูปทรง 3D ไม่สำเร็จ: '+error.message),
+    });
+    if (generated) return generated;
+  }
   let mesh = null;
   if (geo.type === 'box')      mesh = new THREE.Mesh(new THREE.BoxGeometry(geo.size[1], geo.size[2], geo.size[0]), m);
   else if (geo.type === 'cylinder') { const g = new THREE.CylinderGeometry(geo.radius, geo.radius, geo.length, 24); mesh = new THREE.Mesh(g, m); }
@@ -496,6 +527,14 @@ function _mkRobotModel(props) {
       lg.add(vg);
       visualCount++;
     });
+    const wheel=parsed.links[name].wheel;
+    // Moving URDF joints already get their rotation from live TF; do not double it.
+    if(wheel?.radius>0&&parsed.joints[name]?.type==='fixed'){
+      const spin=new THREE.Group();spin.name='wheel-spin';
+      for(const visual of [...lg.children])spin.add(visual);
+      lg.add(spin);
+      lg.userData.wheel={...wheel,axis:r2t(...wheel.axis).normalize(),angle:0,previous:null,spin};
+    }
     g.add(lg);
   }
   console.log('[RVIZ] _mkRobotModel:', Object.keys(parsed.links).length, 'links,', visualCount, 'meshes (per-link TF binding)');
@@ -519,6 +558,7 @@ function _rebuildRobotModels() {
 
 // รับ URDF จาก /robot_description → อัปเดตสถานะ + สร้างโมเดล
 function _applyRobotDescription(urdf){
+  urdf=_normalizeRobotDescription(urdf);
   _robotDesc = urdf;
   console.log('[RVIZ] _applyRobotDescription called, urdf length:', urdf ? urdf.length : 0);
   if(!urdf || !urdf.trim()){
@@ -556,7 +596,9 @@ function rvizWorkspaceBackground(){
   return getComputedStyle(document.documentElement).getPropertyValue('--bg0').trim()||'#1a1d27';
 }
 function rvizApplyWorkspaceTheme(){
-  if(rviz3d.renderer)rviz3d.renderer.setClearColor(rvizWorkspaceBackground(),1);
+  const color=rviz3d.playgroundDecor?(getComputedStyle(document.documentElement).getPropertyValue('--bg2').trim()||'#111622'):rvizWorkspaceBackground();
+  if(rviz3d.renderer)rviz3d.renderer.setClearColor(color,1);
+  if(rviz3d.playgroundDecor&&rviz3d.scene?.fog)rviz3d.scene.fog.color.set(color);
 }
 window.addEventListener('roside-theme-change',rvizApplyWorkspaceTheme);
 
@@ -587,7 +629,7 @@ function _initThree(){
     const dt=rviz3d.lastRenderT?Math.min(.05,(now-rviz3d.lastRenderT)/1000):1/60;
     rviz3d.lastRenderT=now;rviz3d.renderFrames++;
     _smoothDynamicVisuals(dt);
-    _camUpdate();
+    _camUpdate(dt);
     rviz3d.renderer.render(rviz3d.scene,rviz3d.camera);
     if(now-rviz3d.lastFpsT>1000){
       const el=document.getElementById('rviz-fps');
@@ -604,8 +646,9 @@ function _initThree(){
 // ═══════════════════════════════════════════════════════════════
 //  CAMERA & TOUCH CONTROLS
 // ═══════════════════════════════════════════════════════════════
-function _camUpdate(){
+function _camUpdate(dt=1/60){
   const c=rviz3d.camera; if(!c) return;
+  if(typeof playgroundUpdateCamera==='function'&&playgroundUpdateCamera(dt))return;
   const {theta,phi,radius,target}=rvizCam;
   c.position.set(
     target.x+radius*Math.sin(phi)*Math.sin(theta),
@@ -682,6 +725,7 @@ function _bindCam(el){
   let _pinchStartDist = null;
 
   const startDrag = (x, y, isRightClick) => {
+    if(typeof playgroundCameraFollowing==='function'&&playgroundCameraFollowing())return;
     rvizCam.drag = true;
     rvizCam.rightDrag = isRightClick;
     rvizCam.lx = x;
@@ -774,7 +818,7 @@ function _bindCam(el){
       
       if(_pinchStartDist) {
         const zoomDelta = _pinchStartDist / dist;
-        rvizCam.radius = Math.max(0.3, Math.min(300, rvizCam.radius * zoomDelta));
+        if(typeof playgroundCameraZoom!=='function'||!playgroundCameraZoom(zoomDelta))rvizCam.radius = Math.max(0.3, Math.min(300, rvizCam.radius * zoomDelta));
         _pinchStartDist = dist; // อัปเดตระยะล่าสุด
       }
       
@@ -800,15 +844,17 @@ function _bindCam(el){
   // ── MOUSE WHEEL ZOOM ──
   el.addEventListener('wheel', e => {
     e.preventDefault();
-    rvizCam.radius = Math.max(0.3, Math.min(300, rvizCam.radius * (e.deltaY > 0 ? 1.12 : 0.88)));
+    const factor=e.deltaY>0?1.12:.88;
+    if(typeof playgroundCameraZoom!=='function'||!playgroundCameraZoom(factor))rvizCam.radius = Math.max(0.3, Math.min(300, rvizCam.radius * factor));
   }, {passive: false});
 
   el.addEventListener('contextmenu', e => e.preventDefault());
 }
 
+function rvizResize(){_resize();}
 function _resize(){
   const c=document.getElementById('rviz-3d-container');
-  if(!c||!rviz3d.renderer) return;
+  if(!c||!rviz3d.renderer||!c.offsetWidth||!c.offsetHeight) return;
   rviz3d.renderer.setSize(c.offsetWidth,c.offsetHeight);
   if(rviz3d.camera){rviz3d.camera.aspect=c.offsetWidth/c.offsetHeight;rviz3d.camera.updateProjectionMatrix();}
 }
@@ -826,8 +872,7 @@ async function rvizConnect(){
   const btn=document.getElementById('btn-rviz-connect');
   if(_live){
     _live=false;
-    clearInterval(_pingTimer); _pingTimer=null;
-    await API('/api/exec',{sessionId,command:'PID=$(cat /tmp/_rviz_rt.pid 2>/dev/null); [ -n "$PID" ] && kill $PID 2>/dev/null; for p in $(pgrep -f "_rviz_rt[.]py" 2>/dev/null); do [ "$p" != "$$" ] && kill $p 2>/dev/null; done; rm -f /tmp/_rviz_rt.pid; true',timeout:2000}).catch(()=>{});
+    _closeRvizStream('user-disconnect');
     if(btn){btn.textContent='▶ Connect';btn.className='btn btn-g';}
     rvizTeleopStop();   // หยุดส่ง cmd_vel ตอนตัดการเชื่อมต่อ (กันหุ่นวิ่งต่อ)
     rvizTeleopStopProcOnly();  // ฆ่า node persistent ด้วย (คืนลาดตระเวนอัตโนมัติให้หุ่น)
@@ -843,218 +888,173 @@ async function rvizConnect(){
   { const el=document.getElementById('rviz-fixed-frame-display'); if(el) el.textContent='odom';
     const sel=document.getElementById('rviz-fixed-frame-sel'); if(sel) sel.value='odom'; }
   if(displayList.some(d=>d.type==='RobotModel')) _setRobotModelStatus('กำลังรอรับ /robot_description…');
-  await _startStream();
-  rvizTeleopEnsureNode();   // pre-spawn node ล่วงหน้า → กดปุ่มครั้งแรกตอบสนองทันที (ไม่มีดีเลย์สปาวน์)
+  return await _startStream();
 }
 
 async function _startStream(){
-  if(!sessionId||!_live) return;
-  // 🧹 ล้าง state เก่าก่อนเริ่มสตรีมใหม่ — กันของเก่ากระพิบหลังอัพเดท tf/model หรือ ปิดเปิดใหม่
+  if(!sessionId||!_live) return false;
+  _closeRvizStream('stream-restart');
+
+  // ล้าง state จาก runtime ก่อนหน้า เพื่อไม่ให้ TF/โมเดลของการเชื่อมต่อเก่าค้างใน scene
   _tfStore.clear();
-  rviz3d.lastMapSig = null;
-  _robotDesc      = null;   // ล้าง URDF เก่า กันโมเดลเก่ากลับมาแสดงหลังอัพเดท
-  _robotDescSig   = null;
-  _pingFails      = 0;      // รีเซ็ตตัวนับความล้มเหลวของ ping loop
-  _resetVisuals();          // ล้างแกน TF / โมเดล / เส้นเก่าใน scene ทั้งหมด ก่อนเริ่มสตรีมใหม่
+  rviz3d.lastMapSig=null;
+  _robotDesc=null;
+  _robotDescSig=null;
+  _resetVisuals();
 
-  // TF data is also required by RobotModel/LaserScan/Odometry even when the
-  // visible TF axes are hidden (Playground hides them to keep the view clean).
-  const tfEnabled   = displayList.some(d=>d.enabled&&['TF','RobotModel','LaserScan','Odometry'].includes(d.type));
-  const odomEnabled = displayList.some(d=>(d.type==='Odometry'||d.type==='RobotModel')&&d.enabled);
-  const scanEnabled = displayList.some(d=>d.type==='LaserScan'&&d.enabled);
-  const mapEnabled  = displayList.some(d=>d.type==='Map'&&d.enabled);
-  const pathEnabled = displayList.some(d=>d.type==='Path'&&d.enabled);
-  const odomTopic   = displayList.find(d=>d.type==='Odometry'&&d.enabled)?.props.topic||'/odom';
-  const scanTopic   = displayList.find(d=>d.type==='LaserScan'&&d.enabled)?.props.topic||'/scan';
-  const mapTopic    = displayList.find(d=>d.type==='Map'&&d.enabled)?.props.topic||'/map';
-  const pathTopic   = displayList.find(d=>d.type==='Path'&&d.enabled)?.props.topic||'/plan';
+  const odomEnabled=displayList.some(d=>(d.type==='Odometry'||d.type==='RobotModel')&&d.enabled);
+  const scanEnabled=displayList.some(d=>d.type==='LaserScan'&&d.enabled);
+  const mapEnabled=displayList.some(d=>d.type==='Map'&&d.enabled);
+  const pathEnabled=displayList.some(d=>d.type==='Path'&&d.enabled);
+  const odomTopic=displayList.find(d=>d.type==='Odometry'&&d.enabled)?.props.topic||'/odom';
+  const scanTopic=displayList.find(d=>d.type==='LaserScan'&&d.enabled)?.props.topic||'/scan';
+  const mapTopic=displayList.find(d=>d.type==='Map'&&d.enabled)?.props.topic||'/map';
+  const pathTopic=displayList.find(d=>d.type==='Path'&&d.enabled)?.props.topic||'/plan';
 
-  const pyLines=[
-    "# ros2ide_rviz_rt",
-    "import rclpy,json,sys,math,threading,time,signal,os",
-    "from rclpy.node import Node",
-    "from rclpy.qos import QoSProfile,QoSReliabilityPolicy,QoSDurabilityPolicy",
-    "BE=QoSProfile(depth=1,reliability=QoSReliabilityPolicy.BEST_EFFORT,durability=QoSDurabilityPolicy.VOLATILE)",
-    "ST=QoSProfile(depth=100,reliability=QoSReliabilityPolicy.RELIABLE,durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)",
-    "buf={'tf':{},'odom':None,'scan':None,'map':None,'path':None,'tf_seen':{}}",
-    "lk=threading.Lock()",
-    "running=True",
-    "def stop(s,f): global running; running=False",
-    "signal.signal(signal.SIGTERM,stop)",
-    "signal.signal(signal.SIGINT,stop)",
-    "class N(Node):",
-    " def __init__(self):",
-    "  super().__init__('ros2ide_rviz_rt')",
-    ...(tfEnabled?[
-      "  from tf2_msgs.msg import TFMessage",
-      "  self.create_subscription(TFMessage,'/tf',self.cb_tf,BE)",
-      "  self.create_subscription(TFMessage,'/tf_static',self.cb_tf,ST)",
-    ]:[]),
-    ...(odomEnabled?[
-      "  from nav_msgs.msg import Odometry",
-     `  self.create_subscription(Odometry,'${odomTopic}',self.cb_od,BE)`,
-    ]:[]),
-    ...(scanEnabled?[
-      "  from sensor_msgs.msg import LaserScan",
-     `  self.create_subscription(LaserScan,'${scanTopic}',self.cb_sc,BE)`,
-    ]:[]),
-    ...(mapEnabled?[
-      "  from nav_msgs.msg import OccupancyGrid",
-     `  self.create_subscription(OccupancyGrid,'${mapTopic}',self.cb_map,ST)`,
-    ]:[]),
-    ...(pathEnabled?[
-      "  from nav_msgs.msg import Path",
-     `  self.create_subscription(Path,'${pathTopic}',self.cb_path,ST)`,
-    ]:[]),
-    ...(true?[
-      "  from std_msgs.msg import String",
-      "  self._last_desc=None",
-      "  self.create_subscription(String,'/robot_description',self.cb_desc,ST)",
-    ]:[]),
-    " def cb_tf(self,m):",
-    "  with lk:",
-    "   for t in m.transforms:",
-    "    tr,ro=t.transform.translation,t.transform.rotation",
-    "    buf['tf'][t.child_frame_id]={'frame':t.child_frame_id,'parent':t.header.frame_id,'x':tr.x,'y':tr.y,'z':tr.z,'qx':ro.x,'qy':ro.y,'qz':ro.z,'qw':ro.w}; buf['tf_seen'][t.child_frame_id]=time.time()",
-    " def cb_od(self,m):",
-    "  p=m.pose.pose",
-    "  with lk: buf['odom']={'x':p.position.x,'y':p.position.y,'qz':p.orientation.z,'qw':p.orientation.w}",
-    " def cb_sc(self,m):",
-    "  r=[float(v) if not(math.isinf(v) or math.isnan(v)) else 0.0 for v in m.ranges]",
-    "  st=max(1,len(r)//360)",
-    "  with lk: buf['scan']={'amin':m.angle_min,'ainc':m.angle_increment*st,'ranges':r[::st]}",
-    " def cb_map(self,m):",
-    "  with lk: buf['map']={'w':m.info.width,'h':m.info.height,'res':m.info.resolution,'ox':m.info.origin.position.x,'oy':m.info.origin.position.y,'data':list(m.data)}",
-    " def cb_path(self,m):",
-    "  with lk: buf['path']=[{'x':p.pose.position.x,'y':p.pose.position.y,'z':p.pose.position.z} for p in m.poses]",
-    " def cb_desc(self,m):",
-    "  if m.data:",
-    "   with lk: buf['desc']=m.data",
-    "   try: open('/tmp/_rviz_desc.urdf','w').write(m.data)",
-    "   except Exception: pass",
-    "rclpy.init()",
-    "n=N()",
-    "ex=rclpy.executors.SingleThreadedExecutor()",
-    "ex.add_node(n)",
-    "last=time.time()",
-    "hb=0",
-    "while running:",
-    " ex.spin_once(timeout_sec=0.05)",
-    " now=time.time()",
-    " if now-last>=0.1:",
-    "  last=now",
-    "  hb+=1",
-    "  try:",
-    "   if os.path.getsize('/tmp/_rviz_out.jsonl')>5_000_000:",
-    "    os.system(\"tail -n 300 /tmp/_rviz_out.jsonl > /tmp/_rviz_out.tmp 2>/dev/null && mv /tmp/_rviz_out.tmp /tmp/_rviz_out.jsonl\")",
-    "  except: pass",
-    "  with lk:",
-    "   for _k in list(buf['tf'].keys()):",
-    "    if now-buf['tf_seen'].get(_k,0)>8.0: buf['tf'].pop(_k,None); buf['tf_seen'].pop(_k,None)",
-    "   out={}",
-    "   if buf['tf']: out['tf']=list(buf['tf'].values())",
-    "   if buf['odom']: out['odom']=buf['odom']",
-    "   if buf['scan']: out['scan']=buf['scan']; buf['scan']=None",
-    "   if buf['map']: out['map']=buf['map']; buf['map']=None",
-    "   if buf['path'] is not None: out['path']=buf['path']; buf['path']=None",
-    "   d=buf.get('desc')",
-    "   if d and (d!=buf.get('_sent') or hb%8==0): out['desc']=d; buf['_sent']=d",
-    "  try:",
-    "   sys.stdout.write(json.dumps(out,separators=(',',':'))+'\\n')",
-    "   sys.stdout.flush()",
-    "  except: pass",
-    "n.destroy_node()",
-    "rclpy.shutdown()",
-  ];
-
-  const wRes=await API('/api/files/write',{
-    sessionId, path:'/tmp/_rviz_rt.py', content:pyLines.join('\n')
+  const epoch=++_rvizStreamEpoch;
+  _rvizHealth={epoch,transport:false,runtime:false,tf:false,odom:false,scan:false,map:false,path:false,desc:false};
+  const proto=location.protocol==='https:'?'wss:':'ws:';
+  let socket;
+  try{
+    socket=new WebSocket(`${proto}//${location.host}/ws/rviz`,['ros2ide',getAuthToken()]);
+  }catch(error){
+    _scheduleRvizReconnect(error?.message||'WebSocket unavailable');
+    return false;
+  }
+  _rvizSocket=socket;
+  let startupTimer=null,startupSettled=false;
+  const startupReady=new Promise(resolve=>{
+    const finish=value=>{if(startupSettled)return;startupSettled=true;clearTimeout(startupTimer);resolve(value);};
+    socket._settleRvizStartup=finish;
+    // Writing and compiling the bridge happens after the WebSocket opens.  Do
+    // not make callers spend their ROS-data timeout on that server-side work.
+    startupTimer=setTimeout(()=>finish(false),20000);
   });
-  if(!wRes?.ok){ _ovl('Cannot write streamer'); return; }
 
-  await API('/api/exec',{sessionId,command:'sleep 1; true',timeout:2000}).catch(()=>{});
-
-  // เริ่ม bridge แล้วจับ PID เก็บใน pidfile (root/tmp/_rviz_rt.pid สำหรับ SIM)
-  // ⚠️ ห้ามใช้ `pkill -f "python3 -u /tmp/_rviz_rt.py"` เพราะ pattern นี้ปรากฏใน command line ของ
-  //    shell ที่รันคำสั่งเอง → pkill จับคู่แล้วฆ่า shell แม่ → คำสั่ง abort แล้ว bridge ไม่รันเลย
-  // 🧹 ฆ่า streamer ตัวเก่าที่ค้างอยู่ทั้งหมด (ไม่พึ่งพาไฟล์ pid เด็ดขาด)
-  //   - ใช้ pgrep -f '_rviz_rt[.]py' (วงเล็บ [.] กันไม่ให้จับคู่ shell ที่รันคำสั่งนี้เอง)
-  //   - กรอง [ "$p" != "$$" ] กันฆ่า shell ตัวเอง (ตามคำเตือนใน sim.js)
-  //   - จำเป็นเพราะ process แบบ nohup จะรอดตายตอนปิด/รัน node ใหม่ → ถ้าไม่ฆ่าจะเขียน jsonl ปนกับตัวใหม่ → กระพิบ
-  const killStale=`for p in $(pgrep -f '_rviz_rt[.]py' 2>/dev/null); do [ "$p" != "$$" ] && kill $p 2>/dev/null; done`;
-  const startCmd=`source ${_setupBash} 2>/dev/null; OLD=$(cat /tmp/_rviz_rt.pid 2>/dev/null); [ -n "$OLD" ] && kill $OLD 2>/dev/null; ${killStale}; rm -f /tmp/_rviz_rt.pid /tmp/_rviz_out.jsonl /tmp/_rviz_desc.urdf; nohup python3 -u /tmp/_rviz_rt.py > /tmp/_rviz_out.jsonl 2>/dev/null & echo $! > /tmp/_rviz_rt.pid`;
-  const sRes=await API('/api/exec',{sessionId,command:startCmd,timeout:3000});
-  if(!sRes?.ok){ _ovl('Cannot start streamer'); return; }
-
-  await new Promise(r=>setTimeout(r,800));
-
-  clearInterval(_pingTimer);
-  _pingTimer=setInterval(async()=>{
-    if(!_live) return;
-    // ── ดึง URDF จากไฟล์เฉพาะโดยตรง (กันพลาด ไม่ขึ้นกับจังหวะ tail/heartbeat) ──
-    if(!_robotDescSig){
-      try{
-        const dr=await API('/api/exec',{sessionId,command:`cat /tmp/_rviz_desc.urdf 2>/dev/null`,timeout:2000});
-        if(dr?.ok && dr.stdout && dr.stdout.trim().length>20){
-          _robotDescSig=dr.stdout; _applyRobotDescription(dr.stdout);
-        }
-      }catch{}
+  socket.onopen=()=>{
+    if(!_live||_rvizSocket!==socket||epoch!==_rvizStreamEpoch){
+      try{socket.close(1000,'stale-stream');}catch{}
+      return;
     }
-    try{
-      const r=await API('/api/exec',{
-        sessionId,
-        command:`tail -n 40 /tmp/_rviz_out.jsonl 2>/dev/null`,
-        timeout:2000,
-      });
-      if(!r?.ok||!r.stdout){
-        if(++_pingFails>15) _dropConnection('เชื่อมต่อขาด — ดูเหมือน node ถูกปิด (เชื่อมต่อใหม่ได้เลย)');
-        return;
-      }
-      _pingFails=0;
-      const lines=r.stdout.trim().split('\n').filter(Boolean);
-      if(!lines.length) return;
-      rviz3d.msgCount++;
-      // tf / odom / scan → ใช้จากบรรทัดล่าสุด (ข้อมูลสดสุด)
-      const last=lines[lines.length-1];
-      const s=last.indexOf('{'),e=last.lastIndexOf('}');
-      if(s>=0&&e>s){
-        let p; try{p=JSON.parse(last.slice(s,e+1));}catch{p=null;}
-        if(p){
-          if(p.tf)   _applyTF(p.tf);
-          if(p.odom) _applyOdom(p.odom);
-          if(p.scan) _applyScan(p.scan);
-          if(p.map)  _applyMap(p.map);
-          if(Array.isArray(p.path)) _applyPath(p.path);
-        }
-      }
-      // desc (/robot_description) ถูกส่งแค่ครั้งเดียวตอน URDF เปลี่ยน → สแกนย้อนหลังทุกบรรทัด
-      // ห้ามใช้เฉพาะบรรทัดสุดท้าย เพราะบรรทัดนั้นมักเป็น tf/odom/scan ที่ไม่มี desc เลย
-      for(let i=lines.length-1;i>=0;i--){
-        const ls=lines[i]; const ds=ls.indexOf('{'),de=ls.lastIndexOf('}');
-        if(ds<0||de<=ds) continue;
-        let p; try{p=JSON.parse(ls.slice(ds,de+1));}catch{continue;}
-        if(p.desc && p.desc!==_robotDescSig){
-          _robotDescSig=p.desc; _applyRobotDescription(p.desc);
-          break;
-        }
-      }
-      _badge('Live','bg','dg');
-    }catch{
-      if(++_pingFails>15) _dropConnection('เชื่อมต่อขาด — ดูเหมือน node ถูกปิด (เชื่อมต่อใหม่ได้เลย)');
-    }
-  },150);
+    socket.send(JSON.stringify({
+      type:'start',
+      sessionId,
+      odom:odomEnabled?odomTopic:'none',
+      laser:scanEnabled?scanTopic:'none',
+      map:mapEnabled?mapTopic:'none',
+      path:pathEnabled?pathTopic:'none',
+    }));
+  };
 
-  _badge('Live','bg','dg');
+  socket.onmessage=event=>{
+    if(!_live||_rvizSocket!==socket||epoch!==_rvizStreamEpoch)return;
+    let message;
+    try{message=JSON.parse(event.data);}catch{return;}
+
+    if(message.type==='ready'){
+      if(_rvizHealth.epoch===epoch)_rvizHealth.transport=true;
+      socket._settleRvizStartup?.(true);
+      _rvizReconnectAttempt=0;
+      _badge('Connected','bg','dg');
+      _ovl('');
+      return;
+    }
+    if(message.type==='error'){
+      _dropConnection(message.message||'RViz stream error');
+      return;
+    }
+    if(message.type==='pty_closed'){
+      try{socket.close(1011,'stream-process-closed');}catch{}
+      return;
+    }
+    if(message.type!=='data')return;
+
+    socket._settleRvizStartup?.(true);
+
+    let p=message.data;
+    if(typeof p==='string'){try{p=JSON.parse(p);}catch{return;}}
+    if(!p||typeof p!=='object')return;
+    if(_rvizHealth.epoch!==epoch)return;
+    if(p.stream==='ready')_rvizHealth.runtime=true;
+    rviz3d.msgCount++;
+    if(p.tf){_rvizHealth.tf=true;_applyTF(p.tf);}
+    if(p.odom){_rvizHealth.odom=true;_applyOdom(p.odom);}
+    if(p.scan){_rvizHealth.scan=true;_applyScan(p.scan);}
+    if(p.map){_rvizHealth.map=true;_applyMap(p.map);}
+    if(Array.isArray(p.path)){_rvizHealth.path=true;_applyPath(p.path);}
+    if(p.nav_status&&typeof playgroundNavigationStatus==='function')playgroundNavigationStatus(p.nav_status);
+    if(p.desc){const normalized=_normalizeRobotDescription(p.desc);_rvizHealth.desc=true;if(normalized!==_robotDescSig){_robotDescSig=normalized;_applyRobotDescription(normalized);}}
+    _rvizReconnectAttempt=0;
+    _badge('Live','bg','dg');
+    _ovl('');
+  };
+
+  // onclose เป็นจุดเดียวที่เริ่ม reconnect; onerror ปล่อยให้ browser ปิด socket
+  // เพื่อไม่ให้เปิด socket ซ้อนกันระหว่าง error/close สอง event
+  socket.onerror=()=>{};
+  socket.onclose=()=>{
+    socket._settleRvizStartup?.(false);
+    if(_rvizSocket!==socket||epoch!==_rvizStreamEpoch)return;
+    _rvizSocket=null;
+    if(_live)_scheduleRvizReconnect('สตรีมขาดการเชื่อมต่อ');
+  };
+  return startupReady;
 }
 
 async function _restartStream(){
-  if(!_live) return;
-  clearInterval(_pingTimer);
-  await API('/api/exec',{sessionId,command:'PID=$(cat /tmp/_rviz_rt.pid 2>/dev/null); [ -n "$PID" ] && kill $PID 2>/dev/null; for p in $(pgrep -f "_rviz_rt[.]py" 2>/dev/null); do [ "$p" != "$$" ] && kill $p 2>/dev/null; done; rm -f /tmp/_rviz_rt.pid; true',timeout:1000}).catch(()=>{});
-  await new Promise(r=>setTimeout(r,300));
-  await _startStream();
-  rvizTeleopEnsureNode();   // pre-spawn node ใหม่หลัง restart stream (กันดีเลย์สปาวน์)
+  if(!_live) return false;
+  return await _startStream();
 }
+
+function rvizWaitForData(required=['runtime','tf','odom','desc'],timeoutMs=10000){
+  const epoch=_rvizHealth.epoch,needs=[...new Set(required)];
+  return new Promise((resolve,reject)=>{
+    const started=Date.now();
+    const finish=(error)=>{clearInterval(timer);error?reject(error):resolve({..._rvizHealth});};
+    const check=()=>{
+      if(!_live||_rvizHealth.epoch!==epoch)return finish(new Error('RViz stream ถูกปิดก่อนข้อมูลหุ่นยนต์จะพร้อม'));
+      const missing=needs.filter(name=>!_rvizHealth[name]);
+      if(!missing.length)return finish();
+      if(Date.now()-started>=timeoutMs){
+        const labels={runtime:'bridge',tf:'/tf',odom:'/odom',scan:'/scan',map:'/map',path:'/plan',desc:'/robot_description'};
+        finish(new Error(`รอข้อมูล ${missing.map(name=>labels[name]||name).join(', ')} เกิน ${Math.ceil(timeoutMs/1000)} วินาที`));
+      }
+    };
+    const timer=setInterval(check,50);check();
+  });
+}
+
+function _closeRvizStream(reason){
+  clearTimeout(_rvizReconnectTimer);
+  _rvizReconnectTimer=null;
+  const socket=_rvizSocket;
+  _rvizSocket=null;
+  _rvizStreamEpoch++;
+  socket?._settleRvizStartup?.(false);
+  if(socket&&socket.readyState<WebSocket.CLOSING){
+    try{socket.close(1000,String(reason||'client-close').slice(0,80));}catch{}
+  }
+}
+
+function _scheduleRvizReconnect(message){
+  if(!_live||_rvizReconnectTimer)return;
+  const delay=Math.min(5000,250*(2**Math.min(_rvizReconnectAttempt++,4)));
+  _badge('Reconnecting…','ba','da');
+  _ovl(`${message||'สตรีมขาด'} · ลองใหม่ใน ${(delay/1000).toFixed(1)} วินาที`);
+  _rvizReconnectTimer=setTimeout(()=>{
+    _rvizReconnectTimer=null;
+    if(_live)_startStream();
+  },delay);
+}
+
+// เมื่อ browser/tab ถูกพัก ให้ WebSocket close เพื่อให้ server ปิด PTY และ Python
+// streamer ชุดเดียวกัน; ถ้ากลับจาก bfcache ให้เชื่อมใหม่โดยไม่เหลือ process detached
+window.addEventListener('pagehide',()=>{
+  _closeRvizStream('pagehide');
+  if(_live&&typeof rvizTeleopStop==='function')rvizTeleopStop();
+  if(typeof rvizTeleopStopProcOnly==='function')rvizTeleopStopProcOnly();
+});
+window.addEventListener('pageshow',()=>{if(_live&&!_rvizSocket)_startStream();});
 
 // ═══════════════════════════════════════════════════════════════
 //  TF GRAPH SOLVER (Bidirectional BFS)
@@ -1289,6 +1289,23 @@ function _smoothDynamicVisuals(dt){
       node.position.lerp(tp,alpha);node.quaternion.slerp(tq,alpha);
     });
   });
+  _animateRobotWheels(dt);
+}
+
+function _animateRobotWheels(dt){
+  if(typeof RobotWheelMotion==='undefined')return;
+  const active=typeof isSimWorkspace!=='undefined'&&isSimWorkspace&&_live&&document.getElementById('page-playground')?.classList.contains('show');
+  for(const d of displayList.filter(d=>d.type==='RobotModel')){
+    const model=rviz3d.objects[d.id];if(!model)continue;
+    for(const link of model.children){
+      const wheel=link.userData.wheel;if(!wheel)continue;
+      const pos=link.getWorldPosition(new THREE.Vector3()),q=link.getWorldQuaternion(new THREE.Quaternion());
+      const axis=wheel.axis.clone().applyQuaternion(q);
+      const ready=active&&d.enabled&&link.userData.smoothReady&&rviz3d.worldTFs.has(d.props.baseFrame||'base_link');
+      RobotWheelMotion.advance(wheel,pos,axis,ready,dt);
+      wheel.spin.quaternion.setFromAxisAngle(wheel.axis,wheel.angle);
+    }
+  }
 }
 
 function _applyMap(map){
@@ -1318,6 +1335,7 @@ function _applyMap(map){
     const mesh=new THREE.Mesh(new THREE.PlaneGeometry(h*res,w*res),material);mesh.rotation.x=-Math.PI/2;
     const center=r2t((Number(map.ox)||0)+w*res/2,(Number(map.oy)||0)+h*res/2,0);mesh.position.set(center.x,.006,center.z);grp.add(mesh);
   });
+  if(rviz3d.playgroundDecor&&typeof playgroundSyncMapLayers==='function')playgroundSyncMapLayers();
   if(displayList.some(d=>d.type==='Map'&&d.enabled&&d.props.topic==='/slam_map')&&typeof playgroundUpdateSlamProgress==='function')playgroundUpdateSlamProgress(map);
 }
 
@@ -1334,7 +1352,7 @@ function _applyPath(points){
 
 function _applyOdom(o){
   // เก็บตำแหน่งหุ่นยนต์ไว้เผื่อ Fallback
-  rviz3d.robotPos.x=o.x||0; rviz3d.robotPos.y=o.y||0;
+  rviz3d.robotPos.received=true;rviz3d.robotPos.x=o.x||0; rviz3d.robotPos.y=o.y||0;
   rviz3d.robotPos.yaw=2*Math.atan2(o.qz||0,o.qw??1);
   if(typeof playgroundUpdateNavPose==='function')playgroundUpdateNavPose(o.x||0,o.y||0);
 
@@ -1384,7 +1402,8 @@ function _applyScan(s){
     const pos=geo.attributes.position.array,col=geo.attributes.color.array;
 
     // หาตำแหน่งของเซนเซอร์เทียบกับ Fixed Frame
-    const framePose = rviz3d.worldTFs?.get(p.frameId || 'laser_frame');
+    const scanFrame=String(s.frame||p.frameId||'laser_frame').replace(/^\//,'');
+    const framePose = rviz3d.worldTFs?.get(scanFrame);
     // Never draw a sensor at (0,0) when its TF is temporarily unavailable.
     // That creates a convincing but false second point cloud at map origin.
     if(!framePose){geo.setDrawRange(0,0);const el=document.getElementById('rv-scan-pts');if(el)el.textContent='รอ TF';return;}
@@ -1815,7 +1834,9 @@ const TELEOP_PY   = '/tmp/_teleop_pub.py';   // script ของ persistent publ
 const TELEOP_TGT  = '/tmp/_teleop.target';   // ไฟล์เก็บ target twist (ลำดับ: "lin ang")
 const TELEOP_ACC  = '/tmp/_teleop.accel';    // ไฟล์เก็บความเร่ง (lin ang) — ปรับความฉับไว/สมูท สดๆ ได้
 const TELEOP_PID  = '/tmp/_teleop.pid';
-const TELEOP_RATE = 60;                       // Hz — อ่าน target ทุก ~16 ms เพื่อลด input/stop latency
+const TELEOP_LOG  = '/tmp/_teleop_out.log';
+const TELEOP_RATE = 30;                       // Hz — เพียงพอสำหรับ cmd_vel และลด CPU/I/O ต่อ workspace
+const TELEOP_IDLE_STOP_MS = 5000;             // คืน process หลังหยุดขับครบ 5 วินาที
 const rvizTeleop = {
   lin: 0, linY: 0, ang: 0,        // ความเร็วที่ต้องการ (linear.x, linear.y, angular.z)
   linScale: 1.0, angScale: 2.0,   // เพดานความเร็วจากสไลเดอร์ (เพิ่มจาก 0.5 / 1.0)
@@ -1896,6 +1917,7 @@ let _teleopInited = false;
 let _teleopWriteChain = Promise.resolve();
 let _teleopHeartbeat = null;
 let _teleopHeartbeatBusy = false;
+let _teleopIdleTimer = null;
 
 // สร้าง YAML Twist string (สำหรับส่ง one-shot ตอนหยุด)
 function rvizTeleopTwist(lin, ang, linY=0){
@@ -1915,11 +1937,31 @@ function rvizTeleopSendOnce(lin, ang, linY=0){
     timeout: 20000
   }).catch(()=>{});
 }
-// หยุด node persistent (kill ด้วย PID + pattern ที่ self-safe) และลบไฟล์
+// คำสั่งหยุดจะเชื่อ PID file เฉพาะเมื่อ cmdline ชี้กลับมาที่ script ของ workspace นี้
+// SIM agent จะ rewrite '/tmp/...' ใน single quote ให้เป็น root/tmp ของหุ่นนั้นก่อน shell ทำงาน
+function rvizTeleopShellPaths(){
+  return `teleop_py='${TELEOP_PY}'; teleop_target='${TELEOP_TGT}'; teleop_accel='${TELEOP_ACC}'; teleop_pid_file='${TELEOP_PID}'; teleop_log='${TELEOP_LOG}'`;
+}
+function rvizTeleopStopOwnedCommand(){
+  return `${rvizTeleopShellPaths()}; teleop_pid=$(cat "$teleop_pid_file" 2>/dev/null || true); case "$teleop_pid" in ''|*[!0-9]*) ;; *) teleop_cmd=$(tr '\\000' ' ' < "/proc/$teleop_pid/cmdline" 2>/dev/null || true); case "$teleop_cmd" in *"$teleop_py"*) kill "$teleop_pid" 2>/dev/null || true; for teleop_wait in 1 2 3 4 5; do kill -0 "$teleop_pid" 2>/dev/null || break; sleep 0.05; done; if kill -0 "$teleop_pid" 2>/dev/null; then teleop_cmd=$(tr '\\000' ' ' < "/proc/$teleop_pid/cmdline" 2>/dev/null || true); case "$teleop_cmd" in *"$teleop_py"*) kill -KILL "$teleop_pid" 2>/dev/null || true ;; esac; fi ;; esac ;; esac; rm -f "$teleop_pid_file" "$teleop_target"; true`;
+}
+function rvizTeleopCancelIdleStop(){
+  if(_teleopIdleTimer){clearTimeout(_teleopIdleTimer);_teleopIdleTimer=null;}
+}
+function rvizTeleopScheduleIdleStop(){
+  rvizTeleopCancelIdleStop();
+  _teleopIdleTimer=setTimeout(()=>{
+    _teleopIdleTimer=null;
+    if(rvizTeleopActive.size||rvizTeleop.lin!==0||rvizTeleop.linY!==0||rvizTeleop.ang!==0)return;
+    rvizTeleopStopProcOnly();
+  },TELEOP_IDLE_STOP_MS);
+}
+// หยุด node persistent จาก PID file ของ workspace เท่านั้น ห้าม scan/kill process ของ SIM อื่น
 function rvizTeleopStopProcOnly(){
-  const cmd = (rvizTeleop.pid ? `kill ${rvizTeleop.pid} 2>/dev/null; ` : '') +
-    `for p in $(pgrep -f '_teleop_pub[.]py' 2>/dev/null); do [ "$p" != "$$" ] && kill $p 2>/dev/null; done; rm -f ${TELEOP_PID} ${TELEOP_TGT}; true`;
+  rvizTeleopCancelIdleStop();
+  const cmd=rvizTeleopStopOwnedCommand();
   rvizTeleop.pid = null; rvizTeleop.running = false;
+  if(!sessionId)return Promise.resolve();
   return API('/api/exec', { sessionId, command: cmd, timeout: 2000 }).catch(()=>{});
 }
 // เขียน target twist ลงไฟล์ (node persistent อ่านแล้ว publish → เปลี่ยนทิศทางทันที ไม่ต้อง spawn ใหม่)
@@ -1943,8 +1985,8 @@ function rvizTeleopEnsureNode(){
   if(rvizTeleop.running) return Promise.resolve();
   if(rvizTeleop.busy){ rvizTeleop.dirty = true; return Promise.resolve(); }  // กำลัง spawn → จดไว้รอบหน้า
   rvizTeleop.busy = true;
-  const killStale = `for p in $(pgrep -f '_teleop_pub[.]py' 2>/dev/null); do [ "$p" != "$$" ] && kill $p 2>/dev/null; done`;
-  const startCmd = `source ${_setupBash} 2>/dev/null; ${killStale}; rm -f ${TELEOP_PID}; nohup python3 -u ${TELEOP_PY} ${TELEOP_TGT} ${rvizTeleop.topic} ${TELEOP_RATE} > /tmp/_teleop_out.log 2>&1 & echo $! > ${TELEOP_PID}`;
+  const stopStale=rvizTeleopStopOwnedCommand();
+  const startCmd = `${stopStale}; ${rvizTeleopShellPaths()}; source ${_setupBash} 2>/dev/null; nohup python3 -u "$teleop_py" "$teleop_target" ${rvizTeleop.topic} ${TELEOP_RATE} > "$teleop_log" 2>&1 & teleop_started=$!; printf '%s\n' "$teleop_started" > "$teleop_pid_file"; printf '%s\n' "$teleop_started"`;
   return API('/api/files/write', { sessionId, path: TELEOP_PY, content: _teleopPySrc }).then(()=>
     API('/api/exec', { sessionId, command: startCmd, timeout: 5000 })
   ).then(r=>{
@@ -1962,6 +2004,7 @@ function rvizTeleopEnsureNode(){
 // เริ่มส่ง cmd_vel: ให้ node persistent รัน (ถ้ายังไม่รัน) แล้วเขียน target ทันที — ไม่มีหน่วงเวลา spawn
 function rvizTeleopStart(){
   if(!sessionId) return;
+  rvizTeleopCancelIdleStop();
   const lin = rvizTeleop.lin, linY=rvizTeleop.linY, ang = rvizTeleop.ang;
   if(lin === 0 && linY === 0 && ang === 0){ rvizTeleopStop(); return; }
   if(rvizTeleop.running){
@@ -1996,8 +2039,7 @@ function rvizTeleopSet(dir, on){
   if(on) rvizTeleopActive.add(dir); else rvizTeleopActive.delete(dir);
   rvizTeleopRecompute();
 }
-// หยุด: เคลียร์ทิศทาง + เขียน target 0 (node ค้างไว้ → กดซ้ำตอบสนองทันที ไม่มีดีเลย์สปาวน์)
-// หมายเหตุ: ไม่ฆ่า node ที่นี่ (ฆ่าเฉพาะตอน Disconnect) เพื่อลดความหน่วงในการควบคุม
+// หยุด: เคลียร์ทิศทาง + เขียน target 0 ทันที แล้วคืน publisher หลัง idle 5 วินาที
 function rvizTeleopStop(){
   rvizTeleopActive.clear();
   rvizTeleop.lin = 0; rvizTeleop.linY=0; rvizTeleop.ang = 0;
@@ -2009,6 +2051,7 @@ function rvizTeleopStop(){
   if(_teleopHeartbeat){clearInterval(_teleopHeartbeat);_teleopHeartbeat=null;}
   _teleopHeartbeatBusy=false;
   if(!rvizTeleop.running) rvizTeleopSendOnce(0, 0);  // fallback หยุดทันทีกรณี node ตาย
+  rvizTeleopScheduleIdleStop();
   rvizTeleopUpdateUI();
 }
 // ซ่อน/แสดงแผง (ซ่อน → หยุดส่งทันที กันหุ่นวิ่งต่อหลังปิดแผง)

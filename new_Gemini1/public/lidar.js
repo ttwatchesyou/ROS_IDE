@@ -14,6 +14,7 @@ let lidarSelected='rplidar_a1',lidarScanTimer=null,lidarSocket=null,lidarPolling
 let lidarPackageState=null,lidarKnownPorts=[],lidarBusy=false,lidarStatusSequence=0;
 let lidarDriverBusy=false,lidarDiagnosticText='',lidarPreferences={lastModel:'rplidar_a1',models:{}},lidarPreferenceLoadedFromStorage=false;
 let lidarZoom=1,lidarZoomPointers=new Map(),lidarPinchDistance=0;
+let lidarTfFrames=[],lidarTfModel=[],lidarFrameLoadId=0,lidarTfReady=false;
 
 function lidarModel(){return LIDAR_MODELS.find(item=>item.id===lidarSelected)||LIDAR_MODELS[0];}
 function lidarPreferenceKey(){return `ros2ide_lidar_${localStorage.getItem('ros2ide_robotid')||wsPath||'robot'}`;}
@@ -22,16 +23,48 @@ function lidarLoadPreferences(){
   if(LIDAR_MODELS.some(item=>item.id===lidarPreferences.lastModel))lidarSelected=lidarPreferences.lastModel;
 }
 function lidarSavedModel(){return lidarPreferences.models[lidarSelected]||{};}
+function lidarFrameId(){return document.getElementById('lidar-frame-select')?.value||lidarSavedModel().frameId||lidarTfFrames[0]||'laser_frame';}
+function lidarFrameOptions(){
+  const select=document.getElementById('lidar-frame-select');if(!select)return;
+  const names=[...new Set(lidarTfFrames)].filter(name=>/^[A-Za-z][A-Za-z0-9_]*$/.test(name));
+  if(!names.length)names.push('laser_frame');
+  select.replaceChildren(...names.map(name=>new Option(name,name)));
+  const saved=lidarSavedModel().frameId;
+  select.value=names.includes(saved)?saved:names[0];
+  lidarUpdateLaunchPreview();
+}
+async function lidarLoadTfFrames(){
+  const loadId=++lidarFrameLoadId;
+  const comps=await RealScanTF.load(sessionId,wsPath,API);
+  if(loadId!==lidarFrameLoadId)return;
+  lidarTfModel=comps;
+  lidarTfFrames=Array.isArray(comps)?comps.filter(c=>c?.type==='lidar').map(c=>String(c.name||'')):[];
+  lidarTfReady=true;
+  lidarFrameOptions();
+  lidarSyncFrameIfNeeded();
+  lidarDrawScan(lidarLastScan);
+}
+function lidarSyncFrameIfNeeded(){
+  if(lidarTfReady&&lidarPackageState?.installed&&lidarPackageState.savedSelection?.modelId===lidarSelected&&lidarPackageState.savedSelection.frameId!==lidarFrameId())lidarFrameChanged();
+}
+async function lidarFrameChanged(){
+  if(lidarPolling)stopLidarScan();lidarSavePreference();lidarUpdateLaunchPreview();lidarDrawScan(lidarLastScan);
+  if(!sessionId||!lidarPackageState?.installed)return;
+  try{const result=await API('/api/lidar/frame',{sessionId,frameId:lidarFrameId()});if(!result.ok)throw new Error(result.error||'บันทึกเฟรมไม่สำเร็จ');if(lidarPackageState?.savedSelection)lidarPackageState.savedSelection.frameId=result.frameId;const select=document.getElementById('lidar-frame-select');if(select&&[...select.options].some(option=>option.value===result.frameId))select.value=result.frameId;lidarSavePreference();lidarUpdateLaunchPreview();lidarSetInstallStatus(`บันทึก TF frame ${result.frameId} แล้ว`,'success');}
+  catch(error){lidarSetInstallStatus(`บันทึก TF frame บนหุ่นยนต์ไม่สำเร็จ: ${error.message}`,'error');}
+}
 function lidarUpdateLaunchPreview(){
-  const item=lidarModel(),port=lidarSelectedPort(),baud=lidarSelectedBaud(),target=document.getElementById('lidar-launch-command');if(!target)return;
-  target.textContent=item.brand==='YDLIDAR'?`ros2 run ydlidar ydlidar_node --ros-args -p port:=${port} -p baudrate:=${baud}`:item.port.includes('.')?`ros2 launch ${item.id.startsWith('hokuyo')?'urg_node2':item.id} ${item.id.startsWith('hokuyo')?'urg_node2.launch.py':'lidar.launch.py'} ip_address:=${port}`:`ros2 launch ${item.repo.includes('sllidar')?'sllidar_ros2':item.id.startsWith('ldlidar')?'ldlidar_stl_ros2':item.id} ${item.id==='rplidar_a1'?'sllidar_a1_launch.py':item.id==='rplidar_a2'?'sllidar_a2m8_launch.py':item.id==='rplidar_c1'?'sllidar_c1_launch.py':item.id==='rplidar_s2'?'sllidar_s2_launch.py':item.id.endsWith('ld06')?'ld06.launch.py':'ld19.launch.py'} serial_port:=${port} serial_baudrate:=${baud}`;
+  const item=lidarModel(),port=lidarSelectedPort(),baud=lidarSelectedBaud(),frame=lidarFrameId(),target=document.getElementById('lidar-launch-command');if(!target)return;
+  if(item.id==='rplidar_c1'){target.textContent=`ros2 run sllidar_ros2 sllidar_node --ros-args -p channel_type:=serial -p serial_port:=${port} -p serial_baudrate:=${baud} -p frame_id:=${frame} -p scan_mode:=Standard -p angle_compensate:=true`;return;}
+  target.textContent=item.brand==='YDLIDAR'?`ros2 run ydlidar ydlidar_node --ros-args -p port:=${port} -p baudrate:=${baud} -p frame_id:=${frame}`:item.brand==='SLAMTEC'?`ros2 launch sllidar_ros2 ${item.id==='rplidar_a1'?'sllidar_a1_launch.py':item.id==='rplidar_a2'?'sllidar_a2m8_launch.py':'sllidar_s2_launch.py'} serial_port:=${port} serial_baudrate:=${baud} frame_id:=${frame}`:`ros2 launch roside_lidar_setup lidar.launch.py`;
 }
 function lidarSavePreference(){
   const item=lidarModel(),baud=document.getElementById('lidar-baud-input')?.value||item.baud,port=document.getElementById('lidar-port-select')?.value||item.port;
-  lidarPreferences.lastModel=lidarSelected;lidarPreferences.models[lidarSelected]={port,baud};localStorage.setItem(lidarPreferenceKey(),JSON.stringify(lidarPreferences));
+  lidarPreferences.lastModel=lidarSelected;lidarPreferences.models[lidarSelected]={port,baud,frameId:lidarFrameId()};localStorage.setItem(lidarPreferenceKey(),JSON.stringify(lidarPreferences));
 }
 function initLidarSetup(){
   if(isSimWorkspace){window.switchPage('dashboard');return;}
+  lidarTfReady=false;
   lidarLoadPreferences();
   const workspace=document.getElementById('lidar-workspace');if(workspace)workspace.textContent=(wsPath||'~/ros2_ws')+'/src';
   const brands=[...new Set(LIDAR_MODELS.map(item=>item.brand))];
@@ -40,6 +73,7 @@ function initLidarSetup(){
   const selectedBrand=lidarModel().brand;
   document.querySelectorAll('.lidar-brand').forEach(button=>button.classList.toggle('active',button.dataset.brand===selectedBrand));
   lidarRenderModels(selectedBrand);lidarSelectModel(lidarSelected);
+  lidarLoadTfFrames();
   lidarBindZoom();
   requestAnimationFrame(()=>lidarDrawScan(lidarLastScan));
 }
@@ -79,6 +113,7 @@ function lidarSelectModel(id){
   document.getElementById('lidar-selected-name').textContent=`${item.brand} ${item.name}`;
   document.getElementById('lidar-selected-detail').textContent=item.detail;
   const baud=document.getElementById('lidar-baud-input'),saved=lidarSavedModel();if(baud){baud.value=saved.baud||item.baud;baud.disabled=item.baud==='Ethernet';}
+  lidarFrameOptions();
   document.getElementById('lidar-repository').textContent=item.repo.replace('https://github.com/','');
   localStorage.setItem(lidarPreferenceKey(),JSON.stringify(lidarPreferences));
   lidarUpdateLaunchPreview();
@@ -123,7 +158,7 @@ function lidarPortChanged(){
   if(lidarPolling)stopLidarScan();lidarUpdatePortState();lidarSavePreference();lidarUpdateLaunchPreview();
   if(lidarPackageState?.installed)lidarSetInstallStatus('บันทึกพอร์ตแล้ว สามารถกดเชื่อมต่อได้ทันทีโดยไม่ต้อง Build ใหม่','success');
 }
-function lidarBaudChanged(){if(lidarPolling)stopLidarScan();lidarSavePreference();lidarUpdateLaunchPreview();if(lidarPackageState?.installed)lidarSetInstallStatus('บันทึก baudrate แล้ว สามารถกดเชื่อมต่อได้ทันที','success');}
+function lidarBaudChanged(){if(lidarPolling)stopLidarScan();lidarSavePreference();lidarUpdateLaunchPreview();lidarDrawScan(lidarLastScan);if(lidarPackageState?.installed)lidarSetInstallStatus('บันทึก baudrate แล้ว สามารถกดเชื่อมต่อได้ทันที','success');}
 
 async function lidarRefreshStatus(){
   if(!sessionId)return lidarSetInstallStatus('กรุณาเชื่อมต่อหุ่นยนต์จริงก่อน','error');
@@ -133,11 +168,13 @@ async function lidarRefreshStatus(){
   try{
     const result=await API('/api/lidar/status',{sessionId,modelId:item.id});if(sequence!==lidarStatusSequence)return;if(!result.ok)throw new Error(result.error||'ตรวจสอบ package ไม่สำเร็จ');
     const remembered=result.savedSelection||{};
-    if(!lidarPreferenceLoadedFromStorage&&LIDAR_MODELS.some(model=>model.id===remembered.modelId)&&remembered.modelId!==lidarSelected){
-      lidarPreferences.lastModel=remembered.modelId;lidarPreferences.models[remembered.modelId]={port:remembered.port||LIDAR_MODELS.find(model=>model.id===remembered.modelId).port,baud:remembered.baud||LIDAR_MODELS.find(model=>model.id===remembered.modelId).baud};lidarPreferenceLoadedFromStorage=true;localStorage.setItem(lidarPreferenceKey(),JSON.stringify(lidarPreferences));
-      const brand=LIDAR_MODELS.find(model=>model.id===remembered.modelId).brand;document.querySelectorAll('.lidar-brand').forEach(tab=>tab.classList.toggle('active',tab.dataset.brand===brand));lidarRenderModels(brand);lidarSelectModel(remembered.modelId);return;
+    if(!lidarPreferenceLoadedFromStorage&&LIDAR_MODELS.some(model=>model.id===remembered.modelId)){
+      lidarPreferences.lastModel=remembered.modelId;lidarPreferences.models[remembered.modelId]={port:remembered.port||LIDAR_MODELS.find(model=>model.id===remembered.modelId).port,baud:remembered.baud||LIDAR_MODELS.find(model=>model.id===remembered.modelId).baud,frameId:remembered.frameId||'laser_frame'};lidarPreferenceLoadedFromStorage=true;localStorage.setItem(lidarPreferenceKey(),JSON.stringify(lidarPreferences));
+      if(remembered.modelId!==lidarSelected){const brand=LIDAR_MODELS.find(model=>model.id===remembered.modelId).brand;document.querySelectorAll('.lidar-brand').forEach(tab=>tab.classList.toggle('active',tab.dataset.brand===brand));lidarRenderModels(brand);lidarSelectModel(remembered.modelId);return;}
+      lidarFrameOptions();
     }
     lidarPackageState=result;lidarRenderPorts(result.ports);
+    lidarSyncFrameIfNeeded();
     connectButton.hidden=!result.installed;
     dot.className=`lidar-package-dot ${result.installed?'installed':'missing'}`;
     label.textContent=result.installed?`ติดตั้งแล้ว · ${result.driverDir}`:`ยังไม่มี ${item.name} ใน workspace/src`;
@@ -157,7 +194,7 @@ async function lidarRunBuild(install=false,automatic=false){
   button.disabled=true;button.textContent=install?'กำลังติดตั้งและ Build…':'กำลังเตรียมและ Build…';
   lidarPipeline(install?'driver':'tools');lidarSetInstallStatus(install?`กำลังดาวน์โหลด ${item.name} จาก GitHub จากนั้นจะ Build อัตโนมัติ`:`${automatic?'พบ Package เดิม — ':''}กำลังตรวจและติดตั้ง Build tools ก่อน Build`,'busy');
   try{
-    const endpoint=install?'/api/lidar/install':'/api/lidar/build',result=await API(endpoint,{sessionId,modelId,port:lidarSelectedPort(),baud:lidarSelectedBaud()});
+    const endpoint=install?'/api/lidar/install':'/api/lidar/build',result=await API(endpoint,{sessionId,modelId,port:lidarSelectedPort(),baud:lidarSelectedBaud(),frameId:lidarFrameId()});
     if(!result.ok){const error=new Error(result.error||'Build ไม่สำเร็จ');error.stage=result.stage;error.requiresSudo=result.requiresSudo;throw error;}
     const build=install?result.build:result;lidarPackageState={...(lidarPackageState||{}),installed:true,built:true,driverDir:result.driverDir||lidarPackageState?.driverDir};lidarPipelineComplete();
     document.getElementById('lidar-scan-button').hidden=false;
@@ -190,13 +227,14 @@ function lidarRenderDriverDiagnostic(result={}){
   lidarSetDiagnosticCheck('process',running?'ok':'error',running?'Driver กำลังทำงาน':'Driver ไม่ได้ทำงานหรือหยุดแล้ว');
   lidarSetDiagnosticCheck('topic',topic?'ok':'error',topic?'พบ publisher ของ /scan':'ยังไม่พบ publisher ของ /scan');
   const launch=document.getElementById('lidar-launch-command'),test=document.getElementById('lidar-test-command');if(launch&&result.commands?.launch)launch.textContent=result.commands.launch;if(test&&result.commands?.topic)test.textContent=result.commands.topic;
-  const hints=Array.isArray(result.hints)?result.hints:[],hint=document.getElementById('lidar-diagnostic-hint');if(hint){hint.className=`lidar-diagnostic-hint ${running&&topic&&portState==='connected'?'ok':hints.length?'error':''}`;hint.textContent=hints.join(' · ')||(running&&topic?'Driver พร้อมแล้ว กำลังอ่านข้อมูล LaserScan…':'กดเชื่อมต่อและทดสอบเพื่อเปิด Driver');}
-  lidarDiagnosticText=[`PORT: ${result.port||lidarSelectedPort()} (${portState})`,`PROCESS: ${running?'running':'stopped'}`,`TOPIC /scan: ${topic?'ready':'missing'}`,result.output||result.log||''].filter(Boolean).join('\n');
+  const hints=Array.isArray(result.hints)?result.hints:[],hint=document.getElementById('lidar-diagnostic-hint');if(hint){hint.className=`lidar-diagnostic-hint ${running&&topic&&portState==='connected'?'ok':hints.length?'error':''}`;hint.textContent=hints.join(' · ')||(running&&topic?'Driver พร้อมแล้ว กำลังอ่านข้อมูล LaserScan…':result.logState==='missing'?'ยังไม่ได้เปิด Driver — กด “เปิด Driver + ทดสอบ” ก่อน':'กดเชื่อมต่อและทดสอบเพื่อเปิด Driver');}
+  const detail=result.action==='status'?[result.platformLog,result.logState==='missing'?'ไม่พบ Driver log — ตรวจขั้นตอนก่อน launch ใน Platform log':result.log].filter(Boolean).join('\n\n'):result.output||[result.platformLog,result.log].filter(Boolean).join('\n\n');
+  lidarDiagnosticText=[`PORT: ${result.port||lidarSelectedPort()} (${portState})`,`PROCESS: ${running?'running':'stopped'}`,`TOPIC /scan: ${topic?'ready':'missing'}`,detail].filter(Boolean).join('\n');
   const log=document.getElementById('lidar-runtime-log');if(log){log.textContent=lidarDiagnosticText;log.scrollTop=log.scrollHeight;}
 }
 async function lidarRefreshDriverStatus(){
   if(!sessionId||lidarDriverBusy)return;lidarDriverBusy=true;const hint=document.getElementById('lidar-diagnostic-hint');if(hint){hint.className='lidar-diagnostic-hint';hint.textContent='กำลังตรวจพอร์ต, process, topic และ driver log…';}
-  try{const result=await API('/api/lidar/driver',{sessionId,action:'status',modelId:lidarSelected,port:lidarSelectedPort(),baud:lidarSelectedBaud()});if(!result.ok)throw new Error(result.error||'ตรวจ Driver ไม่สำเร็จ');lidarRenderDriverDiagnostic(result);}
+  try{const result=await API('/api/lidar/driver',{sessionId,action:'status',modelId:lidarSelected,port:lidarSelectedPort(),baud:lidarSelectedBaud(),frameId:lidarFrameId()});if(!result.ok)throw new Error(result.error||'ตรวจ Driver ไม่สำเร็จ');lidarRenderDriverDiagnostic(result);}
   catch(error){if(hint){hint.className='lidar-diagnostic-hint error';hint.textContent=error.message;}const log=document.getElementById('lidar-runtime-log');if(log)log.textContent=error.message;}
   finally{lidarDriverBusy=false;}
 }
@@ -206,13 +244,15 @@ async function lidarCopyDiagnostics(){
 }
 async function startLidarScan(){
   if(!sessionId){lidarSetScanState(false,'กรุณาเชื่อมต่อหุ่นยนต์จริงก่อน');return;}
+  if(lidarPolling)return lidarRefreshDriverStatus();
   if(!lidarPackageState?.installed){lidarSetScanState(false,'ยังไม่มี LIDAR package กรุณาติดตั้งก่อน');return;}
   if(lidarDriverBusy)return;lidarDriverBusy=true;const button=document.getElementById('lidar-scan-button');if(button){button.disabled=true;button.textContent='กำลังเชื่อมต่อ Driver…';}
   ['port','process','topic','data'].forEach(name=>lidarSetDiagnosticCheck(name,'checking','กำลังตรวจสอบ…'));lidarSetScanState(false,'กำลังเปิด LIDAR driver และตรวจการเชื่อมต่อ');
   try{
-    const result=await API('/api/lidar/driver',{sessionId,action:'start',modelId:lidarSelected,port:lidarSelectedPort(),baud:lidarSelectedBaud()});if(!result.ok)throw Object.assign(new Error(result.error||'เปิด Driver ไม่สำเร็จ'),{result});
+    const result=await API('/api/lidar/driver',{sessionId,action:'start',modelId:lidarSelected,port:lidarSelectedPort(),baud:lidarSelectedBaud(),frameId:lidarFrameId()});if(!result.ok)throw Object.assign(new Error(result.error||'เปิด Driver ไม่สำเร็จ'),{result});
+    if(result.frameId&&result.frameId!==lidarFrameId()){const select=document.getElementById('lidar-frame-select');if(select&&[...select.options].some(option=>option.value===result.frameId))select.value=result.frameId;lidarSavePreference();lidarUpdateLaunchPreview();}
     lidarRenderDriverDiagnostic(result);lidarPolling=true;if(button){button.disabled=false;button.textContent='■ หยุดทดสอบ';}lidarOpenStream();
-  }catch(error){lidarPolling=false;lidarSetScanState(false,error.message);if(error.result?.portState)lidarSetDiagnosticCheck('port','error',error.result.portState==='permission'?'ระบบใช้สิทธิ์จากการเชื่อมต่อแก้พอร์ตไม่สำเร็จ':'ไม่พบพอร์ต');if(error.result?.stage==='build')lidarSetDiagnosticCheck('process','error','LIDAR Driver ยัง Build ไม่สมบูรณ์');const hint=document.getElementById('lidar-diagnostic-hint');if(hint){hint.className='lidar-diagnostic-hint error';hint.textContent=error.result?.requiresSudo?'รหัสของ Robot ที่บันทึกไว้ใช้ sudo ไม่สำเร็จ กรุณาตรวจข้อมูล Robot Connection':error.result?.stage==='build'?'ระบบลองเตรียม Driver แล้วแต่ยังไม่สำเร็จ — ดู error จริงใน Command output':error.message;}lidarDiagnosticText=[error.message,error.result?.command?`$ ${error.result.command}`:'',error.result?.output||''].filter(Boolean).join('\n\n');const log=document.getElementById('lidar-runtime-log');if(log)log.textContent=lidarDiagnosticText;if(button){button.disabled=false;button.textContent='▶ เชื่อมต่อใหม่';}}
+  }catch(error){lidarPolling=false;lidarSetScanState(false,error.message);if(error.result?.portState!==undefined)lidarRenderDriverDiagnostic(error.result);if(error.result?.portState)lidarSetDiagnosticCheck('port',error.result.portState==='connected'?'ok':'error',error.result.portState==='permission'?'ระบบใช้สิทธิ์จากการเชื่อมต่อแก้พอร์ตไม่สำเร็จ':error.result.portState==='connected'?`${error.result.port||lidarSelectedPort()} พร้อมใช้งาน`:'ไม่พบพอร์ต');if(error.result?.stage==='build')lidarSetDiagnosticCheck('process','error','LIDAR Driver ยัง Build ไม่สมบูรณ์');const hint=document.getElementById('lidar-diagnostic-hint');if(hint){hint.className='lidar-diagnostic-hint error';hint.textContent=error.result?.requiresSudo?'รหัสของ Robot ที่บันทึกไว้ใช้ sudo ไม่สำเร็จ กรุณาตรวจข้อมูล Robot Connection':error.result?.stage==='build'?'ระบบลองเตรียม Driver แล้วแต่ยังไม่สำเร็จ — ดู error จริงใน Command output':error.message;}lidarDiagnosticText=[error.message,error.result?.command?`$ ${error.result.command}`:'',error.result?.output||error.result?.log||''].filter(Boolean).join('\n\n');const log=document.getElementById('lidar-runtime-log');if(log)log.textContent=lidarDiagnosticText;if(button){button.disabled=false;button.textContent='▶ เชื่อมต่อใหม่';}}
   finally{lidarDriverBusy=false;}
 }
 function stopLidarScan(){
@@ -225,10 +265,10 @@ function stopLidarScan(){
 }
 function lidarApplyLiveScan(result){
   if(!result?.ranges?.length)return;
-  lidarLastReceived=Date.now();lidarLastScan=result;lidarDrawScan(result);
+  lidarLastReceived=Date.now();lidarLastScan=result;const frameReady=lidarDrawScan(result)!==false;
   const minRange=Number(result.rangeMin)||0,maxRange=Number(result.rangeMax)||Infinity;
   const valid=result.ranges.filter(value=>Number.isFinite(value)&&value>=minRange&&value<=maxRange),closest=valid.length?Math.min(...valid):null,hz=result.hz==null?NaN:Number(result.hz),interval=result.interval==null?NaN:Number(result.interval);
-  lidarSetScanState(true,`รับข้อมูล realtime ${valid.length.toLocaleString()} จุด · ${Number.isFinite(hz)?hz.toFixed(1)+' Hz':'กำลังวัด'}`);
+  if(frameReady)lidarSetScanState(true,`รับข้อมูล realtime ${valid.length.toLocaleString()} จุด · ${Number.isFinite(hz)?hz.toFixed(1)+' Hz':'กำลังวัด'}`);
   document.getElementById('lidar-stat-points').textContent=valid.length.toLocaleString();
   document.getElementById('lidar-stat-nearest').textContent=closest===null?'—':closest.toFixed(2)+' m';
   document.getElementById('lidar-stat-rate').textContent=Number.isFinite(hz)?hz.toFixed(1)+' Hz':'กำลังวัด';
@@ -266,12 +306,15 @@ function lidarDrawScan(scan){
   ctx.beginPath();ctx.moveTo(cx-maxRadius,cy);ctx.lineTo(cx+maxRadius,cy);ctx.moveTo(cx,cy-maxRadius);ctx.lineTo(cx,cy+maxRadius);ctx.stroke();
   ctx.save();ctx.translate(cx,cy);ctx.fillStyle=accent;ctx.beginPath();ctx.moveTo(0,-12);ctx.lineTo(-8,8);ctx.lineTo(8,8);ctx.closePath();ctx.fill();ctx.restore();
   if(!scan?.ranges?.length)return;
+  const transform=RealScanTF.resolve(lidarTfModel,scan.frame||lidarFrameId());
+  if(!transform){lidarSetScanState(false,`ไม่พบ TF จาก ${scan.frame||lidarFrameId()} ถึง base_link · ตรวจหน้า TF`);return false;}
   const start=Number.isFinite(scan.angleMin)?scan.angleMin:-Math.PI,increment=Number.isFinite(scan.angleIncrement)?scan.angleIncrement:(Math.PI*2/scan.ranges.length);
   ctx.fillStyle=green;ctx.shadowColor='transparent';ctx.shadowBlur=0;
   for(let index=0;index<scan.ranges.length;index++){
     const range=scan.ranges[index];if(!Number.isFinite(range)||range<=0||range>viewRange)continue;
-    // ROS laser frame: +X is forward and +Y is left. Screen-up represents forward.
-    const angle=start+index*increment,x=cx-Math.sin(angle)*range/viewRange*maxRadius,y=cy-Math.cos(angle)*range/viewRange*maxRadius;
+    // Robot +X is screen-up, +Y is screen-left.
+    const point=RealScanTF.point(transform,range,start+index*increment);
+    const x=cx-point.y/viewRange*maxRadius,y=cy-point.x/viewRange*maxRadius;
     ctx.fillRect(Math.round(x)-1,Math.round(y)-1,3,3);
   }
   ctx.shadowBlur=0;

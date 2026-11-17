@@ -34,6 +34,15 @@ if ! command -v npm &>/dev/null; then
 fi
 echo -e "  ${GREEN}✓${NC} npm $(npm --version)"
 
+# New server publishes a verified, staged Online + Local release. If absent,
+# retain the legacy installation workflow for older servers.
+if curl -fSsL "${CLOUD_URL%/}/agent-release.json" -o /dev/null 2>/dev/null; then
+    AGENT_INSTALL_TMP=$(mktemp -d)
+    curl -fSsL "${CLOUD_URL%/}/agent-install.sh" -o "$AGENT_INSTALL_TMP/install.sh"
+    export CLOUD_URL
+    exec bash "$AGENT_INSTALL_TMP/install.sh"
+fi
+
 # ── 2. Create install dir ──────────────────────────────────────
 echo -e "${YELLOW}[2/6]${NC} Creating install directory..."
 mkdir -p "$INSTALL_DIR"
@@ -82,7 +91,8 @@ PKG
 
 cd "$INSTALL_DIR"
 echo "Installing npm dependencies..."
-npm install --silent 2>/dev/null || npm install
+npm_config_build_from_source=true npm install --ignore-scripts=false --foreground-scripts
+node -e 'require("./node_modules/node-pty")'
 echo -e "  ${GREEN}✓${NC} Dependencies installed"
 
 # USB/ACM serial ports are normally root:dialout (0660). Keep the Agent as the

@@ -11,10 +11,22 @@ const fs   = require('fs').promises;
 const fss  = require('fs');
 const path = require('path');
 const { spawn, exec } = require('child_process');
-const b64  = s => Buffer.from(s).toString('base64');
+const SIM_SPATIAL_PY=fss.readFileSync(path.join(__dirname,'sim-spatial.py'),'utf8');
+const SIM_NAVIGATION_PY=fss.readFileSync(path.join(__dirname,'sim-navigation.py'),'utf8');
+const NAVIGATION_SETTINGS=require('./public/navigation-settings');
 
 const SIM_WS_ROOT = path.join(__dirname, 'sim_ws');   // ทุก workspace ของ sim อยู่ที่นี่
 function isSim(k) { return typeof k === 'string' && k.startsWith('SIM-'); }
+function clusterIdForSim(k){const match=String(k||'').match(/^SIM-C([1-9]\d*)-/);return match?Number(match[1]):1;}
+
+// ROS_LOCALHOST_ONLY is deprecated in newer ROS 2 releases.  Delete it rather
+// than merely overriding it: an enabled value inherited by the server makes
+// rcl reject/ignore the newer discovery settings and can stop the simulation.
+function buildSimProcessEnvironment(overrides={}, inheritedEnvironment=process.env) {
+  const environment={...inheritedEnvironment,...overrides};
+  delete environment.ROS_LOCALHOST_ONLY;
+  return environment;
+}
 
 // ── โลกจำลอง: ห้อง 8x8m + สิ่งกีดขวาง (เส้นตรง [x1,y1,x2,y2]) ──
 const WALLS = [
@@ -35,6 +47,39 @@ function rayCast(ox, oy, ang, maxR, walls=WALLS) {
     if (t > 0 && t < best && u >= 0 && u <= 1) best = t;
   }
   return best;
+}
+function rayCastVector(ox,oy,dx,dy,maxR,walls=WALLS){
+  let best=maxR;
+  for(const [x1,y1,x2,y2] of walls){
+    const sx=x2-x1,sy=y2-y1,den=dx*sy-dy*sx;
+    if(Math.abs(den)<1e-9)continue;
+    const t=((x1-ox)*sy-(y1-oy)*sx)/den,u=((x1-ox)*dy-(y1-oy)*dx)/den;
+    if(t>0&&t<best&&u>=0&&u<=1)best=t;
+  }
+  return best;
+}
+function simQuatMul(a,b){const [x,y,z,w]=a,[X,Y,Z,W]=b;return[w*X+x*W+y*Z-z*Y,w*Y-x*Z+y*W+z*X,w*Z+x*Y-y*X+z*W,w*W-x*X-y*Y-z*Z];}
+function simQuatRot(q,v){const [x,y,z,w]=q,[vx,vy,vz]=v,tx=2*(y*vz-z*vy),ty=2*(z*vx-x*vz),tz=2*(x*vy-y*vx);return[vx+w*tx+y*tz-z*ty,vy+w*ty+z*tx-x*tz,vz+w*tz+x*ty-y*tx];}
+function simQuatRPY(angles){const[r,p,y]=angles.map(deg=>deg*Math.PI/360),cr=Math.cos(r),sr=Math.sin(r),cp=Math.cos(p),sp=Math.sin(p),cy=Math.cos(y),sy=Math.sin(y);return[sr*cp*cy-cr*sp*sy,cr*sp*cy+sr*cp*sy,cr*cp*sy-sr*sp*cy,cr*cp*cy+sr*sp*sy];}
+function simLidarModel(robotKey){
+  const fallback={frame:'laser_frame',edges:[{frame:'laser_frame',parent:'base_link',x:0,y:0,z:.1,qx:0,qy:0,qz:0,qw:1}],offset:[0,0,.1],quat:[0,0,0,1]};
+  try{
+    const comps=JSON.parse(fss.readFileSync(path.join(wsRoot(robotKey),'src/sim_robot_tf/tf_model.json'),'utf8'));
+    const byName=new Map(comps.map(c=>[c.name,c])),base=comps.find(c=>c.type==='base')?.name||'base_link',lidar=comps.find(c=>c.type==='lidar');
+    if(!lidar)return fallback;
+    const pathToSensor=[],seen=new Set();let current=lidar;
+    while(current&&current.name!==base&&!seen.has(current.name)){seen.add(current.name);pathToSensor.unshift(current);current=byName.get(current.parent);}
+    if(!current||current.name!==base)return fallback;
+    let offset=[0,0,0],quat=[0,0,0,1];const edges=[];
+    for(const c of pathToSensor){
+      const pos=[c.pos.x,c.pos.y,c.pos.z].map(Number),rpy=[c.rpy.r,c.rpy.p,c.rpy.y].map(Number);
+      if([...pos,...rpy].some(n=>!Number.isFinite(n)))return fallback;
+      const q=simQuatRPY(rpy),rotated=simQuatRot(quat,pos);
+      offset=offset.map((n,i)=>n+rotated[i]);quat=simQuatMul(quat,q);
+      edges.push({frame:c.name,parent:c.parent,x:pos[0],y:pos[1],z:pos[2],qx:q[0],qy:q[1],qz:q[2],qw:q[3]});
+    }
+    return{frame:lidar.name,edges,offset,quat};
+  }catch(_){return fallback;}
 }
 
 const ROBOT_RADIUS = 0.24;
@@ -70,10 +115,109 @@ function mulberry32(a) {
   };
 }
 
-// ── ROS_DOMAIN_ID ต่อ simulation: แยก topic ของแต่ละหุ่น ไม่ให้ชนกัน ──
-// ROS_DOMAIN_ID เป็น unsigned int (0..232) — ใช้ 1..230 เลี่ยง 0 และสงวนค่าบางส่วน
+// ── ROS_DOMAIN_ID ต่อ active simulation ──
+// การ hash robot key ลง 230 domain โดยตรงมี birthday collision ได้ง่ายมาก
+// และทำให้ /tf, /odom, /scan ของคนละ workspace ปนกัน จึงใช้ hash
+// เป็นเพียงจุดเริ่มค้นหา แล้วจอง domain ที่ยังว่างแบบไม่ซ้ำกันอีกชั้น
+const SIM_DOMAIN_MIN = 1;
+const SIM_DOMAIN_MAX = 230;
+const domainsByRobot = new Map();
+const robotsByDomain = new Map();
+const leasesByRobot = new Map();
+const SIM_LEASE_ROOT = path.join(SIM_WS_ROOT, '.runtime-leases');
+
+function processStartId(pid) {
+  try {
+    const stat=fss.readFileSync(`/proc/${pid}/stat`,'utf8'),tail=stat.slice(stat.lastIndexOf(')')+2).trim().split(/\s+/);
+    return tail[19]||''; // field 22 (starttime); tail starts at field 3
+  } catch { return ''; }
+}
+const leaseOwner={pid:process.pid,processStart:processStartId(process.pid)};
+
+function leaseOwnerIsAlive(lease) {
+  const pid=Number(lease?.pid);
+  if(!Number.isInteger(pid)||pid<=0)return false;
+  try{process.kill(pid,0);}catch(error){if(error?.code!=='EPERM')return false;}
+  return !lease.processStart||processStartId(pid)===String(lease.processStart);
+}
+
+function readLease(file) {
+  try{return JSON.parse(fss.readFileSync(file,'utf8'));}catch{return null;}
+}
+
+function acquireLeaseFile(file,payload) {
+  fss.mkdirSync(path.dirname(file),{recursive:true});
+  for(let attempt=0;attempt<4;attempt++){
+    let fd;
+    try{
+      fd=fss.openSync(file,'wx',0o600);
+      fss.writeFileSync(fd,JSON.stringify(payload));
+      fss.closeSync(fd);fd=undefined;
+      return true;
+    }catch(error){
+      if(fd!==undefined)try{fss.closeSync(fd);}catch{}
+      if(error?.code!=='EEXIST')throw error;
+      const stale=readLease(file);
+      if(stale&&leaseOwnerIsAlive(stale))return false;
+      // Re-read the token immediately before unlinking so a process which won
+      // stale recovery is not accidentally removed by this contender.
+      const latest=readLease(file);
+      if((latest?.token||null)!==(stale?.token||null))continue;
+      try{fss.unlinkSync(file);}catch(unlinkError){if(unlinkError?.code!=='ENOENT')continue;}
+    }
+  }
+  return false;
+}
+
+function releaseLeaseFile(file,token) {
+  const lease=readLease(file);
+  if(!lease||lease.token!==token)return;
+  try{fss.unlinkSync(file);}catch{}
+}
+
+function preferredDomainFor(robotKey) {
+  return (hashSeed(robotKey || 'SIM') % SIM_DOMAIN_MAX) + SIM_DOMAIN_MIN;
+}
+
+function reserveDomain(robotKey) {
+  const key=String(robotKey||'');
+  if(domainsByRobot.has(key))return domainsByRobot.get(key);
+  const token=crypto.randomBytes(18).toString('hex');
+  const robotHash=crypto.createHash('sha256').update(key).digest('hex');
+  const robotLeaseFile=path.join(SIM_LEASE_ROOT,'robots',`${robotHash}.json`);
+  const payload={...leaseOwner,token,robotKey:key,createdAt:Date.now()};
+  if(!acquireLeaseFile(robotLeaseFile,payload)){
+    const error=new Error('Simulation workspace is already active in another server process');
+    error.code='SIM_RUNTIME_ALREADY_ACTIVE';
+    throw error;
+  }
+  const preferred=preferredDomainFor(key),count=SIM_DOMAIN_MAX-SIM_DOMAIN_MIN+1;
+  for(let offset=0;offset<count;offset++){
+    const candidate=SIM_DOMAIN_MIN+((preferred-SIM_DOMAIN_MIN+offset)%count);
+    if(robotsByDomain.has(candidate))continue;
+    const domainLeaseFile=path.join(SIM_LEASE_ROOT,'domains',`${candidate}.json`);
+    if(!acquireLeaseFile(domainLeaseFile,{...payload,domain:candidate}))continue;
+    domainsByRobot.set(key,candidate);robotsByDomain.set(candidate,key);
+    leasesByRobot.set(key,{token,robotLeaseFile,domainLeaseFile});
+    return candidate;
+  }
+  releaseLeaseFile(robotLeaseFile,token);
+  const error=new Error(`Simulation capacity reached (${count} isolated ROS domains are active)`);
+  error.code='SIM_DOMAIN_CAPACITY_REACHED';
+  throw error;
+}
+
+function releaseDomain(robotKey,domainId) {
+  const key=String(robotKey||''),reserved=domainsByRobot.get(key);
+  if(reserved===undefined||domainId!==undefined&&reserved!==domainId)return;
+  domainsByRobot.delete(key);
+  if(robotsByDomain.get(reserved)===key)robotsByDomain.delete(reserved);
+  const lease=leasesByRobot.get(key);leasesByRobot.delete(key);
+  if(lease){releaseLeaseFile(lease.domainLeaseFile,lease.token);releaseLeaseFile(lease.robotLeaseFile,lease.token);}
+}
+
 function domainFor(robotKey) {
-  return (hashSeed(robotKey || 'SIM') % 230) + 1;
+  return domainsByRobot.get(String(robotKey||''))||preferredDomainFor(robotKey);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -96,13 +240,17 @@ class SimEngine {
     this.goal = null;
     this.v = 0; this.w = 0;
     this.scan = { amin:-Math.PI, ainc:(2*Math.PI)/360, ranges:new Array(360).fill(0) };
+    this.robotKey=robotKey;this.lidar=simLidarModel(robotKey);this._lidarReadAt=Date.now();
     this.rvizBuf = [];
     this.rvizOn = false;
     // เส้นทางลาดตระเวนหมุนตาม seed → sim ต่างกันวิ่งต่างกัน
     this._patrol = [...corners.slice(si), ...corners.slice(0, si)];
     this._pi = 0;
     this.tick = this.tick.bind(this);
-    this._timer = setInterval(this.tick, 100);
+    // ROS Python is the live simulation owner. Keep this lightweight engine
+    // dormant until the synthetic monitor asks for fallback data.
+    this._timer = null;
+    this._lastTick = Date.now();
   }
   setGoal(x, y) { this.goal = { x:+x, y:+y }; }
   _wallsFromMap(mapData){
@@ -141,9 +289,12 @@ class SimEngine {
     if(motionIsClear(this.x,this.y,nextX,nextY,this.walls)){this.x=nextX;this.y=nextY;}
     else this.v=0;
 
+    if(Date.now()-this._lidarReadAt>2000){this.lidar=simLidarModel(this.robotKey);this._lidarReadAt=Date.now();}
+    const heading=[0,0,Math.sin(this.th/2),Math.cos(this.th/2)],origin=simQuatRot(heading,this.lidar.offset);
     for (let i = 0; i < 360; i++) {
-      const a = this.th + this.scan.amin + i * this.scan.ainc;
-      const r = rayCast(this.x, this.y, a, 12, this.walls);
+      const a=this.scan.amin+i*this.scan.ainc;
+      const direction=simQuatRot(heading,simQuatRot(this.lidar.quat,[Math.cos(a),Math.sin(a),0]));
+      const r = rayCastVector(this.x+origin[0],this.y+origin[1],direction[0],direction[1],12,this.walls);
       this.scan.ranges[i] = r >= 12 ? 0 : +(r + (this._rng()-0.5)*0.02).toFixed(3);
     }
     if (this.rvizOn) {
@@ -152,19 +303,22 @@ class SimEngine {
         tf: [
           { frame:'odom',        parent:'map',       x:0, y:0, z:0, qx:0,qy:0,qz:0,qw:1 },
           { frame:'base_link',   parent:'odom',      x:this.x, y:this.y, z:0, qx:0,qy:0,qz:qz,qw:qw },
-          { frame:'laser_frame', parent:'base_link', x:0, y:0, z:0.1, qx:0,qy:0,qz:0,qw:1 },
+          ...this.lidar.edges,
         ],
         odom: { x:this.x, y:this.y, qz, qw },
-        scan: { amin:this.scan.amin, ainc:this.scan.ainc, ranges:this.scan.ranges.slice() },
+        scan: { frame:this.lidar.frame, amin:this.scan.amin, ainc:this.scan.ainc, ranges:this.scan.ranges.slice() },
       }));
       if (this.rvizBuf.length > 20) this.rvizBuf.shift();
     }
   }
 
   msgFor(topic) {
+    const now=Date.now(),steps=Math.min(5,Math.floor((now-this._lastTick)/100));
+    for(let i=0;i<steps;i++)this.tick();
+    if(steps)this._lastTick+=steps*100;
     const qz = Math.sin(this.th/2), qw = Math.cos(this.th/2);
     if (/scan/.test(topic))
-      return { header:{frame_id:'laser_frame'}, angle_min:this.scan.amin, angle_increment:this.scan.ainc,
+      return { header:{frame_id:this.lidar.frame}, angle_min:this.scan.amin, angle_increment:this.scan.ainc,
                range_min:0.1, range_max:12.0, ranges:this.scan.ranges.slice(0,20).concat(['...']) };
     if (/odom/.test(topic))
       return { header:{frame_id:'odom'}, pose:{pose:{position:{x:+this.x.toFixed(3),y:+this.y.toFixed(3),z:0},
@@ -174,7 +328,7 @@ class SimEngine {
       return { linear:{x:+this.v.toFixed(3),y:0,z:0}, angular:{x:0,y:0,z:+this.w.toFixed(3)} };
     return { stamp:Date.now(), note:`sim data for ${topic}` };
   }
-  destroy() { clearInterval(this._timer); }
+  destroy() { if(this._timer)clearInterval(this._timer); }
 }
 
 const SIM_NODES = ['/robot_state_publisher','/joint_state_publisher','/map_server','/amcl',
@@ -212,19 +366,36 @@ ST = QoSProfile(depth=10, reliability=QoSReliabilityPolicy.RELIABLE, durability=
 CMD_TIMEOUT = 0.5   # วินาที — หยุดหุ่นถ้าไม่ได้รับ /cmd_vel ใหม่ภายในเวลานี้
 ROBOT_RADIUS = 0.24
 
+${SIM_SPATIAL_PY}
+
 WALLS = [(-4,-4,4,-4),(4,-4,4,4),(4,4,-4,4),(-4,4,-4,-4),
          (-1,-1,1,-1),(1,-1,1,1),(1,1,-1,1),(-1,1,-1,-1),(2.5,-3,2.5,-1)]
 def rayCast(ox,oy,ang,maxR):
+    return WALL_INDEX.ray(ox,oy,ang,maxR)
+
+def rayCastVector(ox,oy,dx,dy,maxR):
     best=maxR
-    dx,dy=math.cos(ang),math.sin(ang)
-    for (x1,y1,x2,y2) in WALLS:
-        sx,sy=x2-x1,y2-y1
-        den=dx*sy-dy*sx
+    for x1,y1,x2,y2 in WALLS:
+        sx,sy=x2-x1,y2-y1; den=dx*sy-dy*sx
         if abs(den)<1e-9: continue
         t=((x1-ox)*sy-(y1-oy)*sx)/den
         u=((x1-ox)*dy-(y1-oy)*dx)/den
-        if t>0 and t<best and 0<=u<=1: best=t
+        if 0<t<best and 0<=u<=1: best=t
     return best
+
+def quatMul(a,b):
+    x,y,z,w=a; X,Y,Z,W=b
+    return (w*X+x*W+y*Z-z*Y,w*Y-x*Z+y*W+z*X,w*Z+x*Y-y*X+z*W,w*W-x*X-y*Y-z*Z)
+
+def quatRot(q,v):
+    x,y,z,w=q; vx,vy,vz=v
+    tx=2*(y*vz-z*vy); ty=2*(z*vx-x*vz); tz=2*(x*vy-y*vx)
+    return (vx+w*tx+y*tz-z*ty,vy+w*ty+z*tx-x*tz,vz+w*tz+x*ty-y*tx)
+
+def quatRPY(r,p,y):
+    r,p,y=[math.radians(a)/2 for a in (r,p,y)]
+    cr,sr=math.cos(r),math.sin(r); cp,sp=math.cos(p),math.sin(p); cy,sy=math.cos(y),math.sin(y)
+    return (sr*cp*cy-cr*sp*sy,cr*sp*cy+sr*cp*sy,cr*cp*sy-sr*sp*cy,cr*cp*cy+sr*sp*sy)
 
 def pointSegmentDistance(px,py,x1,y1,x2,y2):
     dx,dy=x2-x1,y2-y1; length2=dx*dx+dy*dy
@@ -240,6 +411,7 @@ def motionIsClear(x1,y1,x2,y2):
 CORNERS=[(-3.0,-3.0),(3.0,-3.0),(3.0,3.0),(-3.0,3.0)]
 # ── โหลดแผนที่จาก ~/map.json (ถ้ามี) → กำแพง/ขอบเขต/จุดเริ่ม ของ simulation ──
 _MAP_START=(-3.0,-3.0)
+_MAP_YAW=0.0
 try:
     import json as _json, os as _os
     with open(_os.path.expanduser('~/map.json')) as _mf:
@@ -255,14 +427,46 @@ try:
     if _b: CORNERS=[(_b[0]+0.5,_b[1]+0.5),(_b[2]-0.5,_b[1]+0.5),(_b[2]-0.5,_b[3]-0.5),(_b[0]+0.5,_b[3]-0.5)]
     _s=_map.get('start')
     if _s: _MAP_START=(float(_s[0]),float(_s[1]))
+    _MAP_YAW=math.radians(float(_map.get('startPose',{}).get('yaw',0.0)))
 except Exception:
     pass
+WALL_INDEX=WallIndex(WALLS)
 URDF='''<?xml version="1.0"?>
 <robot name="sim_robot">
   <link name="base_link"><visual><geometry><box size="0.4 0.3 0.2"/></geometry><material name="c"><color rgba="0.2 0.6 1.0 1"/></material></visual><collision><geometry><box size="0.4 0.3 0.2"/></geometry></collision></link>
   <link name="laser_frame"/>
   <joint name="laser_joint" type="fixed"><parent link="base_link"/><child link="laser_frame"/><origin xyz="0 0 0.1"/></joint>
 </robot>'''
+
+def loadLidarModel():
+    fallback=('laser_frame',[("base_link","laser_frame",(0,0,0.1),(0,0,0,1))],(0,0,0.1),(0,0,0,1))
+    try:
+        import json, os
+        filename=os.path.expanduser('~/src/sim_robot_tf/tf_model.json')
+        with open(filename,encoding='utf-8') as stream: comps=json.load(stream)
+        by_name={c['name']:c for c in comps if isinstance(c,dict) and isinstance(c.get('name'),str)}
+        base=next((c['name'] for c in comps if c.get('type')=='base'),'base_link')
+        lidar=next((c for c in comps if c.get('type')=='lidar'),None)
+        if not lidar: return fallback
+        path=[]; seen=set(); current=lidar
+        while current and current['name']!=base and current['name'] not in seen:
+            seen.add(current['name']); path.insert(0,current); current=by_name.get(current.get('parent'))
+        if not current or current['name']!=base: return fallback
+        pos=(0.0,0.0,0.0); quat=(0.0,0.0,0.0,1.0); edges=[]
+        for c in path:
+            origin=tuple(float(c['pos'][axis]) for axis in ('x','y','z'))
+            angles=tuple(float(c['rpy'][axis]) for axis in ('r','p','y'))
+            q=quatRPY(*angles); rotated=quatRot(quat,origin)
+            pos=tuple(pos[i]+rotated[i] for i in range(3)); quat=quatMul(quat,q)
+            edges.append((c['parent'],c['name'],origin,q))
+        return lidar['name'],edges,pos,quat
+    except (OSError,ValueError,KeyError,TypeError,StopIteration): return fallback
+
+LASER_FRAME,LASER_EDGES,LASER_OFFSET,LASER_Q=loadLidarModel()
+try:
+    import os
+    with open(os.path.expanduser('~/src/sim_robot_tf/urdf/robot.urdf'),encoding='utf-8') as model: URDF=model.read()
+except OSError: pass
 
 class SimState(Node):
     def __init__(self):
@@ -274,20 +478,26 @@ class SimState(Node):
         self.desc_pub=self.create_publisher(String,'/robot_description',ST)
         # Publisher for map simulation visualization
         self.map_pub=self.create_publisher(Marker,'/map_simulation',10)
-        self.x,self.y,self.th=float(_MAP_START[0]),float(_MAP_START[1]),0.0
+        self.x,self.y,self.th=float(_MAP_START[0]),float(_MAP_START[1]),_MAP_YAW
         self.v,self.w=0.0,0.0
         # คำสั่งความเร็วล่าสุดจาก /cmd_vel (Teleop)
         self.cmd_v=0.0
         self.cmd_w=0.0
         self.cmd_t=0.0   # เวลา (time.time) ที่ได้รับ /cmd_vel ล่าสุด
+        self._scan_tick=0
         # ลำดับมุมลาดตระเวน (เดินวนรอบห้อง) — หุ่นจะเคลื่อนที่เองเมื่อไม่มีคำสั่ง Teleop
         # กันหุ่น "ยืนนิ่งเฉย" หลังเปิด RViz (ดูเหมือนระบบพัง)
         self._patrol=CORNERS
         self._pi=0
         m=TransformStamped(); m.header.frame_id='map'; m.child_frame_id='odom'; m.transform.rotation.w=1.0; self._map_odom=m
-        b=TransformStamped(); b.header.frame_id='base_link'; b.child_frame_id='laser_frame'; b.transform.translation.z=0.1; b.transform.rotation.w=1.0; self._bl_laser=b
+        self._laser_tfs=[]
+        for parent,child,origin,q in LASER_EDGES:
+            b=TransformStamped(); b.header.frame_id=parent; b.child_frame_id=child
+            b.transform.translation.x,b.transform.translation.y,b.transform.translation.z=origin
+            b.transform.rotation.x,b.transform.rotation.y,b.transform.rotation.z,b.transform.rotation.w=q
+            self._laser_tfs.append(b)
         self.desc_pub.publish(String(data=URDF))
-        self.static_br.sendTransform([self._map_odom, self._bl_laser])
+        self.static_br.sendTransform([self._map_odom]+self._laser_tfs)
         # รับคำสั่งความเร็วจากแผง Teleop (/cmd_vel)
         self.cmd_sub=self.create_subscription(Twist,'/cmd_vel',self.cb_cmd,BE)
         self.create_timer(0.05,self.tick)
@@ -298,27 +508,15 @@ class SimState(Node):
         self.cmd_t=time.time()
     def tick(self):
         # ถ้ามี /cmd_vel ใหม่ภายใน CMD_TIMEOUT → ตามคำสั่ง Teleop (ขับด้วยแผงควบคุม)
-        # ถ้าไม่ → ลาดตระเวนอัตโนมัติไปยังมุมถัดไป (หุ่นเคลื่อนที่เองตลอดเวลา ไม่นิ่งเฉย)
+        # No fresh command: stay stopped, including before a field is launched.
         if time.time()-self.cmd_t <= CMD_TIMEOUT:
             self.v=self.cmd_v
             self.w=self.cmd_w
         else:
-            tgt=self._patrol[self._pi]
-            dx=tgt[0]-self.x; dy=tgt[1]-self.y
-            dist=math.hypot(dx,dy)
-            if dist < 0.15:
-                self._pi=(self._pi+1) % len(self._patrol)
-                self.v=0.0; self.w=0.0
-            else:
-                desired=math.atan2(dy,dx)
-                err=desired-self.th
-                while err>math.pi: err-=2*math.pi
-                while err<-math.pi: err+=2*math.pi
-                self.w=max(-1.2,min(1.2,2.0*err))
-                self.v=min(0.5,dist) if abs(err)<0.3 else 0.05
+            self.v=0.0; self.w=0.0
         self.th+=self.w*0.05
         next_x=self.x+self.v*math.cos(self.th)*0.05; next_y=self.y+self.v*math.sin(self.th)*0.05
-        if motionIsClear(self.x,self.y,next_x,next_y): self.x,self.y=next_x,next_y
+        if self.v==0.0 or motionIsClear(self.x,self.y,next_x,next_y): self.x,self.y=next_x,next_y
         else: self.v=0.0; self.cmd_v=0.0
         now=self.get_clock().now().to_msg()
         qz=math.sin(self.th/2); qw=math.cos(self.th/2)
@@ -331,11 +529,25 @@ class SimState(Node):
         o.pose.pose.orientation.z=qz; o.pose.pose.orientation.w=qw
         o.twist.twist.linear.x=self.v; o.twist.twist.angular.z=self.w
         self.odom_pub.publish(o)
-        s=LaserScan(); s.header.stamp=now; s.header.frame_id='laser_frame'
-        s.angle_min=-math.pi; s.angle_max=math.pi; s.angle_increment=2*math.pi/360.0
-        s.range_min=0.1; s.range_max=12.0
-        s.ranges=[float(rayCast(self.x,self.y,self.th+a,s.range_max)) for a in [s.angle_min+i*s.angle_increment for i in range(360)]]
-        self.scan_pub.publish(s)
+        self._scan_tick+=1
+        if self._scan_tick % 2 == 0:
+            s=LaserScan(); s.header.stamp=now; s.header.frame_id=LASER_FRAME
+            s.angle_min=-math.pi; s.angle_max=math.pi; s.angle_increment=2*math.pi/360.0
+            s.range_min=0.1; s.range_max=12.0
+            pose=(self.x,self.y,self.th)
+            if pose!=getattr(self,'_scan_pose',None):
+                heading=(0,0,math.sin(self.th/2),math.cos(self.th/2))
+                offset=quatRot(heading,LASER_OFFSET)
+                ox,oy=self.x+offset[0],self.y+offset[1]
+                values=[]
+                for i in range(360):
+                    a=s.angle_min+i*s.angle_increment
+                    direction=quatRot(heading,quatRot(LASER_Q,(math.cos(a),math.sin(a),0)))
+                    values.append(float(rayCastVector(ox,oy,direction[0],direction[1],s.range_max)))
+                self._scan_ranges=values
+                self._scan_pose=pose
+            s.ranges=self._scan_ranges
+            self.scan_pub.publish(s)
 
 def main():
     rclpy.init()
@@ -355,7 +567,8 @@ if __name__=='__main__':
 // ═══════════════════════════════════════════════════════════════
 function wsRoot(robotKey) {
   const safe = String(robotKey).replace(/[^A-Za-z0-9_-]/g, '_');
-  return path.join(SIM_WS_ROOT, safe);
+  const clusterId=clusterIdForSim(robotKey);
+  return clusterId===1?path.join(SIM_WS_ROOT,safe):path.join(SIM_WS_ROOT,`CL-${clusterId}`,safe);
 }
 function seed(root) {
   try {
@@ -417,11 +630,13 @@ function toAbs(root, cwd, p) {
 //  FakeAgent — พูดโปรโตคอลเดียวกับ agent.js เพื่อเสียบ agents map
 // ═══════════════════════════════════════════════════════════════
 function createSimAgent(robotKey, deps) {
-  const { pendingReqs, monSockets, webSockets, WebSocket } = deps;
+  const { pendingReqs, monSockets, webSockets, WebSocket, forwardPtyMessage, remote } = deps;
   const root = wsRoot(robotKey);
+  const domain = reserveDomain(robotKey);      // unique among active runtimes; released by ws.close()
+  const simRosEnvironment={ROS_DOMAIN_ID:String(domain),ROS_AUTOMATIC_DISCOVERY_RANGE:'LOCALHOST'};
+  const remoteRequest=(action,payload={},timeout=30000)=>remote.request(action,{robotKey,masterRoot:root,domain,...payload},timeout);
   let initialMap=null;try{initialMap=JSON.parse(fss.readFileSync(path.join(root,'map.json'),'utf8'));}catch{}
   const eng  = new SimEngine(robotKey,initialMap);
-  const domain = domainFor(robotKey);       // ROS_DOMAIN_ID เฉพาะหุ่นนี้ (แยก topic ไม่ให้ชน sim อื่น)
   seed(root);
 
   // ── Sim backend (dummy-primary): เปิด sim ด้วย dummy kinematic (SIM_STATE_PUB) เสมอ ──
@@ -437,33 +652,55 @@ function createSimAgent(robotKey, deps) {
   // simulation มีเจ้าของ /tf, /odom และ /scan เพียง process เดียวเสมอ
   // ⚠️ ต้องรอ pkill จบก่อน spawn ใหม่ (รัน spawn ใน callback ของ exec)
   //    ถ้าสั่ง pkill แล้ว spawn ต่อกันแบบ async → pkill จะฆ่า node ที่เพิ่ง spawn ไปเอง (race → sim ว่างเปล่า)
-  const startBackend = () => {
+  const startBackend = async () => {
+    if(closed)return;
     // ⚠️ ไม่ auto-start wheel_odom (หุ่นที่ user ออกแบบ) — ผู้ใช้รันเองผ่าน "▶ Run in Sim"
     //    ดังนั้นเปิด sim ด้วย dummy fallback (SIM_STATE_PUB) เสมอ (กล่องชั่วคราว + Teleop)
     try { fss.writeFileSync(path.join(root, 'tmp', '_sim_state_pub.py'), SIM_STATE_PUB); } catch (e) {}
     const _pubPy = path.join(root, 'tmp', '_sim_state_pub.py');
     const _pubLog = path.join(root, 'tmp', '_sim_state.log');
-    let _pubStdio = ['ignore', 'ignore', 'ignore'];
-    try { const fd = fss.openSync(_pubLog, 'a'); _pubStdio = ['ignore', fd, fd]; } catch (e) {}
-    const simPubChild = spawn('bash', ['-lc', `source ${_rosSetup} 2>/dev/null; exec python3 -u ${_pubPy}`], {
+    let _pubStdio = ['ignore', 'ignore', 'ignore'],logFd;
+    try { logFd=fss.openSync(_pubLog, 'a'); _pubStdio = ['ignore', logFd, logFd]; } catch (e) {}
+    if(remote){
+      const result=await remoteRequest('launch',{command:`setup=$(ls /opt/ros/*/setup.bash 2>/dev/null | tail -1); [ -n "$setup" ] && source "$setup"; exec python3 -u ${_pubPy}`,log:_pubLog},10000);
+      fss.writeFileSync(simPubPidFile,String(result.pid));
+      return;
+    }
+    let simPubChild;
+    try{simPubChild = spawn('bash', ['-lc', `source ${_rosSetup} 2>/dev/null; exec python3 -u ${_pubPy}`], {
       cwd: root,
-      env: { ...process.env, HOME: root, TERM: 'xterm-256color', ROS_DOMAIN_ID: String(domain) },
+      env: buildSimProcessEnvironment({ HOME: root, TERM: 'xterm-256color', ...simRosEnvironment }),
       detached: true,
       stdio: _pubStdio,
-    });
+    });}finally{if(logFd!==undefined)fss.closeSync(logFd);}
+    simPubChild.on('error',error=>console.error('[SIM] state publisher failed:',error.message));
     try { fss.writeFileSync(simPubPidFile, String(simPubChild.pid)); } catch (e) {}
     simPubChild.unref();
     console.log('[SIM] dummy SIM_STATE_PUB fallback for', robotKey, '(wheel_odom เปิดด้วยตัวเองผ่าน Run in Sim)');
   };
-  try { exec(`PID=$(cat '${root}/tmp/_mapsim.pid' 2>/dev/null); [ -n "$PID" ] && kill -9 "$PID" 2>/dev/null; pkill -9 -f '${root}/install/.*/[m]apsim' 2>/dev/null; pkill -f '${root}/.*_sim_state_pub[.]py' 2>/dev/null; pkill -f '${root}/.*wheel_odom' 2>/dev/null; rm -f '${root}/tmp/_mapsim.pid'`, () => startBackend()); }
-  catch (e) { startBackend(); }
+  const resetCommand=`PID=$(cat '${root}/tmp/_mapsim.pid' 2>/dev/null); [ -n "$PID" ] && kill -9 "$PID" 2>/dev/null; pkill -9 -f '${root}/install/.*/[m]apsim' 2>/dev/null; pkill -f '${root}/.*_sim_state_pub[.]py' 2>/dev/null; pkill -f '${root}/.*[w]heel_odom' 2>/dev/null; rm -f '${root}/tmp/_mapsim.pid'`;
+  const resetBackend=()=>remote?remoteRequest('exec',{command:resetCommand,timeout:8000},10000):new Promise(resolve=>exec(resetCommand,{timeout:8000},()=>resolve()));
+  const backendReady=resetBackend().then(()=>startBackend());
 
   const cwdState = new Map();               // termId → relative path (cwd)
   const termState = new Map();              // termId → { line } (terminal buffer)
-  const monTimers = new Map();
   const shells = new Map();                 // termId → child_process (shell จริง บน server)
-  const monChildren = new Map();            // monTermId → child_process (subscribe topic จริง)
-  let rvizTermId = null;                    // termId ของ rviz ที่กำลังเปิด (สำหรับสตรีม/ปิด)
+
+  // `script` เป็นแค่ PTY wrapper; kill เฉพาะ wrapper จะทิ้ง bash/Python ลูกให้รันต่อ
+  // จึงเปิด PTY แต่ละตัวเป็น process group และปิดทั้งกลุ่มเมื่อ WebSocket จบ
+  function stopShell(child) {
+    if (!child || child._rosideStopping) return;
+    child._rosideStopping = true;
+    const pid=child.pid;
+    try { child.stdin.write('\x03'); } catch {}
+    try { process.kill(-pid, 'SIGTERM'); }
+    catch { try { child.kill('SIGTERM'); } catch {} }
+    const force=setTimeout(() => {
+      try { process.kill(-pid, 'SIGKILL'); }
+      catch { try { child.kill('SIGKILL'); } catch {} }
+    }, 750);
+    force.unref?.();
+  }
 
   const reply = (reqId, ok, data, error) => {
     const cb = pendingReqs.get(reqId);
@@ -471,7 +708,7 @@ function createSimAgent(robotKey, deps) {
   };
 
   // รันคำสั่งจริงบน server (มี ROS) ภายใน workspace ของหุ่น
-  function realExec(cmd, cwd = root) {
+  function realExec(cmd, cwd = root, requestedTimeout = 120000) {
     // ใน sim: ~/ros2_ws คือ alias ของ root → แปลให้ชี้มาที่ ~ (root) เหมือนทาง terminal
     // ป้องกันคำสั่งเช่น `mkdir -p ~/ros2_ws/src` สร้างโฟลเดอร์ ros2_ws ซ้อนซ้ำ
     cmd = cmd.replace(/~\/ros2_ws(?=\/|\s|$)/g, '~');
@@ -479,21 +716,34 @@ function createSimAgent(robotKey, deps) {
     const tmpRoot = path.join(root, 'tmp') + '/';
     cmd = cmd.replace(/(^|[\s'";&|()])(\/tmp\/)/g, '$1' + tmpRoot);
     try { fss.mkdirSync(tmpRoot, { recursive:true }); } catch (e) {}
+    if(remote)return remoteRequest('exec',{command:cmd,timeout:requestedTimeout},Math.min(310000,Math.max(1000,Number(requestedTimeout)||120000)+5000));
     return new Promise(resolve => {
-      const child = exec(cmd, {
+      const timeout=Math.max(1000, Math.min(300000, Number(requestedTimeout) || 120000));
+      // exec does not forward detached to its child. setsid makes the shell's
+      // PID a process-group ID so the timeout can also stop ROS descendants.
+      const groupedCommand=`exec setsid bash -c '${cmd.replace(/'/g, `'\\''`)}'`;
+      const child = exec(groupedCommand, {
         shell: '/bin/bash', cwd,
-        timeout: 120000, maxBuffer: 20 * 1024 * 1024,
+        timeout, maxBuffer: 20 * 1024 * 1024,
         // ⚠️ ต้องมี ROS_DOMAIN_ID เสมอ (ก่อนหน้านี้ env ถูกเขียนซ้ำสองรอบ → key หลังทับ front ทำให้
         //    ROS_DOMAIN_ID หาย → คำสั่งพวก ros2 node list / rviz bridge ไปรันใน domain 0
         //    ไม่ตรงกับ node ที่รันใน terminal (domain ของ sim) → dashboard/rviz ไม่เจอ node)
-        env: { ...process.env, HOME: cwd, TERM: 'xterm-256color', ROS_DOMAIN_ID: String(domain) },
+        env: buildSimProcessEnvironment({ HOME: cwd, TERM: 'xterm-256color', ...simRosEnvironment }),
       }, (err, stdout, stderr) => {
+        clearTimeout(groupTimeout);
+        // exec's timeout kills only bash by default; ROS grandchildren would
+        // keep consuming CPU after the request has already failed.
+        if(err?.killed){try{process.kill(-child.pid,'SIGKILL');}catch{}}
         resolve({
           stdout: (stdout || '').trim(),
-          stderr: (stderr || '').trim(),
+          stderr: (stderr || (err?.killed ? 'Simulation command timed out' : err?.message) || '').trim(),
           code: err ? (typeof err.code === 'number' ? err.code : 1) : 0,
         });
       });
+      // Do not wait for exec's callback: a grandchild holding stdout open can
+      // prevent that callback from ever arriving after bash was terminated.
+      const groupTimeout=setTimeout(()=>{try{process.kill(-child.pid,'SIGKILL');}catch{}},timeout+100);
+      groupTimeout.unref?.();
     });
   }
 
@@ -501,12 +751,7 @@ function createSimAgent(robotKey, deps) {
   // ⚠️ สำคัญ: simulation รัน ROS จริงบน server โดยใช้ ROS_DOMAIN_ID ของหุ่นนี้ (ดู realExec)
   //    ดังนั้น rviz / topic list / node list ต้องรันคำสั่งจริงเพื่ออ่าน topic ที่ package ของผู้ใช้กำลัง publish
   //    ไม่ใช้ข้อมูลจำลองอีกต่อไป (กัน rviz "ไม่ตรงตาม package ที่รัน" และ topic ชนกันระหว่าง sim)
-  async function runExec(cmd) {
-    if (/topic\s+pub.*goal_pose/.test(cmd)) {
-      const mx = cmd.match(/x:\s*([-\d.]+)/), my = cmd.match(/y:\s*([-\d.]+)/);
-      if (mx && my) eng.setGoal(mx[1], my[1]);
-      return { stdout:'publishing goal...', stderr:'', code:0 };
-    }
+  async function runExec(cmd, requestedTimeout) {
     // ⚠️ ห้าม block คำสั่ง pkill — ก่อนหน้านี้มีการ short-circuit ทุกคำสั่งที่มี "pkill"
     //    ซึ่งทำให้คำสั่งเริ่ม rviz (startCmd ที่มี `pkill ...; nohup python3 ... &`) ถูกยกเลิก silently
     //    ผลคือ bridge (_rviz_rt.py) ไม่ได้รันเลย → หน้า RVIZ ไม่มีข้อมูล TF
@@ -514,6 +759,7 @@ function createSimAgent(robotKey, deps) {
     //    root/tmp ของ sim นี้ ทำให้ฆ่า/เริ่ม bridge ได้ถูกต้องโดยไม่ไปกระทบ sim อื่น
     // ตรวจ ROS_DISTRO จริงบน server (ไม่ฮาร์ดโค้ด humble)
     if (/ROS_DISTRO=/.test(cmd)) {
+      if(remote)return realExec(cmd,root,requestedTimeout);
       let setup = '';
       try {
         const ds = fss.readdirSync('/opt/ros').filter(d => /^[a-z]+$/.test(d)).sort();
@@ -522,10 +768,9 @@ function createSimAgent(robotKey, deps) {
       if (setup) return { stdout: `ROS_DISTRO=${path.basename(path.dirname(setup))}\nSETUP=${setup}`, stderr:'', code:0 };
       return { stdout:'ROS_DISTRO=unknown\nSETUP=/opt/ros/humble/setup.bash', stderr:'', code:0 };
     }
-    if (/tf_static/.test(cmd)) return { stdout: JSON.stringify({transforms:[]}), stderr:'', code:0 };
     // ทุกคำสั่งอื่น (ros2 run/launch, ros2 topic/node list, rviz streamer, colcon build, ls ...)
     // → รันจริงบน server พร้อม ROS_DOMAIN_ID ของหุ่นนี้ (แยก topic ไม่ให้ชน simulation อื่น)
-    return realExec(cmd, root);
+    return realExec(cmd, root, requestedTimeout);
   }
 
   // shell builtin (ls/cd/cat/pwd/colcon) + delegate ไป runExec
@@ -598,6 +843,7 @@ function createSimAgent(robotKey, deps) {
     }
   }
 
+  let closed=false;
   const ws = {
     readyState: WebSocket.OPEN,
     send(str) {
@@ -606,42 +852,38 @@ function createSimAgent(robotKey, deps) {
 
       if (type === 'request') {
         const { reqId, action, payload } = msg;
-        Promise.resolve(action === 'exec' ? runExec(payload.command || '') : runFs(action, payload || {}))
+        Promise.resolve(action === 'exec' ? runExec(payload.command || '', payload.timeout) : runFs(action, payload || {}))
           .then(data => reply(reqId, true, action === 'exec' ? data : data))
           .catch(e => reply(reqId, false, null, e.message));
       }
 
       else if (type === 'pty_init') {
         const id = msg.termId;
-        if (id.startsWith('mon_') || id.startsWith('rviz_')) {
-          // monitor / rviz ยังคงใช้ข้อมูลจำลอง (SimEngine) เหมือนเดิม
-          if (id.startsWith('rviz_')) {
-            rvizTermId = id;                 // จดจำ termId ของ rviz ที่เปิดอยู่
-            const sock = webSockets.get(id);
-            if (sock?.readyState === WebSocket.OPEN) sock.send(JSON.stringify({type:'pty_output',termId:id,data:b64('\x1b[32msim@ros2\x1b[0m:~/ros2_ws$ ')}));
-            cwdState.set(id, '');
-            termState.set(id, { line:'' });
-          }
-          return;
-        }
+        if(remote){void remoteRequest('pty_init',{termId:id},10000).catch(error=>console.error('[CLUSTER] Terminal:',error.message));return;}
         if (shells.has(id)) return;
         // สปาวน์ shell จริงบน server (มี PTY ผ่าน `script`) → colcon build / คำสั่งรันได้จริง
         const child = spawn('script', ['-qec', 'bash -i', '/dev/null'], {
           cwd: root,
+          detached: true, // process-group leader เพื่อปิด Python/ROS descendants ได้ครบ
           // ⚠️ ต้องเซ็ต ROS_DOMAIN_ID ให้ shell ของ terminal ด้วย
           //    ก่อนหน้านี้ shell นี้ไม่ได้ตั้ง → node ที่รันผ่าน Run manager ตกอยู่ใน default domain (0)
           //    ขณะที่ dashboard ใช้ ros2 node list ใน domain ของ sim นี้ → เลยมองไม่เห็น node ที่รันจาก Run manager
           //    และการ Kill ผ่าน ros2 node kill ก็ไปฆ่า domain ผิดตัว ผลคือ "กด kill แล้ว node ไม่ตาย"
-          env: { ...process.env, HOME: root, TERM: 'xterm-256color', COLORTERM: 'truecolor', ROS_DOMAIN_ID: String(domain) },
+          env: buildSimProcessEnvironment({ HOME: root, TERM: 'xterm-256color', COLORTERM: 'truecolor', ...simRosEnvironment }),
         });
         const sockOf = () => { const s = webSockets.get(id); return (s && s.readyState === WebSocket.OPEN) ? s : null; };
-        const fwd = d => { const s = sockOf(); if (s) s.send(JSON.stringify({ type:'pty_output', termId:id, data: Buffer.from(d).toString('base64') })); };
+        const route = message => {
+          if(typeof forwardPtyMessage==='function')return forwardPtyMessage(message);
+          // Standalone/test fallback. Production injects the shared server
+          // parser so SIM and physical agents use the same browser protocol.
+          const s=sockOf();if(s)s.send(JSON.stringify(message));
+        };
+        const fwd = d => route({ type:'pty_output', termId:id, data: Buffer.from(d).toString('base64') });
         child.stdout.on('data', fwd);
         child.stderr.on('data', fwd);
         child.on('exit', () => {
           shells.delete(id);
-          const s = sockOf();
-          if (s) s.send(JSON.stringify({ type:'pty_closed', termId:id }));
+          route({ type:'pty_closed', termId:id });
         });
         child.on('error', () => { shells.delete(id); });
         shells.set(id, child);
@@ -649,85 +891,84 @@ function createSimAgent(robotKey, deps) {
 
       else if (type === 'pty_input') {
         const id = msg.termId, data = msg.data || '';
-        if (id.startsWith('mon_') && /_mon\.py/.test(data)) {
-          const topic = (data.match(/'([^']+)'/)||[])[1] || '/scan';
-          const sock = monSockets.get(id);
-          if (sock?.readyState === WebSocket.OPEN) {
-            sock.send(JSON.stringify({type:'pty_output',termId:id,data:b64('READY:sim\n')}));
-            const t = setInterval(() => {
-              const s = monSockets.get(id);
-              if (!s || s.readyState !== WebSocket.OPEN) { clearInterval(t); monTimers.delete(id); return; }
-              s.send(JSON.stringify({type:'pty_output',termId:id,data:b64('MSG:'+JSON.stringify(eng.msgFor(topic))+'\n')}));
-            }, 200);
-            monTimers.set(id, t);
-          }
-          return;
-        }
-        if (id.startsWith('rviz_')) {
-          // rviz ใช้ข้อมูลจำลอง (SimEngine) — คงพฤติกรรมเดิม
-          const st = termState.get(id); if (st === undefined) return;
-          const sock = webSockets.get(id);
-          const out = s => sock?.readyState===WebSocket.OPEN && sock.send(JSON.stringify({type:'pty_output',termId:id,data:b64(s)}));
-          for (const ch of data) {
-            if (ch === '\r' || ch === '\n') {
-              const line = st.line ? st.line.trim() : '';
-              st.line = '';
-              out('\r\n');
-              if (line) {
-                Promise.resolve(shell(line, id)).then(r => {
-                  if (r) out(r.replace(/\n/g, '\r\n') + '\r\n');
-                  out('\x1b[32msim@ros2\x1b[0m:~/ros2_ws$ ');
-                });
-              } else out('\x1b[32msim@ros2\x1b[0m:~/ros2_ws$ ');
-            } else if (ch === '\x7f') { if (st.line) { st.line = st.line.slice(0,-1); out('\b \b'); } }
-            else { st.line += ch; out(ch); }
-          }
-          return;
-        }
         // terminal ปกติ → ส่งเข้า shell จริง
-        // workspace คือ root เอง → แปล alias ~/ros2_ws ให้ชี้มาที่ ~ (root) โดยไม่ต้องมีโฟลเดอร์จริง
+        // workspace คือ root เอง → แปล alias ~/ros2_ws ให้ชี้มาที่ ~ (root) และ
+        // scope /tmp เข้า workspace เดียวกับ fs_write/exec เพื่อให้ PTY อ่านไฟล์ bridge ถูกตัว
+        if(remote){const scopedData=data.replace(/~\/ros2_ws(?=\/|\s|$)/g,'~').replace(/(^|[\s'";&|()])\/tmp\//g,(_,prefix)=>prefix+path.join(root,'tmp')+'/');void remoteRequest('pty_input',{termId:id,data:scopedData},10000).catch(error=>console.error('[CLUSTER] Terminal input:',error.message));return;}
         const sh = shells.get(id);
-        if (sh) sh.stdin.write(data.replace(/~\/ros2_ws(?=\/|\s|$)/g, '~'));
+        if (sh) {
+          const scopedData=data
+            .replace(/~\/ros2_ws(?=\/|\s|$)/g, '~')
+            .replace(/(^|[\s'";&|()])\/tmp\//g,(_,prefix)=>prefix+path.join(root,'tmp')+'/');
+          sh.stdin.write(scopedData);
+        }
       }
 
       else if (type === 'pty_close') {
         const id = msg.termId;
-        if (monTimers.has(id)) { clearInterval(monTimers.get(id)); monTimers.delete(id); }
-        if (id.startsWith('rviz_')) { eng.rvizOn = false; cwdState.delete(id); termState.delete(id); rvizTermId = null; return; }
+        if(remote)void remoteRequest('pty_close',{termId:id},10000).catch(()=>{});
         const sh = shells.get(id);
-        if (sh) { try { sh.kill(); } catch {} shells.delete(id); }
+        if (sh) { stopShell(sh); shells.delete(id); }
         cwdState.delete(id);
         termState.delete(id);
       }
     },
     close() {
+      if(closed)return;
+      closed=true;
+      ws.readyState=WebSocket.CLOSED??3;
       eng.destroy();
-      monTimers.forEach(clearInterval);
-      shells.forEach(s => { try { s.kill(); } catch {} });
+      if(remote)remote.clearPty?.();
+      shells.forEach(stopShell);
       // ฆ่า Sim Robot State Publisher ของ sim นี้
       try {
         if (fss.existsSync(simPubPidFile)) {
           const pid = parseInt(fss.readFileSync(simPubPidFile, 'utf8').trim());
-          if (pid) try { process.kill(pid, 'SIGKILL'); } catch (e) {}
+          if (pid&&!remote) try { process.kill(pid, 'SIGKILL'); } catch (e) {}
         }
       } catch (e) {}
-      try { exec(`PID=$(cat '${root}/tmp/_mapsim.pid' 2>/dev/null); [ -n "$PID" ] && kill -9 "$PID" 2>/dev/null; pkill -9 -f '${root}/install/.*/[m]apsim' 2>/dev/null; pkill -f '${root}/.*_sim_gazebo[.]sh' 2>/dev/null; pkill -f '${root}/.*_sim_state_pub[.]py' 2>/dev/null; rm -f '${root}/tmp/_mapsim.pid'`, () => {}); } catch (e) {}
+      // Keep the ROS domain lease until every workspace-owned process has
+      // stopped. Releasing it first lets a new simulation reuse the domain
+      // while an old MapSim/teleop/RViz publisher is still emitting data.
+      let released=false;
+      const finish=()=>{if(released)return;released=true;releaseDomain(robotKey,domain);};
+      const pidFiles=['_mapsim.pid','_sim_state_pub.pid','_teleop.pid'].map(name=>`'${root}/tmp/${name}'`).join(' ');
+      const cleanup=`for pf in ${pidFiles}; do pid=$(cat "$pf" 2>/dev/null || true); if printf '%s' "$pid" | grep -Eq '^[0-9]+$' && tr '\\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null | grep -Fq '${root}'; then kill -TERM -- -"$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true; fi; done; sleep 0.25; pkill -KILL -f '${root}/install/.*/[m]apsim' 2>/dev/null || true; pkill -KILL -f '${root}/.*[_]sim_state_pub[.]py' 2>/dev/null || true; pkill -KILL -f '${root}/.*[w]heel_odom' 2>/dev/null || true; pkill -KILL -f '${root}/.*[_]teleop_pub[.]py' 2>/dev/null || true; pkill -KILL -f '${root}/.*[_]rviz_rt_.*[.]py' 2>/dev/null || true; pkill -KILL -f '${root}/.*[_]mon_.*[.]py' 2>/dev/null || true; rm -f ${pidFiles}`;
+      if(remote)remoteRequest('exec',{command:cleanup,timeout:5000},7000).then(finish,finish);
+      else try { exec(cleanup,{timeout:5000},finish); } catch { finish(); }
+      const releaseFallback=setTimeout(finish,5500);releaseFallback.unref?.();
     },
   };
 
   // ── รีสตาร์ท backend ให้โหลด ~/map.json ใหม่ (เรียกจาก endpoint /api/sim/apply-map) ──
-  function respawnBackend(mapJson) {
-    try { fss.mkdirSync(path.join(root, 'tmp'), { recursive: true }); } catch (e) {}
+  async function respawnBackend(mapJson) {
+    fss.mkdirSync(path.join(root, 'tmp'), { recursive: true });
     if (mapJson != null) {
-      try { fss.writeFileSync(path.join(root, 'map.json'), typeof mapJson === 'string' ? mapJson : JSON.stringify(mapJson)); } catch (e) {}
-      try { eng.applyMap(typeof mapJson==='string'?JSON.parse(mapJson):mapJson); } catch (e) {}
+      fss.writeFileSync(path.join(root, 'map.json'), typeof mapJson === 'string' ? mapJson : JSON.stringify(mapJson));
+      eng.applyMap(typeof mapJson==='string'?JSON.parse(mapJson):mapJson);
     }
     // Map apply also changes the kinematic owner back to exactly one fallback.
-    try { exec(`PID=$(cat '${root}/tmp/_mapsim.pid' 2>/dev/null); [ -n "$PID" ] && kill -9 "$PID" 2>/dev/null; pkill -9 -f '${root}/install/.*/[m]apsim' 2>/dev/null; pkill -f '${root}/.*_sim_state_pub[.]py' 2>/dev/null; pkill -f '${root}/.*wheel_odom' 2>/dev/null; rm -f '${root}/tmp/_mapsim.pid'`, () => startBackend()); }
-    catch (e) { startBackend(); }
+    // Resolve after the replacement has started so run-mapsim cannot race the
+    // asynchronous cleanup and have its freshly launched process killed.
+    await backendReady;
+    await resetBackend();
+    if(closed)throw new Error('Simulation closed while applying map');
+    await startBackend();
   }
 
-  return { ws, lastSeen: Date.now(), _sim: true, _engine: eng, respawnBackend };
+  async function applyMapWithoutRestart(mapJson) {
+    await backendReady;
+    if(closed)throw new Error('Simulation closed while applying map');
+    const target=path.join(root,'map.json'),pending=target+'.pending';
+    fss.writeFileSync(pending,JSON.stringify(mapJson));fss.renameSync(pending,target);
+    eng.applyMap(mapJson);
+  }
+
+  if(remote)remote.clearPty=remote.onPty(robotKey,message=>{
+    if(message.type==='pty_output')forwardPtyMessage?.({type:'pty_output',termId:message.termId,data:Buffer.from(message.data||'').toString('base64')});
+    else if(message.type==='pty_closed')forwardPtyMessage?.({type:'pty_closed',termId:message.termId});
+  });
+  return { ws, lastSeen: Date.now(), _sim: true, _engine: eng, _domainId:domain, respawnBackend, applyMapWithoutRestart };
 }
 
 // ── Save the Transformation-page model as a real `sim_robot_tf` package ──
@@ -823,20 +1064,17 @@ from std_msgs.msg import String
 from std_srvs.srv import Trigger
 
 BE = QoSProfile(depth=10, reliability=QoSReliabilityPolicy.BEST_EFFORT)
-ST = QoSProfile(depth=100, reliability=QoSReliabilityPolicy.RELIABLE, durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
+ST = QoSProfile(depth=1, reliability=QoSReliabilityPolicy.RELIABLE, durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
 CMD_TIMEOUT = 0.5
 ROBOT_RADIUS = 0.24
+
+${SIM_SPATIAL_PY}
+${SIM_NAVIGATION_PY}
 
 WALLS = [(-4,-4,4,-4),(4,-4,4,4),(4,4,-4,4),(-4,4,-4,-4),
          (-1,-1,1,-1),(1,-1,1,1),(1,1,-1,1),(-1,1,-1,1),(2.5,-3,2.5,-1)]
 def ray_cast(ox,oy,ang,max_r):
-    best=max_r; dx=math.cos(ang); dy=math.sin(ang)
-    for x1,y1,x2,y2 in WALLS:
-        sx,sy=x2-x1,y2-y1; den=dx*sy-dy*sx
-        if abs(den)<1e-9: continue
-        t=((x1-ox)*sy-(y1-oy)*sx)/den; u=((x1-ox)*dy-(y1-oy)*dx)/den
-        if t>0 and t<best and 0<=u<=1: best=t
-    return best
+    return WALL_INDEX.ray(ox,oy,ang,max_r)
 
 def point_segment_distance(px,py,x1,y1,x2,y2):
     dx,dy=x2-x1,y2-y1; length2=dx*dx+dy*dy
@@ -852,6 +1090,7 @@ def motion_is_clear(x1,y1,x2,y2):
     return all(not robot_collides(x1+(x2-x1)*i/steps,y1+(y2-y1)*i/steps) for i in range(1,steps+1))
 
 MAP_START=(0.0,0.0)
+MAP_YAW=0.0
 try:
     with open(os.path.expanduser('~/map.json')) as _f: _m=json.load(_f)
     w=_m.get('walls') or []
@@ -860,8 +1099,10 @@ try:
     if b and not w: WALLS=[(b[0],b[1],b[2],b[1]),(b[2],b[1],b[2],b[3]),(b[2],b[3],b[0],b[3]),(b[0],b[3],b[0],b[1])]
     s=_m.get('start')
     if s: MAP_START=(float(s[0]),float(s[1]))
+    MAP_YAW=math.radians(float(_m.get('startPose',{}).get('yaw',0.0)))
 except Exception:
     pass
+WALL_INDEX=WallIndex(WALLS)
 
 URDF='''<?xml version="1.0"?>
 <robot name="map_sim_robot">
@@ -888,22 +1129,18 @@ class MapSimNode(Node):
         self.save_map_srv=self.create_service(Trigger,'/save_slam_map',self._save_slam_map)
         self.cancel_nav_srv=self.create_service(Trigger,'/cancel_navigation',self._cancel_navigation)
         self.declare_parameter('nav_enabled',False)
-        self.declare_parameter('nav_max_speed',0.55)
-        self.declare_parameter('nav_turn_speed',1.2)
-        self.declare_parameter('nav_goal_tolerance',0.20)
-        self.declare_parameter('nav_obstacle_distance',0.48)
-        self.declare_parameter('nav_inflation_radius',0.28)
-        self.declare_parameter('nav_lookahead_distance',0.45)
+${Object.values(NAVIGATION_SETTINGS.fields).map(field=>`        self.declare_parameter('${field.ros}',${Number(field.value).toFixed(2)})`).join('\n')}
         self.declare_parameter('nav_allow_unknown',False)
         self.static_br=StaticTransformBroadcaster(self)
         self.br=TransformBroadcaster(self)
-        self.x,self.y,self.th=float(MAP_START[0]),float(MAP_START[1]),0.0
+        self.x,self.y,self.th=float(MAP_START[0]),float(MAP_START[1]),MAP_YAW
         self.last_cmd=Twist(); self.last_cmd_time=0.0
         self.nav_goal=None; self.nav_path=[]; self.nav_path_index=0; self._last_replan=0.0; self._nav_status='ready'; self._last_nav_status_time=0.0
         self._web_goal_file=os.path.expanduser('~/tmp/_nav_goal.json')
         try: self._web_goal_mtime=os.stat(self._web_goal_file).st_mtime_ns
         except FileNotFoundError: self._web_goal_mtime=0
         self._web_nav_config_file=os.path.expanduser('~/tmp/_nav_config.json'); self._web_nav_config_mtime=0
+        self._nav_grid=None; self._nav_grid_source=None; self._nav_error=''; self._nav_progress=(self.x,self.y,time.monotonic())
         self.map_data=None; self.nav_map_data=None; self.nav_map_name=None; self._load_map(); self._load_selected_nav_map()
         self._init_slam_map()
         self._publish_static_tfs()
@@ -920,7 +1157,14 @@ class MapSimNode(Node):
             try:
                 if os.path.isfile(urdf_path):
                     with open(urdf_path,'r') as urdf_file: loaded_urdf=urdf_file.read()
-                    if '<robot' in loaded_urdf: robot_urdf=loaded_urdf; break
+                    # Older Robot Config versions persisted XML quotes as \".
+                    # Normalize that exact legacy encoding and validate the XML;
+                    # an invalid saved model must never make the robot disappear.
+                    candidate=loaded_urdf.replace(chr(92)+chr(34),chr(34))
+                    if '<robot' in candidate:
+                        import xml.etree.ElementTree as _xml_tree
+                        _xml_tree.fromstring(candidate)
+                        robot_urdf=candidate; break
             except Exception as e: self.get_logger().warning(f'Cannot load Robot Config URDF: {e}')
         self._robot_urdf=robot_urdf
         self.desc_pub.publish(String(data=self._robot_urdf))
@@ -928,6 +1172,7 @@ class MapSimNode(Node):
         self.get_logger().info('Robot model: Robot Config' if robot_urdf != URDF else 'Robot model: MapSim fallback')
         self._last_tick=time.monotonic()
         self._last_slam_publish=0.0
+        self._scan_pose=None; self._slam_pose=None
         self.timer=self.create_timer(0.1,self._tick)
         self.get_logger().info('sim_robot_mapsim started')
     def _publish_description(self): self.desc_pub.publish(String(data=self._robot_urdf))
@@ -947,7 +1192,10 @@ class MapSimNode(Node):
             with open(self._web_goal_file,'r') as goal_file: goal=json.load(goal_file)
             goal_id=str(goal.get('id','')); x=float(goal['x']); y=float(goal['y']); yaw=float(goal.get('yaw',0.0))
             if not all(math.isfinite(value) for value in (x,y,yaw)): raise ValueError('goal contains non-finite values')
-            accepted,error=self._accept_nav_goal(x,y,yaw)
+            if goal.get('cancel'):
+                self.nav_goal=None; self.nav_path=[]; self._publish_nav_path(); self._set_nav_status('canceled','ยกเลิกภารกิจนำทางแล้ว')
+                accepted,error=True,''
+            else: accepted,error=self._accept_nav_goal(x,y,yaw)
             ack_path=os.path.expanduser('~/tmp/_nav_goal_ack.json')
             with open(ack_path,'w') as ack_file: json.dump({'id':goal_id,'accepted':accepted,'error':error,'x':x,'y':y},ack_file)
             if accepted: self.get_logger().info('Robot Playground goal planned: %.2f, %.2f (%d points)'%(x,y,len(self.nav_path)))
@@ -959,7 +1207,7 @@ class MapSimNode(Node):
             if modified==self._web_nav_config_mtime: return
             self._web_nav_config_mtime=modified
             with open(self._web_nav_config_file,'r') as config_file: config=json.load(config_file)
-            config_id=str(config.get('id','')); allowed={'nav_enabled':bool,'nav_max_speed':float,'nav_turn_speed':float,'nav_obstacle_distance':float,'nav_inflation_radius':float,'nav_lookahead_distance':float,'nav_goal_tolerance':float}
+            config_id=str(config.get('id','')); allowed={'nav_enabled':bool,${Object.values(NAVIGATION_SETTINGS.fields).map(field=>`'${field.ros}':float`).join(',')}}
             params=[]
             for name,value_type in allowed.items():
                 if name in config: params.append(Parameter(name,value=value_type(config[name])))
@@ -967,7 +1215,9 @@ class MapSimNode(Node):
             ack={'id':config_id,'ok':not errors,'error':'; '.join(errors)}
             with open(os.path.expanduser('~/tmp/_nav_config_ack.json'),'w') as ack_file: json.dump(ack,ack_file)
             if errors: self.get_logger().warning('Navigation config rejected: '+ack['error'])
-            else: self.get_logger().info('Navigation config applied')
+            else:
+                self.nav_path=[]; self._publish_nav_path()
+                self.get_logger().info('Navigation config applied')
         except FileNotFoundError: pass
         except Exception as error:
             try:
@@ -986,81 +1236,81 @@ class MapSimNode(Node):
         for x,y in self.nav_path:
             pose=PoseStamped(); pose.header=message.header; pose.pose.position.x=x; pose.pose.position.y=y; pose.pose.orientation.w=1.0; message.poses.append(pose)
         self.nav_path_pub.publish(message)
-    def _nearest_free(self,cell,blocked,width,height,max_radius=20):
-        x,y=cell
-        for radius in range(max_radius+1):
-            for cy in range(max(0,y-radius),min(height,y+radius+1)):
-                for cx in range(max(0,x-radius),min(width,x+radius+1)):
-                    if max(abs(cx-x),abs(cy-y))==radius and not blocked[cy*width+cx]: return (cx,cy)
-        return None
+    def _prepare_nav_grid(self):
+        grid=self.nav_map_data or self.map_data
+        if self._nav_grid_source is not grid:
+            self._nav_grid=NavigationGrid(grid.data,grid.info.width,grid.info.height,grid.info.resolution,
+                (grid.info.origin.position.x,grid.info.origin.position.y),WALLS,
+                bool(self.get_parameter('nav_allow_unknown').value))
+            self._nav_grid_source=grid
+        self._nav_grid.configure(float(self.get_parameter('nav_robot_radius').value),
+            float(self.get_parameter('nav_safety_margin').value),float(self.get_parameter('nav_inflation_radius').value),
+            float(self.get_parameter('nav_cost_scaling').value))
+        return self._nav_grid
     def _plan_nav_path(self,gx,gy):
-        grid=self.nav_map_data or self.map_data; width,height=grid.info.width,grid.info.height; resolution=grid.info.resolution
-        ox,oy=grid.info.origin.position.x,grid.info.origin.position.y; allow_unknown=bool(self.get_parameter('nav_allow_unknown').value)
-        occupied=[value>=65 or (value<0 and not allow_unknown) for value in grid.data]
-        inflation=max(0,int(math.ceil(float(self.get_parameter('nav_inflation_radius').value)/resolution)))
-        blocked=occupied[:]
-        if inflation:
-            obstacles=[(index%width,index//width) for index,value in enumerate(occupied) if value]
-            for x,y in obstacles:
-                for dy in range(-inflation,inflation+1):
-                    for dx in range(-inflation,inflation+1):
-                        nx,ny=x+dx,y+dy
-                        if dx*dx+dy*dy<=inflation*inflation and 0<=nx<width and 0<=ny<height: blocked[ny*width+nx]=True
-        to_cell=lambda x,y:(int((x-ox)/resolution),int((y-oy)/resolution))
-        raw_start,raw_goal=to_cell(self.x,self.y),to_cell(gx,gy)
-        if not(0<=raw_goal[0]<width and 0<=raw_goal[1]<height) or occupied[raw_goal[1]*width+raw_goal[0]]: return []
-        start=self._nearest_free(raw_start,blocked,width,height); goal=self._nearest_free(raw_goal,blocked,width,height)
-        if start is None or goal is None: return []
-        queue=[(0.0,start)]; came={}; cost={start:0.0}; directions=[(-1,0,1),(1,0,1),(0,-1,1),(0,1,1),(-1,-1,1.414),(1,-1,1.414),(-1,1,1.414),(1,1,1.414)]
-        while queue:
-            _,current=heapq.heappop(queue)
-            if current==goal: break
-            cx,cy=current
-            for dx,dy,step in directions:
-                nx,ny=cx+dx,cy+dy
-                if not(0<=nx<width and 0<=ny<height) or blocked[ny*width+nx]: continue
-                if dx and dy and (blocked[cy*width+nx] or blocked[ny*width+cx]): continue
-                neighbor=(nx,ny); next_cost=cost[current]+step
-                if next_cost>=cost.get(neighbor,float('inf')): continue
-                cost[neighbor]=next_cost; came[neighbor]=current; heuristic=math.hypot(goal[0]-nx,goal[1]-ny); heapq.heappush(queue,(next_cost+heuristic,neighbor))
-        if goal not in cost: return []
-        cells=[goal]
-        while cells[-1]!=start: cells.append(came[cells[-1]])
-        cells.reverse(); points=[(ox+(x+0.5)*resolution,oy+(y+0.5)*resolution) for x,y in cells]
-        if math.hypot(points[-1][0]-gx,points[-1][1]-gy)>resolution*0.25: points.append((gx,gy))
-        return points
+        try:
+            grid=self._prepare_nav_grid()
+            points=grid.plan((self.x,self.y),(gx,gy),float(self.get_parameter('nav_planning_budget_ms').value))
+            self._nav_error=grid.error
+            return points
+        except Exception as error:
+            self._nav_error='วางแผนไม่สำเร็จ: '+str(error)
+            return []
     def _accept_nav_goal(self,x,y,yaw):
-        self._set_nav_status('planning','กำลังคำนวณเส้นทาง A*')
+        self._set_nav_status('planning','กำลังคำนวณเส้นทางพร้อมระยะปลอดภัย')
         planned=self._plan_nav_path(x,y)
         if not planned:
-            self.nav_goal=None; self.nav_path=[]; self._publish_nav_path(); self._set_nav_status('failed','หาเส้นทางไม่ได้ ลองเลือกจุดในพื้นที่ว่าง')
-            return False,'ไม่พบเส้นทางบน Saved Map'
-        self.nav_goal=(x,y,yaw); self.nav_path=planned; self.nav_path_index=1 if len(planned)>1 else 0; self._last_replan=time.monotonic(); self._publish_nav_path(); self._set_nav_status('navigating','สร้างเส้นทางแล้ว กำลังเดินทาง',math.hypot(x-self.x,y-self.y)); return True,''
+            self.nav_goal=None; self.nav_path=[]; self._publish_nav_path(); self._set_nav_status('failed',self._nav_error)
+            return False,self._nav_error
+        self.nav_goal=(x,y,yaw); self.nav_path=planned; self.nav_path_index=1 if len(planned)>1 else 0
+        self._last_replan=time.monotonic(); self._nav_progress=(self.x,self.y,time.monotonic())
+        self._publish_nav_path(); self._set_nav_status('navigating','สร้างเส้นทางแล้ว กำลังเดินทาง',math.hypot(x-self.x,y-self.y)); return True,''
     def _nav_command(self):
         if not self.get_parameter('nav_enabled').value or self.nav_goal is None: return 0.0,0.0
-        gx,gy,gyaw=self.nav_goal; dx,dy=gx-self.x,gy-self.y; distance=math.hypot(dx,dy)
-        tolerance=float(self.get_parameter('nav_goal_tolerance').value)
+        gx,gy,gyaw=self.nav_goal; distance=math.hypot(gx-self.x,gy-self.y)
+        tolerance=float(self.get_parameter('nav_goal_tolerance').value); turn=float(self.get_parameter('nav_turn_speed').value)
         if distance<=tolerance:
-            self.th=gyaw; self.nav_goal=None; self.nav_path=[]; self._publish_nav_path(); self._set_nav_status('succeeded','ถึงจุดหมายแล้ว!',0.0); return 0.0,0.0
+            error=math.atan2(math.sin(gyaw-self.th),math.cos(gyaw-self.th))
+            if abs(error)>float(self.get_parameter('nav_yaw_tolerance').value):
+                self._set_nav_status('aligning','ถึงตำแหน่งแล้ว กำลังปรับมุมปลายทาง',distance)
+                return 0.0,max(-turn,min(turn,error*2))
+            self.nav_goal=None; self.nav_path=[]; self._publish_nav_path(); self._set_nav_status('succeeded','ถึงจุดหมายแล้ว!',0.0); return 0.0,0.0
         if not self.nav_path:
             accepted,_=self._accept_nav_goal(gx,gy,gyaw)
             if not accepted: return 0.0,0.0
+        grid=self._nav_grid; position=(self.x,self.y); now=time.monotonic()
         lookahead=float(self.get_parameter('nav_lookahead_distance').value)
-        while self.nav_path_index<len(self.nav_path)-1 and math.hypot(self.nav_path[self.nav_path_index][0]-self.x,self.nav_path[self.nav_path_index][1]-self.y)<lookahead: self.nav_path_index+=1
-        tx,ty=self.nav_path[self.nav_path_index]; target=math.atan2(ty-self.y,tx-self.x); error=math.atan2(math.sin(target-self.th),math.cos(target-self.th))
-        max_speed=float(self.get_parameter('nav_max_speed').value); turn=float(self.get_parameter('nav_turn_speed').value)
-        obstacle=float(self.get_parameter('nav_obstacle_distance').value)
-        lx=self.x+0.20*math.cos(self.th); ly=self.y+0.20*math.sin(self.th)
-        front=self._ray(lx,ly,self.th,rng=max(1.0,obstacle+0.4))
-        if front<obstacle:
-            if time.monotonic()-self._last_replan>1.5:
-                replanned=self._plan_nav_path(gx,gy); self._last_replan=time.monotonic()
-                if replanned: self.nav_path=replanned; self.nav_path_index=1 if len(replanned)>1 else 0; self._publish_nav_path()
-            self._set_nav_status('replanning','เส้นทางถูกขวาง กำลังวางแผนใหม่',distance)
-            direction=1.0 if error>=0 else -1.0; return 0.0,direction*min(turn,max(0.45,abs(error)*1.5))
-        self._set_nav_status('navigating','กำลังตามเส้นทาง A* ไปยังธง',distance)
-        if abs(error)>0.38: return 0.0,max(-turn,min(turn,error*2.0))
-        heading_scale=max(0.25,1.0-abs(error)/0.6); return min(max_speed,max(0.08,distance*0.65))*heading_scale,max(-turn,min(turn,error*1.6))
+        while self.nav_path_index<len(self.nav_path)-1:
+            point=self.nav_path[self.nav_path_index]
+            if math.hypot(point[0]-self.x,point[1]-self.y)>=lookahead: break
+            if not grid.line_free(position,self.nav_path[self.nav_path_index+1]): break
+            self.nav_path_index+=1
+        tx,ty=self.nav_path[self.nav_path_index]; target=math.atan2(ty-self.y,tx-self.x)
+        error=math.atan2(math.sin(target-self.th),math.cos(target-self.th))
+        px,py,progress_time=self._nav_progress
+        if math.hypot(self.x-px,self.y-py)>.04: self._nav_progress=(self.x,self.y,now)
+        elif now-progress_time>20:
+            self.nav_goal=None; self.nav_path=[]; self._publish_nav_path()
+            self._set_nav_status('failed','หุ่นไม่คืบหน้า 20 วินาที: หยุดเพื่อความปลอดภัย กรุณาตรวจ Map และระยะเผื่อ',distance)
+            return 0.0,0.0
+        if not grid.line_free(position,(tx,ty)):
+            if now-self._last_replan>=float(self.get_parameter('nav_replan_interval').value):
+                replanned=self._plan_nav_path(gx,gy); self._last_replan=now
+                if replanned: self.nav_path=replanned; self.nav_path_index=1; self._publish_nav_path()
+            self._set_nav_status('replanning','ทางไม่มีระยะปลอดภัย หยุดรอวางแผนใหม่',distance)
+            return 0.0,0.0
+        wz=max(-turn,min(turn,error*2.0))
+        if abs(error)>.25: return 0.0,wz
+        max_speed=float(self.get_parameter('nav_max_speed').value)
+        slow_distance=float(self.get_parameter('nav_obstacle_distance').value)
+        radius=max(.24,float(self.get_parameter('nav_robot_radius').value))
+        front=max(0,self._ray(self.x,self.y,self.th,rng=radius+slow_distance)-radius)
+        v=min(max_speed,distance*.8)*max(.15,1-abs(error)/.3)*max(.15,min(1,front/slow_distance))
+        # Validate the actual next motion, not only the path's waypoint centres.
+        predicted=(self.x+v*.25*math.cos(self.th+wz*.1),self.y+v*.25*math.sin(self.th+wz*.1))
+        if not grid.line_free(position,predicted): return 0.0,wz
+        self._set_nav_status('navigating','กำลังตามเส้นทางพร้อมระยะปลอดภัย',distance)
+        return v,wz
     def _init_slam_map(self):
         self.slam_grid=[-1]*(self.map_data.info.width*self.map_data.info.height)
         self.slam_data=OccupancyGrid(); self.slam_data.header.frame_id='map'
@@ -1137,6 +1387,8 @@ class MapSimNode(Node):
             ys=[float(v) for wall in walls if len(wall)>=4 for v in (wall[1],wall[3])]
             if xs and ys: b=[min(float(b[0]),min(xs)-res),min(float(b[1]),min(ys)-res),max(float(b[2]),max(xs)+res),max(float(b[3]),max(ys)+res)]
         w=int(math.ceil(abs(b[2]-b[0])/res)); h=int(math.ceil(abs(b[3]-b[1])/res))
+        if not(0<w<=1000 and 0<h<=1000 and w*h<=400000):
+            raise ValueError('Map exceeds simulation grid limit (including wall bounds)')
         grid=[0]*(w*h)
         for wall in data.get('walls',[]):
             if len(wall)<4: continue
@@ -1159,7 +1411,7 @@ class MapSimNode(Node):
             if not name or not all(ch.isalnum() or ch in '_-' for ch in name): return
             with open(os.path.expanduser('~/maps/%s/map.json'%name),'r') as map_file: saved=json.load(map_file)
             width=int(saved['width']); height=int(saved['height']); resolution=float(saved['resolution']); origin=saved.get('origin',[0,0,0]); data=[int(value) for value in saved['data']]
-            if width<=0 or height<=0 or len(data)!=width*height: raise ValueError('invalid occupancy grid size')
+            if not(0<width<=1000 and 0<height<=1000 and width*height<=400000) or len(data)!=width*height or not math.isfinite(resolution) or resolution<=0: raise ValueError('invalid occupancy grid size')
             self.nav_map_data=OccupancyGrid(); self.nav_map_data.header.frame_id='map'; self.nav_map_data.info.width=width; self.nav_map_data.info.height=height; self.nav_map_data.info.resolution=resolution
             self.nav_map_data.info.origin.position.x=float(origin[0]); self.nav_map_data.info.origin.position.y=float(origin[1]); self.nav_map_data.info.origin.orientation.w=1.0; self.nav_map_data.data=data; self.nav_map_name=name
             self.get_logger().info('Navigation map selected: '+name)
@@ -1188,7 +1440,10 @@ class MapSimNode(Node):
             else: v,wz=self._nav_command()
             self.th+=wz*dt
             next_x=self.x+v*math.cos(self.th)*dt; next_y=self.y+v*math.sin(self.th)*dt
-            if motion_is_clear(self.x,self.y,next_x,next_y): self.x,self.y=next_x,next_y
+            if not manual and self.nav_goal is not None and v!=0.0 and not self._nav_grid.line_free((self.x,self.y),(next_x,next_y)):
+                v=0.0; next_x,next_y=self.x,self.y
+                self._set_nav_status('blocked','หยุดก่อนเข้าเขตระยะปลอดภัย')
+            if v==0.0 or motion_is_clear(self.x,self.y,next_x,next_y): self.x,self.y=next_x,next_y
             else:
                 v=0.0
                 if manual: self.last_cmd.linear.x=0.0
@@ -1218,18 +1473,28 @@ class MapSimNode(Node):
             # base_link), matching the TF used by the web RViz renderer.
             laser_x=self.x+0.2*math.cos(self.th); laser_y=self.y+0.2*math.sin(self.th)
             scan_angles=[self.th+scan.angle_min+i*scan.angle_increment for i in range(n)]
-            scan.ranges=[self._ray(laser_x,laser_y,angle) for angle in scan_angles]
+            scan_pose=(laser_x,laser_y,self.th)
+            if scan_pose!=self._scan_pose:
+                self._scan_ranges=[self._ray(laser_x,laser_y,angle) for angle in scan_angles]
+                self._scan_pose=scan_pose
+            scan.ranges=self._scan_ranges
             self.scan_pub.publish(scan)
-            self._integrate_slam_scan(laser_x,laser_y,scan_angles,scan.ranges,scan.range_max)
-            if tick_now-self._last_slam_publish>=0.5:
-                self._last_slam_publish=tick_now; self._publish_slam_map()
+            # Laser/TF/odom stay at 10 Hz for responsive driving, while the
+            # occupancy update runs at 2 Hz. Marching every ray through the
+            # grid on every control tick wastes CPU without adding visible map
+            # detail (the map texture itself is published at 2 Hz).
+            if self.nav_goal is None and tick_now-self._last_slam_publish>=0.5 and scan_pose!=self._slam_pose:
+                self._last_slam_publish=tick_now
+                self._integrate_slam_scan(laser_x,laser_y,scan_angles,scan.ranges,scan.range_max)
+                self._publish_slam_map()
+                self._slam_pose=scan_pose
     def _ray(self,ox,oy,ang,step=0.05,rng=10.0):
-        for d in range(int((rng-0.1)/step)+1):
-            cur=0.1+d*step; tx=ox+cur*math.cos(ang); ty=oy+cur*math.sin(ang)
-            mx=int((tx-self.map_data.info.origin.position.x)/self.map_data.info.resolution)
-            my=int((ty-self.map_data.info.origin.position.y)/self.map_data.info.resolution)
-            if 0<=mx<self.map_data.info.width and 0<=my<self.map_data.info.height:
-                if self.map_data.data[my*self.map_data.info.width+mx]==100: return cur
+        # Intersect directly with the map's wall segments. The old grid marcher
+        # tested up to 200 cells for each of 181 rays at 10 Hz and consumed more
+        # than half a CPU core per user. Map Editor already expands every solid
+        # object into WALLS, so the analytic result preserves collision detail.
+        distance=ray_cast(ox,oy,ang,rng)
+        if distance<rng: return distance
         # ROS LaserScan convention: no return is +inf. The bridge discards it,
         # so phantom points are not drawn outside an open section of the map.
         return float('inf')
@@ -1297,4 +1562,4 @@ def generate_launch_description():
   };
 }
 
-module.exports = { createSimAgent, isSim, SIM_NODES, SIM_TOPICS, SIM_STATE_PUB, SimEngine, wsRoot, toAbs, writeTfPackage, writeOdomPackage, writeMapsimPackage, genMapsimFiles, robotCollides, motionIsClear };
+module.exports = { createSimAgent, isSim, clusterIdForSim, SIM_NODES, SIM_TOPICS, SIM_STATE_PUB, SimEngine, wsRoot, toAbs, writeTfPackage, writeOdomPackage, writeMapsimPackage, genMapsimFiles, robotCollides, motionIsClear, domainFor, reserveDomain, releaseDomain, buildSimProcessEnvironment };

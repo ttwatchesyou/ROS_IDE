@@ -1,0 +1,33 @@
+{
+  "parameters": {
+    "base": "http://127.0.0.1:8001",
+    "kp": 2.0,
+    "kd": 1.2,
+    "max_wz": 0.5,
+    "angle_deg": 90,
+    "return_to_zero": false,
+    "absolute_cycle": true,
+    "run": true,
+    "timeout": 20.0
+  },
+  "prehome": {
+    "time_s": 1.1572764109998843,
+    "peak_yaw_rate_radps": 0.0,
+    "overshoot_deg": 0.0,
+    "final_error_deg": -0.05156620156177409
+  },
+  "outbound": {
+    "time_s": 8.765067532000103,
+    "peak_yaw_rate_radps": 0.4440000000000252,
+    "overshoot_deg": 0.0,
+    "final_error_deg": 0.8133896099360568
+  },
+  "return": {
+    "time_s": 9.34138218299995,
+    "peak_yaw_rate_radps": 0.4500000000000248,
+    "overshoot_deg": 0.0,
+    "final_error_deg": -0.5786873730821315
+  },
+  "fault": null,
+  "samples": 267
+}

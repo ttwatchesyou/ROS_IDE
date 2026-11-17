@@ -1,0 +1,5 @@
+requested_cap_mps,x_kp,x_ki,x_kd,y_kp,y_ki,y_kd,yaw_kp,yaw_kd,yaw_max_radps,observed_peak_x_mps,observed_peak_y_mps,status
+0.5,5,0,0.1,6,0,0.1,9.5,0.4,1.5,0.316,0.297,command_tested_actual_cap_not_reached_post_stop_pose_shift
+1.0,5,0,0.1,6,0,0.1,9.5,0.4,1.5,0.206,0.202,command_tested_actual_cap_not_reached
+1.5,5,0,0.1,6,0,0.1,9.5,0.4,1.5,0.194,,aborted_after_X_outbound_post_stop_Y_shift
+2.0,5,0,0.1,6,0,0.1,9.5,0.4,1.5,,,not_run_after_safety_fault

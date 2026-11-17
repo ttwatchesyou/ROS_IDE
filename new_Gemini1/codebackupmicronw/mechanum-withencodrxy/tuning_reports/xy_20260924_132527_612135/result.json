@@ -1,0 +1,28 @@
+{
+  "parameters": {
+    "axis": "x",
+    "distance": 0.2,
+    "speed": 0.25,
+    "kp": 1.0,
+    "ki": 0.0,
+    "kd": 0.1,
+    "yaw_kp": 4.0,
+    "yaw_kd": 1.2,
+    "yaw_max": 1.0,
+    "base": "http://127.0.0.1:8001",
+    "run": true
+  },
+  "legs": [],
+  "fault": "{\"detail\":\"STM32 did not acknowledge yaw_pid. Check connection and upload the matching firmware.\",\"status\":\"error\"}\n",
+  "origin": {
+    "goal_x": 0.0,
+    "goal_y": 0.0,
+    "goal_yaw": 0.0,
+    "imu_ok": true,
+    "position_active": false,
+    "x": 0.0,
+    "y": 0.0,
+    "yaw": -0.0013
+  },
+  "last_target": null
+}

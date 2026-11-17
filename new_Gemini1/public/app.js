@@ -16,6 +16,7 @@
   const savedWorkspace = localStorage.getItem('ros2ide_workspace');
   const savedUsername  = localStorage.getItem('ros2ide_username');
   const savedRobotName = localStorage.getItem('ros2ide_robotname');
+  const savedRobotKey  = localStorage.getItem('ros2ide_robotkey');
   const savedIsSim     = localStorage.getItem('ros2ide_is_sim');
 
   if(savedSession){
@@ -26,6 +27,7 @@
       workspace: savedWorkspace || '~/ros2_ws',
       username:  savedUsername  || 'ubuntu',
       robotName: savedRobotName || 'Robot',
+      robotKey:  savedRobotKey || '',
       isSim:     savedIsSim === 'true',
     };
   }
@@ -36,8 +38,33 @@
 
 let connectionMode = 'ssh';
 let _connTimeouts = []; 
+let robotPresenceSocket=null,robotPresenceTimer=null,robotPresenceReconnect=null,robotPresenceEnabled=false;
 const SIMULATION_PAGES = new Set(['map', 'playground']);
 const WIZARD_RETURN_SAVE_TARGETS={editor:'#btn-save',flow:'#btn-flow-save',transformation:'#tf-right-panel .tf-save-action',map:'#map3d-save','3dcomp':'#dc-save-component'};
+
+function updateRobotPresence(count,reconnecting=false){
+  const badge=document.getElementById('robot-presence');if(!badge)return;
+  const value=Math.max(0,Number(count)||0);badge.classList.toggle('reconnecting',reconnecting);
+  const label=reconnecting?'กำลังต่อ…':`${value} ออนไลน์`;badge.querySelector('span').textContent=label;
+  badge.title=reconnecting?'กำลังเชื่อมระบบนับผู้ใช้ใหม่':`มีผู้ใช้ ${value} คนกำลังเปิดหุ่นยนต์ตัวนี้`;
+}
+
+function stopRobotPresence(){
+  robotPresenceEnabled=false;if(robotPresenceTimer)clearInterval(robotPresenceTimer);if(robotPresenceReconnect)clearTimeout(robotPresenceReconnect);
+  robotPresenceTimer=robotPresenceReconnect=null;if(robotPresenceSocket){robotPresenceSocket.onclose=null;try{robotPresenceSocket.close();}catch{}}robotPresenceSocket=null;updateRobotPresence(0);
+}
+
+function startRobotPresence(){
+  if(!sessionId||isSimWorkspace){stopRobotPresence();return;}
+  if(robotPresenceSocket&&[WebSocket.OPEN,WebSocket.CONNECTING].includes(robotPresenceSocket.readyState))return;
+  robotPresenceEnabled=true;updateRobotPresence(0,true);
+  const protocol=location.protocol==='https:'?'wss:':'ws:',socket=new WebSocket(`${protocol}//${location.host}/ws/robot-status`,['ros2ide',getAuthToken()]);robotPresenceSocket=socket;
+  const watch=()=>socket.readyState===WebSocket.OPEN&&socket.send(JSON.stringify({type:'watch',sessionId}));
+  socket.onopen=()=>{watch();if(robotPresenceTimer)clearInterval(robotPresenceTimer);robotPresenceTimer=setInterval(()=>{if(socket.readyState===WebSocket.OPEN)socket.send(JSON.stringify({type:'heartbeat',sessionId}));},15000);};
+  socket.onmessage=event=>{let message;try{message=JSON.parse(event.data);}catch{return;}const key=localStorage.getItem('ros2ide_robotkey');if(message.type==='presence'&&(!key||message.robot_key===key))updateRobotPresence(message.onlineUsers,false);};
+  socket.onclose=()=>{if(robotPresenceTimer)clearInterval(robotPresenceTimer);robotPresenceTimer=null;if(robotPresenceSocket===socket)robotPresenceSocket=null;if(robotPresenceEnabled){updateRobotPresence(0,true);robotPresenceReconnect=setTimeout(startRobotPresence,1000);}};
+  socket.onerror=()=>{};
+}
 
 function positionWorkspaceWizardReturn(page){
   const button=document.getElementById('workspace-wizard-return'),pages=document.getElementById('pages');
@@ -226,16 +253,16 @@ async function doConnect(){
     localStorage.setItem('ros2ide_workspace',res.workspace||wsPath);
     localStorage.setItem('ros2ide_username',res.username||user);
     localStorage.setItem('ros2ide_robotname',res.robotName||pairingCode);
+    localStorage.setItem('ros2ide_robotkey',res.robotKey||'');
     localStorage.setItem('ros2ide_is_sim', String(isSimWorkspace));
+    updateRobotPresence(res.onlineUsers||0);
     if(stat) stat.textContent = 'Connected!';
 
-    setTimeout(()=>{
-      closeModal('modal-conn');
-      onConnected(res.host || 'localhost', res.username || user, res.rosInfo);
-      if(btn) { btn.disabled=false; btn.textContent='Connect'; }
-      if(prog) prog.style.width='0';
-      if(stat) stat.textContent='พร้อมเชื่อมต่อ';
-    }, 400);
+    closeModal('modal-conn');
+    void onConnected(res.robotName||res.host||'Robot',res.username||user,res.rosInfo);
+    if(btn) { btn.disabled=false; btn.textContent='Connect'; }
+    if(prog) prog.style.width='0';
+    if(stat) stat.textContent='พร้อมเชื่อมต่อ';
 
   } catch(e) {
     _connTimeouts.forEach(clearTimeout);
@@ -267,6 +294,7 @@ async function onConnected(host,user,ri){
     const el=document.getElementById(id);if(el)el.disabled=false;
   });
   applySimulationVisibility();
+  startRobotPresence();
   
   document.getElementById('sb-conn').textContent=`${user}@${host}`;
   document.getElementById('sb-ros').textContent=`${ri.distro} (ROS${ri.version})`;
@@ -301,8 +329,30 @@ async function onConnected(host,user,ri){
   if (typeof loadTopics === 'function') loadTopics();
 }
 
+async function robotSelectionDestination(){
+  const response=await fetch('/api/local/info',{cache:'no-store',signal:AbortSignal.timeout(2500)});
+  if(!response.ok)return '/robots';
+  const info=await response.json();
+  if(info.local!==true)return '/robots';
+  let target;try{target=new URL(info.cloudUrl);}catch{throw new Error('หุ่นยนต์ยังไม่ได้ตั้ง URL ของ Cloud');}
+  if(!['http:','https:'].includes(target.protocol)||target.pathname!=='/robots'||target.username||target.password)throw new Error('URL ของ Cloud ไม่ถูกต้อง');
+  return target.href;
+}
+
 async function doDisconnect(){
-  if(sessionId) await API('/api/disconnect',{sessionId});
+  const disconnectButton=document.getElementById('btn-disc');
+  if(disconnectButton?.disabled)return;
+  if(disconnectButton)disconnectButton.disabled=true;
+  let destination;
+  try{
+    destination=await robotSelectionDestination();
+    if(sessionId){const result=await API('/api/disconnect',{sessionId});if(!result?.ok)throw new Error(result?.error||'ตัดการเชื่อมต่อไม่สำเร็จ');}
+  }catch(error){
+    if(disconnectButton)disconnectButton.disabled=false;
+    if(typeof sbMsg==='function')sbMsg(error.message||'ไม่สามารถกลับไปหน้าเลือกหุ่นยนต์ได้',5000);
+    return;
+  }
+  stopRobotPresence();
   sessionId=null; rosInfo=null; isSimWorkspace=false;
   applySimulationVisibility();
   if(typeof window.termWs!=='undefined'&&window.termWs){window.termWs.close();window.termWs=null;}
@@ -336,9 +386,10 @@ async function doDisconnect(){
   localStorage.removeItem('ros2ide_workspace');
   localStorage.removeItem('ros2ide_username');
   localStorage.removeItem('ros2ide_robotname');
+  localStorage.removeItem('ros2ide_robotkey');
   localStorage.removeItem('ros2ide_is_sim');
   // Redirect to robots page
-  window.location.replace('/robots');
+  window.location.replace(destination);
 }
 
 // ══ FILE TREE ══
@@ -1309,10 +1360,10 @@ if(typeof window !== 'undefined'){
       // ── Apply restored session from robots page ──
       if(window._restoredSession){
         const saved = window._restoredSession;
-        setTimeout(async()=>{
+        void (async()=>{
           const restored=await API('/api/session/restore',{sessionId:saved.sessionId,robotId:saved.robotId}).catch(()=>null);
           if(!restored?.ok){
-            ['ros2ide_session','ros2ide_robotid','ros2ide_rosinfo','ros2ide_workspace','ros2ide_username','ros2ide_robotname','ros2ide_is_sim'].forEach(key=>localStorage.removeItem(key));
+            ['ros2ide_session','ros2ide_robotid','ros2ide_rosinfo','ros2ide_workspace','ros2ide_username','ros2ide_robotname','ros2ide_robotkey','ros2ide_is_sim'].forEach(key=>localStorage.removeItem(key));
             window.location.replace('/robots');
             return;
           }
@@ -1328,6 +1379,7 @@ if(typeof window !== 'undefined'){
           localStorage.setItem('ros2ide_workspace',wsPath);
           localStorage.setItem('ros2ide_username',rs.username||'ubuntu');
           localStorage.setItem('ros2ide_robotname',rs.robotName||'Robot');
+          localStorage.setItem('ros2ide_robotkey',rs.robotKey||'');
           localStorage.setItem('ros2ide_is_sim',String(isSimWorkspace));
           // เรียก onConnected เพื่อ setup UI และ Terminal ครบ
           if(typeof onConnected === 'function'){
@@ -1345,13 +1397,7 @@ if(typeof window !== 'undefined'){
             if(typeof loadTree==='function') loadTree(wsPath,'file-tree',0);
           }
           console.log('[APP] Session restored:',rs.sessionId,restored.restored?'reused':'renewed');
-          // Trigger flow + dashboard refresh after session ready
-          setTimeout(()=>{
-            if(typeof flowLoadPackages==='function') flowLoadPackages();
-            if(typeof loadDashboard==='function')    loadDashboard();
-            if(typeof loadTopics==='function')       loadTopics();
-          }, 800);
-        },150);
+        })();
       }
 
       const sidebar  = document.getElementById('sidebar');

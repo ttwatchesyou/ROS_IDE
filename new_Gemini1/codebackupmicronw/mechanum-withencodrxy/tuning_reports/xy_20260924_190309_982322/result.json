@@ -1,0 +1,73 @@
+{
+  "parameters": {
+    "axis": "y",
+    "distance": 0.6,
+    "speed": 0.5,
+    "kp": 5.0,
+    "ki": 0.0,
+    "kd": 0.1,
+    "cross_kp": 3.0,
+    "cross_ki": 0.0,
+    "cross_kd": 0.1,
+    "yaw_kp": 9.5,
+    "yaw_kd": 0.4,
+    "yaw_max": 1.5,
+    "yaw_target": 0.0,
+    "firmware_defaults": false,
+    "base": "http://127.0.0.1:8001",
+    "run": true
+  },
+  "legs": [
+    {
+      "leg": "align_heading",
+      "time_s": 3.4183438859981834,
+      "final_position_error_m": 0.0064007812023221065,
+      "peak_overshoot_m": 0.0003999999999999976,
+      "peak_yaw_error_deg": 4.394586288653414,
+      "peak_off_axis_m": 0.0009000000000000119,
+      "peak_measured_speed_mps": 0.042000000000038014,
+      "post_stop_drift_m": 0.0,
+      "post_stop_axis_shift_m": 0.0,
+      "post_stop_final_position_error_m": 0.0064007812023221065
+    },
+    {
+      "leg": "outbound",
+      "time_s": 4.5185014870003215,
+      "final_position_error_m": 0.022743130831088372,
+      "peak_overshoot_m": 0.0,
+      "peak_yaw_error_deg": 0.9511099399171665,
+      "peak_off_axis_m": 0.004400000000000015,
+      "peak_measured_speed_mps": 0.4840041322142055,
+      "post_stop_drift_m": 9.999999999998899e-05,
+      "post_stop_axis_shift_m": 0.0,
+      "post_stop_final_position_error_m": 0.022743130831088372
+    },
+    {
+      "leg": "return",
+      "time_s": 6.2741359020001255,
+      "final_position_error_m": 0.012531959144523248,
+      "peak_overshoot_m": 0.0,
+      "peak_yaw_error_deg": 1.283425461093044,
+      "peak_off_axis_m": 0.010099999999999998,
+      "peak_measured_speed_mps": 0.47260977560817063,
+      "post_stop_drift_m": 0.000899999999999998,
+      "post_stop_axis_shift_m": -0.000899999999999998,
+      "post_stop_final_position_error_m": 0.011649892703368556
+    }
+  ],
+  "origin": {
+    "goal_x": 0.3442,
+    "goal_y": 0.0859,
+    "goal_yaw": 0.0673,
+    "imu_ok": true,
+    "position_active": false,
+    "x": 0.3411,
+    "y": 0.1125,
+    "yaw": 0.0767
+  },
+  "last_target": {
+    "x": 0.3411,
+    "y": 0.1125,
+    "yaw": 0.0
+  }
+}

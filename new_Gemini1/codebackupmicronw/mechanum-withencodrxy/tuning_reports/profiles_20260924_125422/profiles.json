@@ -1,0 +1,337 @@
+{
+  "controller": "yaw PD (Ki=0)",
+  "command_targets_deg": [
+    0,
+    90,
+    0
+  ],
+  "speed_unit": "rad/s (command ceiling)",
+  "profiles": [
+    {
+      "speed_radps": 0.5,
+      "kp": 4.0,
+      "ki": 0,
+      "kd": 0.4,
+      "validated_on_target_source": false,
+      "cycles": [
+        {
+          "report": "tuning_reports/yaw_web_20260924_125555",
+          "outbound": {
+            "time_s": 5.684332367999787,
+            "peak_yaw_rate_radps": 0.46999999999989467,
+            "overshoot_deg": 0.0,
+            "final_error_deg": 0.7790121422282111
+          },
+          "return": {
+            "time_s": 6.013480389000051,
+            "peak_yaw_rate_radps": 0.4779999999998914,
+            "overshoot_deg": 0.0,
+            "final_error_deg": -0.8078704911344607
+          }
+        },
+        {
+          "report": "tuning_reports/yaw_web_20260924_125634",
+          "outbound": {
+            "time_s": 5.960893561000148,
+            "peak_yaw_rate_radps": 0.4700000000001574,
+            "overshoot_deg": 0.0,
+            "final_error_deg": 0.7217163627151224
+          },
+          "return": {
+            "time_s": 6.322502529000076,
+            "peak_yaw_rate_radps": 0.4739999999998922,
+            "overshoot_deg": 0.0,
+            "final_error_deg": -0.028647889756541162
+          }
+        },
+        {
+          "report": "tuning_reports/yaw_web_20260924_125650",
+          "outbound": {
+            "time_s": 6.576704686999847,
+            "peak_yaw_rate_radps": 0.4799999999998913,
+            "overshoot_deg": 0.0,
+            "final_error_deg": 0.5097219785167157
+          },
+          "return": {
+            "time_s": 6.2656732189998365,
+            "peak_yaw_rate_radps": 0.47000000000016073,
+            "overshoot_deg": 0.0,
+            "final_error_deg": -0.17761691649055517
+          }
+        }
+      ]
+    },
+    {
+      "speed_radps": 1.0,
+      "kp": 4.4,
+      "ki": 0,
+      "kd": 0.4,
+      "validated_on_target_source": false,
+      "cycles": [
+        {
+          "report": "tuning_reports/yaw_web_20260924_125737",
+          "outbound": {
+            "time_s": 5.274101497999936,
+            "peak_yaw_rate_radps": 0.9899999999997724,
+            "overshoot_deg": 0.0,
+            "final_error_deg": 0.8076600319847492
+          },
+          "return": {
+            "time_s": 4.594220964999977,
+            "peak_yaw_rate_radps": 0.9719999999997785,
+            "overshoot_deg": 0.0,
+            "final_error_deg": -0.8422479588423101
+          }
+        },
+        {
+          "report": "tuning_reports/yaw_web_20260924_125759",
+          "outbound": {
+            "time_s": 5.100119354000071,
+            "peak_yaw_rate_radps": 0.9839999999997762,
+            "overshoot_deg": 0.0,
+            "final_error_deg": 0.8363079217412872
+          },
+          "return": {
+            "time_s": 5.8247006879998935,
+            "peak_yaw_rate_radps": 0.9819999999997774,
+            "overshoot_deg": 0.0,
+            "final_error_deg": -0.716197243913529
+          }
+        },
+        {
+          "report": "tuning_reports/yaw_web_20260924_125814",
+          "outbound": {
+            "time_s": 4.9987974519999625,
+            "peak_yaw_rate_radps": 0.9919999999997717,
+            "overshoot_deg": 0.0,
+            "final_error_deg": 0.698798050909892
+          },
+          "return": {
+            "time_s": 6.320826347000093,
+            "peak_yaw_rate_radps": 0.9759999999997794,
+            "overshoot_deg": 0.0,
+            "final_error_deg": -0.5557690612768985
+          }
+        }
+      ]
+    },
+    {
+      "speed_radps": 1.5,
+      "kp": 4.8,
+      "ki": 0,
+      "kd": 0.5,
+      "validated_on_target_source": false,
+      "cycles": [
+        {
+          "report": "tuning_reports/yaw_web_20260924_125901",
+          "outbound": {
+            "time_s": 3.975834251000151,
+            "peak_yaw_rate_radps": 1.833999999999583,
+            "overshoot_deg": 0.0,
+            "final_error_deg": 0.7217163627151224
+          },
+          "return": {
+            "time_s": 6.288791637000031,
+            "peak_yaw_rate_radps": 1.539999999999649,
+            "overshoot_deg": 0.0,
+            "final_error_deg": -0.6990085100596044
+          }
+        },
+        {
+          "report": "tuning_reports/yaw_web_20260924_125927",
+          "outbound": {
+            "time_s": 4.254350410000143,
+            "peak_yaw_rate_radps": 1.555999999999647,
+            "overshoot_deg": 0.0,
+            "final_error_deg": 0.8076600319847492
+          },
+          "return": {
+            "time_s": 4.530663296000057,
+            "peak_yaw_rate_radps": 1.5539999999996443,
+            "overshoot_deg": 0.0,
+            "final_error_deg": -0.8021409131831524
+          }
+        },
+        {
+          "report": "tuning_reports/yaw_web_20260924_125939",
+          "outbound": {
+            "time_s": 4.253208613999959,
+            "peak_yaw_rate_radps": 1.5539999999996466,
+            "overshoot_deg": 0.0,
+            "final_error_deg": 0.6415022713968032
+          },
+          "return": {
+            "time_s": 4.820599524000045,
+            "peak_yaw_rate_radps": 1.5579999999996474,
+            "overshoot_deg": 0.0,
+            "final_error_deg": -0.6245239966925974
+          }
+        }
+      ]
+    },
+    {
+      "speed_radps": 2.0,
+      "kp": 4.0,
+      "ki": 0,
+      "kd": 1.2,
+      "validated_on_target_source": false,
+      "cycles": [
+        {
+          "report": "tuning_reports/yaw_web_20260924_130221",
+          "outbound": {
+            "time_s": 4.945090313000037,
+            "peak_yaw_rate_radps": 2.0480000000018634,
+            "overshoot_deg": 0.0,
+            "final_error_deg": 0.796200876082134
+          },
+          "return": {
+            "time_s": 5.710020245000123,
+            "peak_yaw_rate_radps": 2.103999999997129,
+            "overshoot_deg": 0.0,
+            "final_error_deg": -0.6302535746439055
+          }
+        },
+        {
+          "report": "tuning_reports/yaw_web_20260924_130235",
+          "outbound": {
+            "time_s": 5.000141643999996,
+            "peak_yaw_rate_radps": 2.0899999999971497,
+            "overshoot_deg": 0.0,
+            "final_error_deg": 0.7102572068125073
+          },
+          "return": {
+            "time_s": 5.885203880000063,
+            "peak_yaw_rate_radps": 2.0439999999972107,
+            "overshoot_deg": 0.0,
+            "final_error_deg": -0.4812845479098915
+          }
+        },
+        {
+          "report": "tuning_reports/yaw_web_20260924_130249",
+          "outbound": {
+            "time_s": 6.037466820999725,
+            "peak_yaw_rate_radps": 2.0599999999971903,
+            "overshoot_deg": 0.0,
+            "final_error_deg": 0.6357726934454956
+          },
+          "return": {
+            "time_s": 6.0071355850000145,
+            "peak_yaw_rate_radps": 2.0819999999971612,
+            "overshoot_deg": 0.0,
+            "final_error_deg": -0.29793805346802804
+          }
+        }
+      ]
+    },
+    {
+      "speed_radps": 2.5,
+      "kp": 4.0,
+      "ki": 0,
+      "kd": 1.6,
+      "validated_on_target_source": false,
+      "cycles": [
+        {
+          "report": "tuning_reports/yaw_web_20260924_130640",
+          "outbound": {
+            "time_s": 5.9038715100000445,
+            "peak_yaw_rate_radps": 2.1180000000019263,
+            "overshoot_deg": 0.0,
+            "final_error_deg": 0.7331755186177377
+          },
+          "return": {
+            "time_s": 5.438718686999891,
+            "peak_yaw_rate_radps": 2.1980000000020015,
+            "overshoot_deg": 0.0,
+            "final_error_deg": -0.739115555718762
+          }
+        },
+        {
+          "report": "tuning_reports/yaw_web_20260924_130705",
+          "outbound": {
+            "time_s": 5.152615807000075,
+            "peak_yaw_rate_radps": 2.325999999996826,
+            "overshoot_deg": 0.0,
+            "final_error_deg": 0.7331755186177377
+          },
+          "return": {
+            "time_s": 5.815270535000309,
+            "peak_yaw_rate_radps": 2.156000000001961,
+            "overshoot_deg": 0.0,
+            "final_error_deg": -0.641712730546522
+          }
+        },
+        {
+          "report": "tuning_reports/yaw_web_20260924_130719",
+          "outbound": {
+            "time_s": 5.866973991999657,
+            "peak_yaw_rate_radps": 2.001999999997268,
+            "overshoot_deg": 0.0,
+            "final_error_deg": 0.45242619900363973
+          },
+          "return": {
+            "time_s": 6.31314305900014,
+            "peak_yaw_rate_radps": 2.0420000000018566,
+            "overshoot_deg": 0.0,
+            "final_error_deg": -0.567228217179515
+          }
+        }
+      ]
+    },
+    {
+      "speed_radps": 3.0,
+      "kp": 4.8,
+      "ki": 0,
+      "kd": 1.8,
+      "validated_on_target_source": false,
+      "cycles": [
+        {
+          "report": "tuning_reports/yaw_web_20260924_130823",
+          "outbound": {
+            "time_s": 5.919375752000178,
+            "peak_yaw_rate_radps": 2.0900000000019014,
+            "overshoot_deg": 0.0,
+            "final_error_deg": 0.3836712635879358
+          },
+          "return": {
+            "time_s": 4.947884430999693,
+            "peak_yaw_rate_radps": 2.0520000000018666,
+            "overshoot_deg": 0.0,
+            "final_error_deg": -0.813600069085769
+          }
+        },
+        {
+          "report": "tuning_reports/yaw_web_20260924_130843",
+          "outbound": {
+            "time_s": 5.734990485999788,
+            "peak_yaw_rate_radps": 2.2019999999969957,
+            "overshoot_deg": 0.0,
+            "final_error_deg": 0.6243135375428805
+          },
+          "return": {
+            "time_s": 4.856004589999884,
+            "peak_yaw_rate_radps": 2.2339999999969526,
+            "overshoot_deg": 0.0,
+            "final_error_deg": -0.7734930234266113
+          }
+        },
+        {
+          "report": "tuning_reports/yaw_web_20260924_130857",
+          "outbound": {
+            "time_s": 5.698283528000047,
+            "peak_yaw_rate_radps": 2.3159999999968406,
+            "overshoot_deg": 0.0,
+            "final_error_deg": 0.7389050965690453
+          },
+          "return": {
+            "time_s": 4.69563568500007,
+            "peak_yaw_rate_radps": 2.226000000002026,
+            "overshoot_deg": 0.0,
+            "final_error_deg": -0.7792226013779195
+          }
+        }
+      ]
+    }
+  ],
+  "note": "These trials used the board firmware before restored source was uploaded. Values are candidates for the restored source, not yet validated on it. Times include 1 second of settling observation.",
+  "wheel_config_sha256": "5c2eda75ca34a2004ff37d9dc03d65ed67f355ea977fbf89cac36351c827f377"
+}
